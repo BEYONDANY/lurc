@@ -1,0 +1,2147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lecoo 用户中心 · 统一登录与身份治理交互原型 O-V2.0</title>
+<style>
+:root{
+  --navy:#101838;--navy2:#182352;--ink:#1B2340;--blue:#2E9BFF;--blue-d:#1677E0;
+  --ice:#CADCFC;--bg:#F2F6FD;--card:#FFFFFF;--line:#DDE7F7;--gray:#5A6478;--muted:#8B96AD;
+  --green:#27AE60;--orange:#E67E22;--red:#D64545;--radius:12px;
+  font-size:14px;
+}
+*{margin:0;padding:0;box-sizing:border-box;font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif}
+body{background:#0B1126;color:var(--ink)}
+/* ===== 原型外框 ===== */
+.proto-bar{display:flex;align-items:center;gap:10px;padding:10px 18px;background:#0B1126;color:#fff;position:sticky;top:0;z-index:99;border-bottom:1px solid #1E2A55}
+.proto-bar .logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#2E9BFF,#7C5CFF);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.proto-bar b{font-size:14px}
+.proto-bar .tag{font-size:11px;color:#8FA3D9;border:1px solid #2A3766;border-radius:20px;padding:2px 10px}
+.role-tabs{margin-left:auto;display:flex;gap:6px}
+.role-tabs button{background:#141D42;color:#9FB0D8;border:1px solid #26336A;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:12.5px}
+.role-tabs button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.stage{max-width:1280px;margin:16px auto 40px;box-shadow:0 20px 60px rgba(0,0,0,.45);border-radius:16px;overflow:hidden}
+/* ===== 登录门户 ===== */
+.login-wrap{display:flex;min-height:680px}
+.login-left{flex:1.15;background:linear-gradient(150deg,#101838 0%,#182352 55%,#1E3A7A 100%);color:#fff;padding:56px;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.login-left::after{content:"";position:absolute;right:-120px;bottom:-120px;width:340px;height:340px;border-radius:80px;transform:rotate(20deg);background:rgba(46,155,255,.12)}
+.login-left h1{font-size:30px;margin:120px 0 14px;font-weight:700}
+.login-left p{color:#AFC3EE;line-height:1.9;font-size:14px}
+.login-left .caps{margin-top:auto;display:flex;gap:10px;flex-wrap:wrap}
+.login-left .caps span{font-size:11.5px;color:#CADCFC;border:1px solid rgba(202,220,252,.35);padding:4px 12px;border-radius:20px}
+.login-right{flex:1;background:#fff;display:flex;align-items:center;justify-content:center}
+.login-card{width:380px}
+.login-card h2{font-size:20px;margin-bottom:6px}
+.login-card .sub{color:var(--muted);font-size:12.5px;margin-bottom:22px}
+.ltabs{display:flex;border-bottom:1px solid var(--line);margin-bottom:20px}
+.ltabs div{padding:10px 0;margin-right:26px;cursor:pointer;color:var(--gray);font-size:14px;border-bottom:2px solid transparent}
+.ltabs div.on{color:var(--blue-d);border-color:var(--blue-d);font-weight:600}
+.qr{width:190px;height:190px;margin:8px auto 14px;border:1px solid var(--line);border-radius:12px;display:flex;align-items:center;justify-content:center;background:
+ repeating-linear-gradient(0deg,#EDF3FE 0 8px,#fff 8px 16px),repeating-linear-gradient(90deg,#EDF3FE 0 8px,#fff 8px 16px)}
+.qr span{background:#fff;border:1px solid var(--line);padding:6px 10px;border-radius:8px;font-size:12px;color:var(--gray)}
+.hint{text-align:center;color:var(--muted);font-size:12px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12.5px;color:var(--gray);margin-bottom:6px}
+.field input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px;outline:none}
+.field input:focus{border-color:var(--blue)}
+.btn{display:inline-block;border:none;border-radius:9px;padding:11px 20px;font-size:14px;cursor:pointer}
+.btn-pri{background:linear-gradient(90deg,#1677E0,#2E9BFF);color:#fff;width:100%}
+.btn-line{background:#fff;border:1px solid var(--line);color:var(--ink)}
+.btn-sm{padding:6px 14px;font-size:12.5px;border-radius:7px}
+.btn-danger{background:var(--red);color:#fff}
+.note{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.7}
+/* ===== 门户/后台通用布局 ===== */
+.app{display:flex;min-height:720px;background:var(--bg)}
+.side{width:220px;background:var(--navy);color:#B9C6E8;padding:18px 12px;display:flex;flex-direction:column}
+.side .brand{display:flex;align-items:center;gap:9px;padding:6px 8px 18px;color:#fff;font-weight:700;font-size:14.5px}
+.side .brand i{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#2E9BFF,#7C5CFF);display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:12px}
+.side nav{display:flex;flex-direction:column;gap:2px}
+.side nav a{padding:10px 12px;border-radius:8px;cursor:pointer;font-size:13px;color:#B9C6E8;text-decoration:none;display:flex;gap:8px;align-items:center}
+.side nav a.on,.side nav a:hover{background:#1E2B5E;color:#fff}
+.side .grp{font-size:10.5px;color:#5F6FA0;margin:16px 12px 6px;letter-spacing:1px}
+.side .me{margin-top:auto;border-top:1px solid #22305F;padding:12px 8px 4px;display:flex;gap:9px;align-items:center;font-size:12px;color:#DCE5FA}
+.avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#2E9BFF,#27AE60);display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px;flex:none}
+.main{flex:1;padding:22px 26px;overflow:auto}
+.crumb{font-size:12px;color:var(--muted);margin-bottom:14px}
+.ptitle{font-size:19px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:12px}
+.banner{background:linear-gradient(90deg,#FFF7E8,#FFFDF6);border:1px solid #F5DFB8;color:#8A5A00;font-size:12.5px;padding:10px 14px;border-radius:10px;margin-bottom:16px;display:flex;gap:10px;align-items:center}
+.banner b{color:#B4720A}
+.cards{display:grid;gap:14px}
+.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.card h4{font-size:13.5px;margin-bottom:10px;color:var(--ink)}
+.kpi b{font-size:26px;color:var(--navy)}
+.kpi span{display:block;color:var(--muted);font-size:12px;margin-top:4px}
+.kpi .up{color:var(--green);font-size:11px}
+.appgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.appitem{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 14px;cursor:pointer;transition:.15s}
+.appitem:hover{border-color:var(--blue);box-shadow:0 6px 18px rgba(46,155,255,.15)}
+.appitem .ic{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:700;margin-bottom:10px}
+.appitem b{font-size:13.5px;display:block}
+.appitem span{font-size:11.5px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{color:var(--muted);text-align:left;font-weight:500;padding:9px 10px;border-bottom:1px solid var(--line);background:#FAFCFF}
+td{padding:10px;border-bottom:1px solid #EDF2FB}
+tr:hover td{background:#F7FAFF}
+.pill{display:inline-block;font-size:11px;padding:2px 10px;border-radius:20px}
+.p-green{background:#E7F7EE;color:#1D8A4E}.p-blue{background:#E8F3FF;color:#1677E0}.p-orange{background:#FDF1E3;color:#C06A0A}.p-red{background:#FCE9E9;color:#C43D3D}.p-gray{background:#EEF1F7;color:#6B7590}
+.kv{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px dashed #E8EEF9;font-size:12.5px}
+.kv b{font-family:Consolas,monospace;color:var(--ink)}
+.kv .lab{color:var(--muted)}
+.steps{display:flex;gap:0;margin:6px 0 18px}
+.steps div{flex:1;text-align:center;font-size:11.5px;color:var(--muted);position:relative;padding-top:26px}
+.steps div::before{content:"";width:18px;height:18px;border-radius:50%;background:#D6E2F7;position:absolute;top:0;left:50%;transform:translateX(-50%)}
+.steps div.done::before{background:var(--green)}
+.steps div.cur::before{background:var(--blue);box-shadow:0 0 0 4px rgba(46,155,255,.2)}
+.steps div::after{content:"";position:absolute;top:8px;left:calc(50% + 12px);width:calc(100% - 24px);height:2px;background:#E3EBF8}
+.steps div:last-child::after{display:none}
+.toolbar{display:flex;gap:10px;margin-bottom:14px;align-items:center}
+.toolbar input{padding:8px 12px;border:1px solid var(--line);border-radius:8px;width:230px;font-size:12.5px}
+.toolbar select{padding:8px;border:1px solid var(--line);border-radius:8px;color:var(--gray);font-size:12.5px}
+.right{margin-left:auto}
+.form{max-width:640px}
+.form .field select,.form .field textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:9px;font-size:13.5px;color:var(--ink)}
+.radio-cards{display:flex;gap:10px}
+.radio-cards div{flex:1;border:1.5px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;font-size:12.5px;color:var(--gray)}
+.radio-cards div.on{border-color:var(--blue);background:#F3F9FF;color:var(--ink)}
+.radio-cards b{display:block;font-size:13px;margin-bottom:4px;color:var(--ink)}
+.countdown{background:#FFF4E8;border:1px solid #F2D4AC;border-radius:10px;padding:12px 14px;font-size:12.5px;color:#8A5A00;display:flex;align-items:center;gap:12px}
+.countdown b{font-size:18px;color:#C06A0A;font-family:Consolas,monospace}
+/* ===== 弹窗 ===== */
+.mask{position:fixed;inset:0;background:rgba(10,16,40,.55);display:none;align-items:center;justify-content:center;z-index:200}
+.mask.show{display:flex}
+.modal{background:#fff;border-radius:14px;width:520px;max-width:92vw;padding:24px;box-shadow:0 24px 80px rgba(0,0,0,.35)}
+.modal h3{font-size:16px;margin-bottom:8px}
+.modal .sub{font-size:12.5px;color:var(--muted);margin-bottom:16px;line-height:1.8}
+.modal .foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+.secretbox{background:#0F1630;color:#7CE7A8;font-family:Consolas,monospace;font-size:13px;padding:14px;border-radius:10px;margin:10px 0;word-break:break-all}
+.warn{background:#FCE9E9;border:1px solid #F0C3C3;color:#A33;padding:10px 12px;border-radius:9px;font-size:12px;line-height:1.7}
+.view{display:none}.view.show{display:block}
+.screen{display:none}.screen.show{display:block}
+.footer-tip{max-width:1280px;margin:0 auto 30px;color:#5F6FA0;font-size:11.5px;text-align:center}
+/* AI-GEN-BEGIN */
+.codebox{background:#0F1630;color:#C8D6F5;font-family:Consolas,monospace;font-size:11.5px;padding:12px 14px;border-radius:10px;line-height:1.7;overflow:auto;white-space:pre}
+.codebox .m{color:#7CE7A8}.codebox .p{color:#FFD7A8}.codebox .c{color:#8B96AD}
+.toast{position:fixed;right:24px;bottom:24px;background:#101838;color:#fff;padding:12px 16px;border-radius:10px;font-size:12.5px;z-index:300;display:none;box-shadow:0 12px 40px rgba(0,0,0,.35);max-width:360px}
+.toast.show{display:block}
+.split{display:grid;grid-template-columns:1.1fr .9fr;gap:14px}
+.perm-tree{font-size:12.5px;line-height:1.9;color:var(--gray)}
+.perm-tree b{color:var(--ink)}
+.chip-row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.sso-block{margin:0 0 18px}
+.sso-block .sso-title{font-size:12px;color:var(--muted);margin-bottom:10px;text-align:center}
+.sso-btns{display:flex;flex-direction:column;gap:8px}
+.sso-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:13.5px;color:var(--ink);transition:.15s}
+.sso-btn:hover{border-color:var(--blue);box-shadow:0 4px 14px rgba(46,155,255,.12)}
+.sso-btn .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.sso-btn .proto{font-size:10px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.sso-divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted);font-size:11.5px}
+.sso-divider::before,.sso-divider::after{content:"";flex:1;height:1px;background:var(--line)}
+.toggle{position:relative;width:36px;height:20px;background:#D6E2F7;border-radius:20px;cursor:pointer;display:inline-block;vertical-align:middle}
+.toggle.on{background:#2E9BFF}
+.toggle i{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.15s}
+.toggle.on i{left:18px}
+/* AI-GEN-END */
+
+/* AI-GEN-BEGIN O-V1.5 mobile + secure */
+.phone-stage{display:flex;justify-content:center;gap:28px;flex-wrap:wrap;padding:28px 16px 40px;background:linear-gradient(180deg,#0B1126,#152048)}
+.phone{width:320px;height:640px;border-radius:36px;background:#0E1428;border:3px solid #2A3560;box-shadow:0 24px 60px rgba(0,0,0,.45);position:relative;overflow:hidden}
+.phone .notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:110px;height:22px;background:#0B1020;border-radius:12px;z-index:2}
+.phone .pcontent{height:100%;background:#F5F8FF;display:flex;flex-direction:column;padding-top:40px}
+.phone .ph-header{padding:8px 18px 12px;display:flex;justify-content:space-between;align-items:center}
+.phone .ph-header b{font-size:15px}
+.phone .ph-body{flex:1;overflow:auto;padding:0 16px 20px}
+.phone .ph-tabbar{display:flex;border-top:1px solid #E3EAF8;background:#fff;padding:8px 4px calc(10px + env(safe-area-inset-bottom))}
+.phone .ph-tabbar button{flex:1;border:0;background:transparent;font-size:10.5px;color:#8B96AD;cursor:pointer;padding:4px}
+.phone .ph-tabbar button.on{color:#1677E0;font-weight:600}
+.bio-orb{width:120px;height:120px;margin:24px auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:42px;background:radial-gradient(circle at 30% 30%,#9ED0FF,#2E9BFF 55%,#1677E0);color:#fff;box-shadow:0 0 0 10px rgba(46,155,255,.18),0 12px 30px rgba(22,119,224,.35);animation:pulse 1.8s ease-in-out infinite}
+.bio-orb.face{background:radial-gradient(circle at 30% 30%,#C9B6FF,#7C5CFF 55%,#5A3FE0)}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+.mfa-digits{display:flex;gap:8px;justify-content:center;margin:18px 0}
+.mfa-digits span{width:38px;height:46px;border:1px solid #DDE7F7;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;background:#fff;color:#101838}
+.flow-board{display:grid;grid-template-columns:240px 1fr;min-height:680px;background:#fff}
+.flow-nav{background:#101838;color:#B9C6E8;padding:18px 12px}
+.flow-nav a{display:block;padding:10px 12px;border-radius:8px;cursor:pointer;font-size:13px;margin-bottom:4px}
+.flow-nav a.on,.flow-nav a:hover{background:#1E2B5E;color:#fff}
+.flow-main{padding:24px 28px;background:#F2F6FD}
+.flow-steps{display:flex;gap:0;margin:8px 0 22px}
+.flow-steps .fs{flex:1;text-align:center;font-size:11.5px;color:#8B96AD;position:relative;padding-top:28px}
+.flow-steps .fs::before{content:attr(data-n);width:22px;height:22px;border-radius:50%;background:#D6E2F7;color:#334;position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+.flow-steps .fs.done::before{background:#27AE60;color:#fff}
+.flow-steps .fs.cur::before{background:#2E9BFF;color:#fff;box-shadow:0 0 0 4px rgba(46,155,255,.2)}
+.flow-steps .fs::after{content:"";position:absolute;top:10px;left:calc(50% + 14px);width:calc(100% - 28px);height:2px;background:#E3EBF8}
+.flow-steps .fs:last-child::after{display:none}
+.secure-panel{display:none}.secure-panel.show{display:block}
+.device-chip{display:inline-flex;align-items:center;gap:6px;background:#EEF4FF;border:1px solid #D5E4FF;color:#1677E0;border-radius:20px;padding:4px 10px;font-size:11.5px}
+/* AI-GEN-END */
+
+/* AI-GEN-BEGIN O-V2.0 identity governance */
+.module-tag{display:inline-flex;align-items:center;gap:6px;border-radius:20px;padding:4px 10px;font-size:11px;font-weight:600}
+.module-login{background:#E8F3FF;color:#1677E0}.module-govern{background:#E7F7EE;color:#1D8A4E}
+.score{display:flex;align-items:center;gap:8px;min-width:120px}.score-bar{width:68px;height:7px;background:#E6ECF6;border-radius:9px;overflow:hidden}
+.score-bar i{display:block;height:100%;border-radius:9px;background:#27AE60}.score.mid .score-bar i{background:#E67E22}.score.low .score-bar i{background:#D64545}
+.source-chip{display:inline-block;padding:3px 8px;border-radius:6px;background:#EEF3FB;color:#55637C;font-size:10.5px;margin:2px}
+.flowline{display:flex;align-items:stretch;gap:0;margin:12px 0}.flowline .node{flex:1;background:#fff;border:1px solid var(--line);padding:12px;text-align:center;font-size:12px;position:relative}
+.flowline .node:first-child{border-radius:10px 0 0 10px}.flowline .node:last-child{border-radius:0 10px 10px 0}
+.flowline .node+.node{border-left:0}.flowline .node b{display:block;color:var(--navy);margin-bottom:5px}
+.flowline .node.done{background:#F0FAF4}.flowline .node.cur{background:#F2F8FF;border-color:#9CCBFA}
+.evidence{border-left:3px solid #DDE7F7;padding-left:14px;margin:10px 0}.evidence div{position:relative;padding:0 0 12px;font-size:12px;color:var(--gray)}
+.evidence div::before{content:"";position:absolute;left:-20px;top:3px;width:9px;height:9px;border-radius:50%;background:#2E9BFF}
+.mini-stat{display:flex;gap:8px;align-items:center}.mini-stat b{font-size:19px;color:var(--navy)}.mini-stat span{font-size:11px;color:var(--muted)}
+.owner-route{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.owner-route .person{padding:6px 9px;border-radius:8px;background:#F3F6FC;font-size:11.5px}
+.owner-route em{font-style:normal;color:var(--muted)}
+.review-progress{height:9px;background:#E8EDF5;border-radius:10px;overflow:hidden;margin:7px 0}.review-progress i{height:100%;display:block;background:#27AE60;border-radius:10px}
+/* AI-GEN-END */
+
+</style>
+</head>
+<body>
+
+<div class="proto-bar">
+  <span class="tag" style="border-color:#2a6;color:#9fdfb8">模块 1 · 统一登录与账号安全</span>
+  <div class="logo">U</div><b>lecoo 用户中心 · 最新交互原型</b>
+  <span class="tag">O-V2.0 · 身份治理 + 安全审计</span><span class="tag">飞书/北森组织 · 账号关联 · 季度复核</span>
+  <div class="role-tabs">
+    <button class="on" onclick="go('login',this)">① 登录与安全</button>
+    <button onclick="go('portal',this)">② 员工入口</button>
+    <button onclick="go('admin',this)">③ 身份治理与审计</button>
+    <button onclick="go('mobile',this)">④ 手机版</button>
+  </div>
+</div>
+
+<!-- ================= 登录门户 ================= -->
+<div id="view-login" class="view show">
+<div class="stage"><div class="login-wrap">
+  <div class="login-left">
+    <div style="display:flex;align-items:center;gap:10px"><div class="logo" style="width:34px;height:34px;border-radius:9px;font-size:15px">S</div><b style="font-size:16px">企业统一认证中心</b></div>
+    <h1>一次登录 · 多租户<br>OIDC / OAuth2</h1>
+    <p>面向全企业约 100 个应用的统一身份基础设施<br>飞书 · 企业微信 · 北森 · 通用 OIDC 标准协议接入</p>
+    <div class="caps"><span>飞书 SSO</span><span>企业微信 SSO</span><span>北森 SSO</span><span>邮箱 OTP</span><span>多租户 RBAC</span></div>
+  </div>
+  <div class="login-right"><div class="login-card">
+    <h2>登录</h2><div class="sub">即将前往：项目管理系统（PMS）</div>
+    <!-- AI-GEN-BEGIN -->
+    <div class="sso-block">
+      <div class="sso-title">企业 SSO（后台可配置启用 / 隐藏）</div>
+      <div class="sso-btns" id="login-sso-btns">
+        <button class="sso-btn" type="button" onclick="demoSso('feishu')">
+          <span class="dot" style="background:#3370FF"></span>
+          <span>飞书登录</span>
+          <span class="proto">OAuth2</span>
+        </button>
+        <button class="sso-btn" type="button" onclick="demoSso('wecom')">
+          <span class="dot" style="background:#07C160"></span>
+          <span>企业微信登录</span>
+          <span class="proto">OAuth2</span>
+        </button>
+        <button class="sso-btn" type="button" onclick="demoSso('beisen')">
+          <span class="dot" style="background:#FF7A45"></span>
+          <span>北森登录</span>
+          <span class="proto">OIDC</span>
+        </button>
+      </div>
+      <div class="note" style="text-align:center">适配器实现标准协议；未配置密钥时演示跳转授权页构造。</div>
+    </div>
+    <div class="sso-divider">或使用账号登录</div>
+    <!-- AI-GEN-END -->
+    <div class="ltabs">
+      <div class="on" onclick="ltab(0,this)">邮箱验证码</div>
+      <div onclick="ltab(1,this)">密码登录</div>
+    </div>
+    <div id="lt0">
+      <div class="field"><label>工作邮箱</label><input placeholder="name@company.com"></div>
+      <button class="btn btn-pri" onclick="toast('已发送验证码（演示）')">发送验证码并登录</button>
+      <div class="note">邮箱 OTP 为方案 O 默认主路径；企业员工可优先使用上方飞书 / 企微 SSO。</div>
+    </div>
+    <div id="lt1" style="display:none">
+      <div class="field"><label>账号（itcode / 手机号 / OA 编号）</label><input placeholder="请输入账号"></div>
+      <div class="field"><label>密码</label><input type="password" placeholder="请输入密码"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;font-size:12px;color:var(--gray)">
+        <label><input type="checkbox"> 记住我（7 天）</label><a style="color:var(--blue-d);cursor:pointer">忘记密码</a>
+      </div>
+      <button class="btn btn-pri" onclick="openModal('m-mfa-challenge')">登 录</button>
+      <div class="note">内部员工未设置密码？请使用飞书 / 企业微信 SSO，或登录后在个人中心设置兜底密码。连续 5 次失败将锁定 30 分钟。</div>
+      <!-- AI-GEN-BEGIN -->
+      <div style="margin-top:18px;padding-top:14px;border-top:1px dashed var(--line)">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;text-align:center">登录安全能力（归属模块 1）</div>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <button class="btn btn-line btn-sm" type="button" onclick="openModal('m-mfa-challenge')">多因子 MFA</button>
+          <button class="btn btn-line btn-sm" type="button" onclick="toast('正在调用设备人脸 / Passkey 验证（演示）')">人脸识别</button>
+          <button class="btn btn-line btn-sm" type="button" onclick="toast('正在调用设备指纹 / WebAuthn 验证（演示）')">指纹解锁</button>
+          <button class="btn btn-line btn-sm" type="button" onclick="go('mobile',document.querySelectorAll('.role-tabs button')[3])">手机版预览</button>
+        </div>
+      </div>
+      <!-- AI-GEN-END -->
+    </div>
+  </div></div>
+</div></div>
+<div class="footer-tip">O-V2.0 模块 1：桌面登录 + 手机版 + 人脸/指纹/MFA；支持飞书、企业微信、北森等联合登录扩展。</div>
+</div>
+
+<!-- ================= 员工端 ================= -->
+<div id="view-portal" class="view">
+<div class="stage"><div class="app">
+  <aside class="side">
+    <div class="brand"><i>S</i>统一认证中心</div>
+    <nav>
+      <a class="on" onclick="scr('portal','p-home',this)">🏠 工作台</a>
+      <a onclick="scr('portal','p-profile',this)">👤 个人中心</a>
+      <div class="grp">开发者中心</div>
+      <a onclick="scr('portal','p-myapps',this)">📦 我创建的应用</a>
+      <a onclick="scr('portal','p-create',this)">➕ 创建应用</a>
+      <a onclick="scr('portal','p-appdetail',this)">🔑 应用详情 · PMS</a>
+      <div class="grp">工单</div>
+      <a onclick="scr('portal','p-tickets',this)">📋 工单中心</a>
+      <div class="grp">团队管理</div>
+      <a onclick="scr('portal','p-team-accounts',this)">👥 团队账号管理</a>
+    </nav>
+    <div class="me"><span class="avatar">吴</span><div>chuanbin.wu<br><span style="color:#7C8BB8;font-size:11px">租户 Owner · Acme Corp</span></div></div>
+  </aside>
+  <div class="main">
+
+  <!-- 工作台 -->
+  <section id="p-home" class="screen show">
+    <div class="crumb">员工端 / 工作台</div>
+    <div class="banner">⚠️ <div>你名下的外部人员 <b>王强（供应商）</b> 账号将于 <b>5 天后（07-26）</b>到期 —— <a style="color:#B4720A;text-decoration:underline;cursor:pointer">去代提延期</a></div></div>
+    <div class="banner"><b>当前租户</b> Acme Corp　·　方案 O Demo（Logto + 治理层）　·　无 CAS</div>
+<div class="ptitle">我的应用 <span style="font-size:12px;color:var(--muted);font-weight:400">已授权 8 个 · 点击直接免登进入</span></div>
+    <div class="appgrid" style="margin-bottom:18px">
+      <div class="appitem"><div class="ic" style="background:#2E9BFF">P</div><b>项目管理 PMS</b><span>OAuth2 · 常用</span></div>
+      <div class="appitem"><div class="ic" style="background:#7C5CFF">C</div><b>CRM 客户系统</b><span>OIDC</span></div>
+      <div class="appitem"><div class="ic" style="background:#27AE60">F</div><b>财务报销</b><span>CAS</span></div>
+      <div class="appitem"><div class="ic" style="background:#E67E22">H</div><b>HR 自助</b><span>OIDC</span></div>
+      <div class="appitem"><div class="ic" style="background:#16A2B8">W</div><b>数据看板</b><span>OAuth2</span></div>
+      <div class="appitem"><div class="ic" style="background:#D64545">K</div><b>知识库</b><span>OIDC</span></div>
+      <div class="appitem"><div class="ic" style="background:#5A6478">O</div><b>运维平台</b><span>OAuth2</span></div>
+      <div class="appitem" style="border-style:dashed;text-align:center;color:var(--muted)"><div style="font-size:26px;margin:6px 0 4px">＋</div><span>申请新应用权限</span></div>
+    </div>
+    <div class="cards g2">
+      <div class="card"><h4>待办 · 3</h4>
+        <div class="kv"><span>【待我审批】李雷的 CRM 权限申请</span><span class="pill p-blue">审批</span></div>
+        <div class="kv"><span>【我的申请】数据看板接入 — 审核中</span><span class="pill p-orange">进行中</span></div>
+        <div class="kv"><span>【转交待办】离职同事张伟名下应用 1 个</span><span class="pill p-red">30天内</span></div>
+      </div>
+      <div class="card"><h4>通知</h4>
+        <div class="kv"><span>PMS 应用 Key 已重置（操作人：你）</span><span class="lab">10:24</span></div>
+        <div class="kv"><span>你的延期申请已通过，账号至 2026-10-19</span><span class="lab">昨天</span></div>
+        <div class="kv"><span>新设备登录提醒：Windows · 上海</span><span class="lab">07-18</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 个人中心 -->
+  <section id="p-profile" class="screen">
+    <div class="crumb">员工端 / 个人中心</div>
+    <div class="ptitle">个人中心</div>
+    <div class="cards g2">
+      <div class="card"><h4>个人资料 <span class="pill p-gray" style="float:right">由 IdP / 邀请写入（只读示意）</span></h4>
+        <div class="kv"><span class="lab">姓名</span><b>吴川斌 🔒</b></div>
+        <div class="kv"><span class="lab">itcode</span><b>chuanbin.wu 🔒</b></div>
+        <div class="kv"><span class="lab">部门 / 职位</span><b>平台研发部 · 产品经理 🔒</b></div>
+        <div class="kv"><span class="lab">手机号</span><b>138****3013 <a style="color:var(--blue-d);font-size:11px;cursor:pointer">验证后修改</a></b></div>
+        <div class="kv"><span class="lab">语言 / 时区</span><b>简体中文 · GMT+8 ✏️</b></div>
+      </div>
+      <div class="card"><h4>账号安全</h4>
+        <div style="background:#F3F9FF;border:1px solid #CFE6FF;border-radius:10px;padding:12px;font-size:12.5px;margin-bottom:10px">
+          <b style="color:var(--blue-d)">建议设置兜底密码</b><br><span style="color:var(--gray)">密码登录可用；凭证存 Logto（方案 O）</span>
+          <button class="btn btn-line btn-sm" style="float:right;margin-top:-4px">去设置</button>
+        </div>
+        <div class="kv"><span class="lab">登录密码</span><b>未设置</b></div>
+        <div class="kv"><span class="lab">MFA 二次验证</span><b>飞书验证 · 已开启</b></div>
+        <div class="kv"><span class="lab">绑定邮箱</span><b>chuanbin.wu@company.com</b></div>
+      </div>
+      <div class="card"><h4>登录设备与会话 <button class="btn btn-line btn-sm" style="float:right">下线其他全部</button></h4>
+        <table><tr><th>设备</th><th>IP / 地点</th><th>最后活跃</th><th></th></tr>
+        <tr><td>Windows · Chrome（当前）</td><td>10.8.12.33 · 北京</td><td>刚刚</td><td></td></tr>
+        <tr><td>飞书内置浏览器 · iOS</td><td>117.136.x.x · 北京</td><td>2 小时前</td><td><a style="color:var(--red);cursor:pointer">下线</a></td></tr>
+        <tr><td>macOS · Safari</td><td>203.119.x.x · 上海</td><td>07-18</td><td><a style="color:var(--red);cursor:pointer">下线</a></td></tr></table>
+      </div>
+      <div class="card"><h4>成员席位 / 邀请有效期（示意）</h4>
+        <div class="countdown">⏳ <div>账号剩余 <b>5 天</b>（模式 B · 强制有效期）<br><span style="font-size:11.5px">席位到期请联系 Owner 续期或重新邀请</span></div>
+        <button class="btn btn-pri btn-sm right" style="width:auto" onclick="openModal('m-extend')">发起延期申请</button></div>
+        <div class="kv" style="margin-top:8px"><span class="lab">密码有效期</span><b>剩余 62 天（90 天策略）</b></div>
+        <div class="kv"><span class="lab">邀请人 / Owner</span><b>吴川斌（平台研发部）</b></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 我创建的应用 -->
+  <section id="p-myapps" class="screen">
+    <div class="crumb">员工端 / 开发者中心 / 我创建的应用</div>
+    <div class="ptitle">我创建的应用 <button class="btn btn-pri btn-sm right" style="width:auto" onclick="scr('portal','p-create',document.querySelectorAll('#view-portal .side nav a')[3])">＋ 创建应用</button></div>
+    <table>
+      <tr><th>应用</th><th>协议</th><th>状态</th><th>授权用户</th><th>近30天登录</th><th>操作</th></tr>
+      <tr><td><b>项目管理 PMS</b></td><td>OAuth2+PKCE</td><td><span class="pill p-green">已启用</span></td><td>326</td><td>8,412</td><td><a style="color:var(--blue-d);cursor:pointer" onclick="scr('portal','p-appdetail',document.querySelectorAll('#view-portal .side nav a')[4])">管理</a></td></tr>
+      <tr><td><b>数据看板</b></td><td>OAuth2</td><td><span class="pill p-orange">审核中</span></td><td>—</td><td>—</td><td><a style="color:var(--muted)">查看</a></td></tr>
+      <tr><td><b>老工具站</b></td><td>CAS 3.0</td><td><span class="pill p-red">已驳回</span></td><td>—</td><td>—</td><td><a style="color:var(--blue-d);cursor:pointer">查看原因并重提</a></td></tr>
+    </table>
+  </section>
+
+  <!-- 创建应用 -->
+  <section id="p-create" class="screen">
+    <div class="crumb">员工端 / 开发者中心 / 创建应用</div>
+    <div class="ptitle">创建应用</div>
+    <div class="steps"><div class="cur">① 填写信息</div><div>② 平台审核</div><div>③ 获取凭证</div><div>④ 下载 Skill 对接</div><div>⑤ 沙箱联调</div></div>
+    <div class="card form">
+      <div class="field"><label>应用名称 *（全局唯一，2~30 字）</label><input placeholder="如：数据看板"></div>
+      <div class="field"><label>应用负责人 *（默认本人，可添加共同负责人；审核通过后自动成为应用管理员）</label><input value="吴川斌（chuanbin.wu）"></div>
+      <div class="field"><label>接入协议 *</label>
+        <div class="radio-cards">
+          <div class="on"><b>OAuth2 / OIDC（推荐）</b>授权码 + PKCE，适合新建及前后分离系统</div>
+          <div><b>CAS 3.0</b>适合存量 CAS Client 系统迁移</div>
+        </div></div>
+      <div class="field"><label>回调地址 callback_url *（可多个，须 HTTPS）</label><input placeholder="https://dash.company.com/auth/callback"></div>
+      <div class="field"><label>用户唯一标识 *</label>
+        <div class="radio-cards">
+          <div class="on"><b>itcode（推荐）</b>不可变，内部员工全覆盖</div>
+          <div><b>手机号</b>⚠️ 存在换号风险，换号需工单</div>
+          <div><b>OA 用户编号</b>覆盖率校验：87%，缺失 261 人</div>
+        </div></div>
+      <div class="field"><label>用途说明 / 预计用户规模</label><textarea rows="2" placeholder="供审核参考"></textarea></div>
+      <button class="btn btn-pri" style="width:auto">提交审核（生成应用接入工单）</button>
+    </div>
+  </section>
+
+  <!-- 应用详情 -->
+  <section id="p-appdetail" class="screen">
+    <div class="crumb">员工端 / 开发者中心 / 应用详情</div>
+    <div class="ptitle">项目管理 PMS <span class="pill p-green">已启用</span><span class="pill p-blue">OAuth2+PKCE</span></div>
+    <div class="cards g2">
+      <div class="card"><h4>凭证管理（生产）</h4>
+        <div class="kv"><span class="lab">client_id</span><b>pms_8f2e91c04a7b 📋</b></div>
+        <div class="kv"><span class="lab">client_secret</span><b>••••••••••••3f8a（仅创建/重置时展示一次）</b></div>
+        <div class="countdown" style="margin-top:10px">🔁 <div>旧 Key 宽限中，<b id="cd">05:12:33</b> 后失效<br><span style="font-size:11.5px">新旧 Key 并行可用，请尽快完成生产发布</span></div>
+          <button class="btn btn-danger btn-sm right">立即作废旧 Key</button></div>
+        <div style="margin-top:12px;display:flex;gap:10px">
+          <button class="btn btn-line btn-sm" onclick="openModal('m-reset')">重置 Secret</button>
+          <span style="font-size:11.5px;color:var(--muted);align-self:center">重置需二次确认，通知全部 App Admin</span></div>
+      </div>
+      <div class="card"><h4>沙箱环境（联调专用）</h4>
+        <div class="kv"><span class="lab">sandbox client_id</span><b>sbx_pms_77a1b2 📋</b></div>
+        <div class="kv"><span class="lab">预置测试账号</span><b>5 个（与生产隔离）</b></div>
+        <table style="margin-top:6px"><tr><th>账号</th><th>类型</th><th>角色</th></tr>
+        <tr><td>test_admin_01</td><td>内部</td><td>admin</td></tr>
+        <tr><td>test_editor_01</td><td>内部</td><td>editor</td></tr>
+        <tr><td>test_ext_01</td><td>外部</td><td>viewer</td></tr></table>
+      </div>
+      <div class="card"><h4>接入配置</h4>
+        <div class="kv"><span class="lab">回调地址</span><b>https://pms.company.com/auth/cb ✏️</b></div>
+        <div class="kv"><span class="lab">登出回调（SLO）</span><b>https://pms.company.com/auth/slo ✏️</b></div>
+        <div class="kv"><span class="lab">scope</span><b>openid profile roles</b></div>
+        <div class="kv"><span class="lab">token 有效期</span><b>access 2h / refresh 7d（轮换）</b></div>
+        <div class="kv"><span class="lab">应用角色</span><b>admin · editor · viewer ✏️</b></div>
+      </div>
+      <div class="card"><h4>对接 Skill 与联调</h4>
+        <p style="font-size:12.5px;color:var(--gray);line-height:1.8;margin-bottom:12px">Skill 含端点说明、协议流程、多语言示例（Java/PHP/Python/Node）与自检清单。<b style="color:var(--ink)">不含 client_secret</b>——对接时 AI 将询问你输入凭证并引导写入环境变量。</p>
+        <button class="btn btn-pri" style="width:auto" onclick="openModal('m-skill')">⬇ 下载对接 Skill</button>
+        <div style="margin-top:14px;display:flex;gap:10px">
+          <button class="btn btn-line btn-sm">Token 解析器</button>
+          <button class="btn btn-line btn-sm">回调连通测试</button>
+          <button class="btn btn-line btn-sm">登录诊断日志</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 工单中心 -->
+  <section id="p-tickets" class="screen">
+    <div class="crumb">员工端 / 工单中心</div>
+    <div class="ptitle">工单中心
+      <button class="btn btn-pri btn-sm right" style="width:auto" onclick="openModal('m-extend')">＋ 发起申请</button></div>
+    <div class="toolbar">
+      <span class="pill p-blue" style="padding:6px 14px;cursor:pointer">待我审批 2</span>
+      <span class="pill p-gray" style="padding:6px 14px;cursor:pointer">我的申请 3</span>
+      <span class="pill p-gray" style="padding:6px 14px;cursor:pointer">已办</span>
+      <span class="pill p-gray" style="padding:6px 14px;cursor:pointer">抄送我</span>
+    </div>
+    <table>
+      <tr><th>工单号</th><th>类型</th><th>申请人</th><th>当前节点</th><th>渠道</th><th>提交时间</th><th>操作</th></tr>
+      <tr><td>T20260721-018</td><td>应用权限申请（CRM · viewer）</td><td>李雷</td><td><span class="pill p-blue">待你审批</span></td><td>本系统</td><td>今天 09:41</td><td><a style="color:var(--green);cursor:pointer">同意</a> · <a style="color:var(--red);cursor:pointer">驳回</a> · <a style="color:var(--blue-d);cursor:pointer">转办</a></td></tr>
+      <tr><td>T20260721-011</td><td>外部账号延期（王强 · +90天）</td><td>吴川斌（代提）</td><td><span class="pill p-orange">一级领导审批中</span></td><td>飞书审批 ↗</td><td>今天 08:52</td><td><a style="color:var(--muted)">催办</a></td></tr>
+      <tr><td>T20260720-206</td><td>应用接入申请（数据看板）</td><td>吴川斌</td><td><span class="pill p-orange">平台管理员审核</span></td><td>本系统</td><td>昨天</td><td><a style="color:var(--muted)">撤回</a></td></tr>
+      <tr><td>T20260719-152</td><td>外部人员换号（陈芳）</td><td>吴川斌（代提）</td><td><span class="pill p-green">已完成</span></td><td>本系统</td><td>07-19</td><td><a style="color:var(--muted)">详情</a></td></tr>
+    </table>
+  </section>
+
+  <!-- AI-GEN-BEGIN O-V2.0 team account management -->
+  <section id="p-team-accounts" class="screen">
+    <div class="crumb">员工入口 / 团队管理 / 团队账号管理</div>
+    <div class="ptitle">团队账号管理 <span class="pill p-blue">负责人 / 部门上级</span><button class="btn btn-pri btn-sm right" style="width:auto" onclick="openTeamBulk('新建账号')">＋ 新建账号</button></div>
+    <div class="banner">当前管理范围：<strong>来酷 PC 事业部 / 产品运作</strong>，共 45 人。范围来自飞书/北森组织关系及本系统责任人配置，不可越权管理其他部门。</div>
+    <div class="cards g4" style="margin-bottom:14px">
+      <div class="card kpi"><b>45</b><span>可管理人员</span></div>
+      <div class="card kpi"><b>126</b><span>已关联系统账号</span></div>
+      <div class="card kpi"><b style="color:var(--orange)">8</b><span>30 天内到期</span></div>
+      <div class="card kpi"><b style="color:var(--red)">3</b><span>待关闭 / 异常</span></div>
+    </div>
+    <div class="toolbar">
+      <input placeholder="姓名 / ITcode / 系统账号">
+      <select><option>全部下属部门</option><option>产品运作</option><option>产品开发</option><option>项目管理</option></select>
+      <select><option>全部状态</option><option>正常</option><option>即将到期</option><option>待关闭</option></select>
+      <span class="pill p-blue" id="team-selected">已选择 0 人</span>
+    </div>
+    <div class="toolbar">
+      <button class="btn btn-line btn-sm" onclick="openTeamBulk('设置可登录系统')">批量设置可登录系统</button>
+      <button class="btn btn-line btn-sm" onclick="openTeamBulk('设置有效期')">批量设置有效期</button>
+      <button class="btn btn-line btn-sm" onclick="openTeamBulk('申请账号延期')">批量申请延期</button>
+      <button class="btn btn-line btn-sm" onclick="openTeamBulk('新建账号')">批量新建账号</button>
+      <button class="btn btn-line btn-sm" style="border-color:#F0C3C3;color:var(--red)" onclick="openTeamBulk('关闭账号')">批量关闭账号</button>
+    </div>
+    <table id="team-account-table">
+      <tr><th><input type="checkbox" onchange="teamSelectAll(this)"></th><th>人员 / 组织</th><th>系统账号</th><th>可登录系统</th><th>有效期</th><th>风险状态</th><th>操作</th></tr>
+      <tr><td><input class="team-check" type="checkbox" onchange="teamSelectionChanged()"></td><td><b>张冠桥</b><br>产品运作 · 在职</td><td>NC / SCM / BIP</td><td>3 个系统</td><td>在职有效</td><td><span class="pill p-green">正常</span></td><td><a style="color:var(--blue-d)" onclick="openTeamBulk('设置可登录系统')">管理</a></td></tr>
+      <tr><td><input class="team-check" type="checkbox" onchange="teamSelectionChanged()"></td><td><b>王晓</b><br>产品开发 · 在职</td><td>CRM / PMS</td><td>2 个系统</td><td><b style="color:var(--orange)">剩 18 天</b></td><td><span class="pill p-orange">即将到期</span></td><td><a style="color:var(--blue-d)" onclick="openTeamBulk('申请账号延期')">延期</a></td></tr>
+      <tr><td><input class="team-check" type="checkbox" onchange="teamSelectionChanged()"></td><td><b>李雷</b><br>项目管理 · 在职</td><td>CRM / PMS / 数据看板</td><td>3 个系统</td><td>2026-12-31</td><td><span class="pill p-green">正常</span></td><td><a style="color:var(--blue-d)" onclick="openTeamBulk('设置有效期')">有效期</a></td></tr>
+      <tr><td><input class="team-check" type="checkbox" onchange="teamSelectionChanged()"></td><td><b>陈芳</b><br>外包人员 · 合同结束</td><td>CRM / 堡垒机</td><td>2 个系统</td><td><b style="color:var(--red)">已到期</b></td><td><span class="pill p-red">待关闭</span></td><td><a style="color:var(--red)" onclick="openTeamBulk('关闭账号')">关闭</a></td></tr>
+    </table>
+    <div class="cards g2" style="margin-top:14px">
+      <div class="card"><h4>负责人可执行</h4>
+        <div class="chip-row"><span class="pill p-blue">设置系统准入</span><span class="pill p-blue">设置有效期</span><span class="pill p-blue">申请延期</span><span class="pill p-blue">新建账号</span><span class="pill p-blue">关闭账号</span><span class="pill p-blue">批量操作</span></div>
+        <p class="note">操作结果可能由接口自动执行，也可能生成系统负责人线下待办；未取得回执前不视为完成。</p>
+      </div>
+      <div class="card"><h4>权限边界</h4>
+        <div class="kv"><span>人员范围</span><b>直属人员 / 下属部门 / 指定代管</b></div>
+        <div class="kv"><span>普通系统账号</span><b>按配置直接执行或普通审批</b></div>
+        <div class="kv"><span>成本查看权限</span><b style="color:var(--red)">必须一级领导 + 财务负责人复核</b></div>
+        <div class="kv"><span>批量关闭</span><b>二次确认 + 原因 + 全量审计</b></div>
+      </div>
+    </div>
+  </section>
+  <!-- AI-GEN-END -->
+
+  </div>
+</div></div>
+<div class="footer-tip">演示交互：应用详情页可打开【重置 Secret】【下载 Skill】弹窗；个人中心含外部人员有效期视角；侧边栏切换各页面</div>
+</div>
+
+<!-- ================= 管理员端 ================= -->
+<div id="view-admin" class="view">
+<div class="stage"><div class="app">
+  <aside class="side">
+    <div class="brand"><i>S</i>管理后台</div>
+    <nav>
+      <a class="on" onclick="scr('admin','a-dash',this)">📊 仪表盘</a>
+      <div class="grp">身份治理</div>
+      <a onclick="scr('admin','a-users',this)">👥 统一身份主档</a>
+      <a onclick="scr('admin','a-user-detail',this)">🔍 身份与账号详情</a>
+      <a onclick="scr('admin','a-perm-explorer',this)">🧭 集中权限查看</a>
+      <a onclick="scr('admin','a-org',this)">🌲 组织与负责人</a>
+      <div class="grp">应用与权限</div>
+      <a onclick="scr('admin','a-apps',this)">📦 应用管理 / 审核</a>
+      <a onclick="scr('admin','a-roles',this)">🎭 角色权限查看</a>
+      <a onclick="scr('admin','a-grant',this)">🛡 授权管理</a>
+      <a onclick="scr('admin','a-xperm',this)">🗂 跨系统权限目录</a>
+      <a onclick="scr('admin','a-sync-api',this)">🔄 手动同步 · 拉推接口</a>
+      <div class="grp">流程与策略</div>
+      <a onclick="scr('admin','a-sso',this)">🔐 SSO 适配器配置</a>
+      <a onclick="scr('admin','a-flow',this)">🧭 审批管理</a>
+      <a onclick="scr('admin','a-policy',this)">⚙️ 策略配置</a>
+      <a onclick="scr('admin','a-audit',this)">🧾 审计与报表</a>
+      <!-- AI-GEN-BEGIN O-V2.0 governance navigation -->
+      <div class="grp">账号治理与审计 · O-V2.0</div>
+      <a onclick="scr('admin','a-link',this)">🔗 账号关联工作台</a>
+      <a onclick="scr('admin','a-accounts',this)">🗃 系统账号台账</a>
+      <a onclick="scr('admin','a-lifecycle',this)">🔁 生命周期任务</a>
+      <a onclick="scr('admin','a-special',this)">🛡 成本权限复核</a>
+      <a onclick="scr('admin','a-quarterly',this)">✅ 季度审计核查</a>
+      <a onclick="scr('admin','a-quarter-flow',this)">↪ 季度核查流程</a>
+      <!-- AI-GEN-END -->
+    </nav>
+    <div class="me"><span class="avatar" style="background:linear-gradient(135deg,#E67E22,#D64545)">管</span><div>platform.admin<br><span style="color:#7C8BB8;font-size:11px">平台管理员</span></div></div>
+  </aside>
+  <div class="main">
+
+  <section id="a-dash" class="screen show">
+    <div class="crumb">管理后台 / 身份治理与安全审计</div>
+    <div class="ptitle">用户中心治理概览 <span class="module-tag module-govern">模块 2</span><span style="font-size:12px;color:var(--muted);font-weight:400">2026-07-31 16:30 刷新</span></div>
+    <div class="cards g4" style="margin-bottom:14px">
+      <div class="card kpi"><b>1,987</b><span>统一身份主档</span><i class="up">飞书/北森已同步</i></div>
+      <div class="card kpi"><b>21</b><span>账号来源文件 / 系统</span><i class="up">接口 + 手工导入</i></div>
+      <div class="card kpi"><b style="color:var(--orange)">42</b><span>待人工确认账号关联</span></div>
+      <div class="card kpi"><b style="color:var(--red)">9</b><span>离职账号待关闭核验</span></div>
+    </div>
+    <div class="cards g3">
+      <div class="card"><h4>账号治理</h4>
+        <div class="kv"><span>外部账号总数</span><b>412</b></div>
+        <div class="kv"><span>30 天内到期</span><b style="color:var(--orange)">89</b></div>
+        <div class="kv"><span>已过期待处置</span><b style="color:var(--red)">12</b></div>
+        <div class="kv"><span>休眠（90 天未登录）</span><b>26</b></div></div>
+      <div class="card"><h4>工单时效</h4>
+        <div class="kv"><span>待处理工单</span><b>14</b></div>
+        <div class="kv"><span>平均审批时长</span><b>6.8 小时</b></div>
+        <div class="kv"><span>超 48h 未处理</span><b style="color:var(--orange)">2（已提醒）</b></div>
+        <div class="kv"><span>飞书渠道占比</span><b>64%</b></div></div>
+      <div class="card"><h4>组织与责任同步</h4>
+        <div class="kv"><span>飞书组织增量</span><b style="color:var(--green)">正常 · 3 分钟前</b></div>
+        <div class="kv"><span>北森人员状态</span><b style="color:var(--green)">正常 · 8 分钟前</b></div>
+        <div class="kv"><span>同步冲突待处理</span><b style="color:var(--orange)">2（手机号重复）</b></div>
+        <div class="kv"><span>部门负责人待指定</span><b style="color:var(--orange)">3 个部门</b></div></div>
+    </div>
+  </section>
+
+  <section id="a-users" class="screen">
+    <div class="crumb">管理后台 / 用户管理</div>
+    <div class="ptitle">用户管理 <span class="pill p-blue">含有效期</span></div>
+    <div class="banner">统一身份主档：内部员工、外部人员、服务身份统一管理；可直达账号、权限、有效期、责任人与审计证据。</div>
+    <div class="toolbar">
+      <input placeholder="搜索 itcode / 姓名 / 手机号">
+      <select><option>全部类型</option><option>内部员工</option><option>外部人员</option></select>
+      <select><option>全部状态</option><option>正常</option><option>即将过期</option><option>已过期</option><option>禁用</option></select>
+      <button class="btn btn-line btn-sm" onclick="demoSync('用户','pull')">⬇ 拉取用户</button>
+      <button class="btn btn-line btn-sm" onclick="demoSync('用户','push')">⬆ 推送用户</button>
+      <button class="btn btn-pri btn-sm right" style="width:auto">＋ 开通外部人员</button>
+    </div>
+    <table>
+      <tr><th>用户</th><th>类型 / 来源</th><th>唯一标识</th><th>生命周期</th><th>账号有效期</th><th>跨系统角色数</th><th>操作</th></tr>
+      <tr><td><b>吴川斌</b></td><td>内部 · Logto/飞书</td><td>chuanbin.wu</td><td><span class="pill p-green">正常</span></td><td>在职即有效</td><td>3 应用 / 5 角色</td><td><a style="color:var(--blue-d);cursor:pointer" onclick="scr('admin','a-user-detail',document.querySelectorAll('#view-admin .side nav a')[2])">权限详情</a></td></tr>
+      <tr><td><b>王强</b>（供应商A）</td><td>外部 · 自建</td><td>138****5566</td><td><span class="pill p-orange">即将过期</span></td><td><b style="color:var(--orange)">至 2026-07-26 · 剩 5 天</b><br><span style="font-size:11px;color:var(--muted)">模式 B · 强制有效期</span></td><td>2 应用 / 2 角色</td><td><a style="color:var(--blue-d);cursor:pointer" onclick="openModal('m-extend')">延期</a> · <a style="color:var(--blue-d);cursor:pointer" onclick="scr('admin','a-user-detail',document.querySelectorAll('#view-admin .side nav a')[2])">权限详情</a></td></tr>
+      <tr><td><b>陈芳</b>（外包B）</td><td>外部 · 自建</td><td>159****2211</td><td><span class="pill p-red">已过期</span></td><td><b style="color:var(--red)">已过期 3 天</b><br><span style="font-size:11px;color:var(--muted)">过期即禁登</span></td><td>1 应用 / 1 角色</td><td><a style="color:var(--blue-d);cursor:pointer">恢复处理</a></td></tr>
+      <tr><td><b>刘敏</b>（合作方C）</td><td>外部 · 自建</td><td>137****8899</td><td><span class="pill p-green">正常</span></td><td>至 2026-10-12 · 剩 77 天<br><span style="font-size:11px;color:var(--muted)">模式 A · 改密续期</span></td><td>1 应用 / 1 角色</td><td><a style="color:var(--blue-d);cursor:pointer" onclick="scr('admin','a-user-detail',document.querySelectorAll('#view-admin .side nav a')[2])">权限详情</a></td></tr>
+      <tr><td><b>张伟</b></td><td>内部 · 飞书</td><td>wei.zhang</td><td><span class="pill p-gray">已禁用（离职）</span></td><td>—</td><td>0（已回收）</td><td><a style="color:var(--orange)">名下资产转交 ›</a></td></tr>
+    </table>
+    <div class="card" style="margin-top:14px"><h4>生命周期操作（选中用户后）</h4>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-line btn-sm">禁用</button><button class="btn btn-line btn-sm">解锁</button>
+        <button class="btn btn-line btn-sm">重置密码</button><button class="btn btn-line btn-sm">强制下线</button>
+        <button class="btn btn-line btn-sm" onclick="openModal('m-extend')">手动延期</button>
+        <button class="btn btn-line btn-sm" onclick="demoSync('用户','manual')">手动同步此用户</button>
+        <button class="btn btn-line btn-sm" style="border-color:#F2D4AC;color:#C06A0A">紧急临时密码（15 分钟）</button>
+      </div></div>
+  </section>
+
+  <!-- AI-GEN-BEGIN -->
+  <section id="a-user-detail" class="screen">
+    <div class="crumb">管理后台 / 用户权限详情</div>
+    <div class="ptitle">用户权限详情 · 王强（供应商A） <span class="pill p-orange">剩 5 天到期</span></div>
+    <div class="split">
+      <div class="card">
+        <h4>账号与有效期</h4>
+        <div class="kv"><span class="lab">用户 ID</span><b>usr_wangqiang_ext</b></div>
+        <div class="kv"><span class="lab">类型</span><b>外部 · 自建</b></div>
+        <div class="kv"><span class="lab">租户角色</span><b>member</b></div>
+        <div class="kv"><span class="lab">有效期模式</span><b>模式 B · 强制 90 天</b></div>
+        <div class="kv"><span class="lab">生效 / 到期</span><b>2026-04-27 → 2026-07-26</b></div>
+        <div class="kv"><span class="lab">剩余</span><b style="color:var(--orange)">5 天</b></div>
+        <div class="kv"><span class="lab">sponsor</span><b>吴川斌</b></div>
+        <div class="countdown" style="margin-top:12px">⏳ <div>过期后将<strong>完全无法登录</strong>；各子系统授权随账号到期一并失效。</div></div>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <button class="btn btn-pri btn-sm" style="width:auto" onclick="openModal('m-extend')">发起延期</button>
+          <button class="btn btn-line btn-sm" onclick="demoSync('用户','manual')">手动同步用户</button>
+          <button class="btn btn-line btn-sm" onclick="demoSync('权限','pull')">拉取其权限快照</button>
+        </div>
+      </div>
+      <div class="card">
+        <h4>跨系统权限一览（只读聚合）</h4>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px">按用户查看其在各业务系统的角色与权限点 · GET /members/{id}/cross-permissions</p>
+        <table>
+          <tr><th>系统</th><th>角色</th><th>权限点（摘录）</th><th>授权有效期</th></tr>
+          <tr><td><b>CRM</b></td><td><span class="pill p-gray">viewer</span></td><td>crm.customer.read<br>crm.report.view</td><td>随账号 · 2026-07-26</td></tr>
+          <tr><td><b>PMS</b></td><td><span class="pill p-gray">viewer</span></td><td>pms.project.read<br>pms.task.comment</td><td>随账号 · 2026-07-26</td></tr>
+          <tr><td><b>数据看板</b></td><td><span class="pill p-red">无授权</span></td><td>—</td><td>—</td></tr>
+        </table>
+        <div class="chip-row" style="margin-top:12px">
+          <span class="pill p-blue">2 个已授权系统</span>
+          <span class="pill p-orange">授权随账号有效期绑定</span>
+          <span class="pill p-gray">细粒度鉴权仍由子系统执行</span>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h4>角色矩阵（用户 × 系统角色）</h4>
+      <table>
+        <tr><th>角色 Key</th><th>所属系统</th><th>授予方式</th><th>最近同步</th><th>操作</th></tr>
+        <tr><td>crm.viewer</td><td>CRM</td><td>单独授权</td><td>今日 14:02 · push</td><td><a style="color:var(--blue-d);cursor:pointer" onclick="scr('admin','a-roles',document.querySelectorAll('#view-admin .side nav a')[5])">查看角色权限</a></td></tr>
+        <tr><td>pms.viewer</td><td>PMS</td><td>单独授权</td><td>今日 14:02 · push</td><td><a style="color:var(--blue-d);cursor:pointer" onclick="scr('admin','a-roles',document.querySelectorAll('#view-admin .side nav a')[5])">查看角色权限</a></td></tr>
+      </table>
+    </div>
+  </section>
+  <!-- AI-GEN-END -->
+
+  <!-- AI-GEN-BEGIN -->
+  <section id="a-perm-explorer" class="screen">
+    <div class="crumb">管理后台 / 集中权限查看</div>
+    <div class="ptitle">集中权限查看 <span class="pill p-blue">O-V2.0</span><span class="pill p-gray">只读聚合</span></div>
+    <div class="banner">Board 增量：①按用户查各系统权限 ②按权限查持有人 ③按组织架构查公司/部门人员；支持<strong>树形 / 列表</strong>与<strong>导出</strong>；树形可切换「全部权限（标记已有）」与「仅有权限」。</div>
+    <div class="toolbar">
+      <button class="btn btn-pri btn-sm" id="pe-tab-user" style="width:auto" onclick="peSetView('by_user')">按用户</button>
+      <button class="btn btn-line btn-sm" id="pe-tab-perm" style="width:auto" onclick="peSetView('by_permission')">按权限</button>
+      <button class="btn btn-line btn-sm" id="pe-tab-org" style="width:auto" onclick="peSetView('by_org')">按组织</button>
+      <select id="pe-subject" onchange="peRender()"></select>
+      <select id="pe-display" onchange="peRender()">
+        <option value="tree">树形</option>
+        <option value="list">列表</option>
+      </select>
+      <select id="pe-tree-mode" onchange="peRender()">
+        <option value="all_marked">树形：全部权限（标记已有）</option>
+        <option value="owned_only">树形：仅用户已有权限</option>
+      </select>
+      <button class="btn btn-pri btn-sm right" style="width:auto" onclick="peExport()">导出 CSV</button>
+    </div>
+    <div class="split">
+      <div class="card">
+        <h4 id="pe-title">主体</h4>
+        <p id="pe-sub" style="font-size:12px;color:var(--muted);margin-bottom:10px"></p>
+        <div id="pe-tree" class="perm-tree" style="line-height:1.9;font-size:13px"></div>
+        <div id="pe-list-wrap" style="display:none">
+          <table id="pe-list"><thead></thead><tbody></tbody></table>
+        </div>
+      </div>
+      <div class="card">
+        <h4>接口契约</h4>
+        <div class="kv"><span class="lab">查询</span><b>GET /permission-explorer?view=&amp;subjectId=&amp;treeMode=</b></div>
+        <div class="kv"><span class="lab">主体列表</span><b>GET /permission-explorer?meta=1</b></div>
+        <div class="kv"><span class="lab">导出</span><b>GET /permission-explorer/export</b></div>
+        <div class="kv"><span class="lab">鉴权语义</span><b>只读聚合 · 非实时鉴权</b></div>
+        <h4 style="margin-top:14px">图例</h4>
+        <div class="chip-row">
+          <span class="pill p-green">✓ 已有权限</span>
+          <span class="pill p-gray">○ 目录中但未授予</span>
+          <span class="pill p-blue">树 / 列表可切换</span>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin-top:12px">按组织时，左侧展示部门下人员及其权限树；可展开到公司根节点查看全部人员。</p>
+      </div>
+    </div>
+  </section>
+  <!-- AI-GEN-END -->
+
+  <section id="a-org" class="screen">
+    <div class="crumb">管理后台 / 组织与负责人</div>
+    <div class="ptitle">组织架构与责任人 <span class="pill p-blue">飞书 / 北森双来源</span></div>
+    <div class="banner">组织架构默认从<strong>飞书或北森</strong>同步；部门负责人、一级领导、财务负责人支持自动推导与人工指定，例外配置全程留痕。</div>
+    <div class="cards g3">
+      <div class="card" style="grid-column:span 1"><h4>部门树</h4>
+        <div class="chip-row"><span class="source-chip">主：飞书</span><span class="source-chip">人员状态：北森</span></div>
+        <div style="font-size:13px;line-height:2.2;color:var(--gray)">▾ lecoo（1,987）<br>&nbsp;&nbsp;▾ 来酷 PC 事业部（326）<br>&nbsp;&nbsp;&nbsp;&nbsp;· 产品运作（45）<br>&nbsp;&nbsp;&nbsp;&nbsp;· 产品开发（98）<br>&nbsp;&nbsp;▸ 产品营销（278）<br>&nbsp;&nbsp;▸ 中台交付（214）<br>&nbsp;&nbsp;▸ 财法管理（86）</div></div>
+      <div class="card" style="grid-column:span 2"><h4>同步源与字段权威
+        <button class="btn btn-line btn-sm" style="float:right;margin-left:6px" onclick="orgSync('beisen')">同步北森</button>
+        <button class="btn btn-line btn-sm" style="float:right" onclick="orgSync('feishu')">同步飞书</button>
+      </h4>
+        <table><tr><th>数据域</th><th>权威来源</th><th>最近同步</th><th>状态</th></tr>
+        <tr><td>部门、上下级、工作邮箱</td><td>飞书</td><td>3 分钟前</td><td><span class="pill p-green">正常</span></td></tr>
+        <tr><td>入职、离职、在职状态</td><td>北森</td><td>8 分钟前</td><td><span class="pill p-green">正常</span></td></tr>
+        <tr><td>部门负责人、财务负责人</td><td>本系统指定</td><td>今日 15:20</td><td><span class="pill p-orange">3 个待完善</span></td></tr></table>
+        <div class="kv"><span>今日人员事件</span><b>入职 2 · 离职 1 · 调岗 14</b></div>
+        <div class="kv"><span>离职联动</span><b style="color:var(--green)">张伟 → 已生成跨系统账号清零任务</b></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px"><h4>部门与负责人配置</h4>
+      <div class="toolbar">
+        <select><option>来酷 PC 事业部 / 产品运作</option><option>产品营销 / BTIT</option><option>中台交付</option><option>财法管理</option></select>
+        <select id="org-owner"><option>部门负责人：吴涛（飞书推导）</option><option>部门负责人：人工指定…</option></select>
+        <select><option>一级领导：刘维翰（组织推导）</option><option>一级领导：人工指定…</option></select>
+        <select><option>财务负责人：常明明（本系统指定）</option><option>财务负责人：人工指定…</option></select>
+        <button class="btn btn-pri btn-sm right" style="width:auto" onclick="saveOwnerRoute()">保存责任链</button>
+      </div>
+      <div class="owner-route"><span class="person">直接负责人 · 吴涛</span><em>→</em><span class="person">一级领导 · 刘维翰</span><em>→</em><span class="person">财务负责人 · 常明明</span><em>→</em><span class="person">系统负责人 · 武传斌</span></div>
+      <p class="note">同步字段只读；人工指定仅覆盖责任路由，不修改飞书/北森原始组织数据。每次变更记录配置人、依据、有效期与审计事件。</p>
+    </div>
+  </section>
+
+  <section id="a-apps" class="screen">
+    <div class="crumb">管理后台 / 应用管理</div>
+    <div class="ptitle">应用管理 <span class="pill p-red">待审核 3</span></div>
+    <table>
+      <tr><th>应用</th><th>负责人</th><th>协议</th><th>状态</th><th>授权用户</th><th>近30天登录</th><th>操作</th></tr>
+      <tr style="background:#FFFBF3"><td><b>数据看板</b></td><td>吴川斌</td><td>OAuth2</td><td><span class="pill p-orange">待审核</span></td><td>—</td><td>—</td><td><a style="color:var(--green);cursor:pointer" onclick="openModal('m-approve')">审核</a></td></tr>
+      <tr><td><b>项目管理 PMS</b></td><td>吴川斌 +1</td><td>OAuth2+PKCE</td><td><span class="pill p-green">已启用</span></td><td>326</td><td>8,412</td><td><a style="color:var(--gray)">停用</a> · <a style="color:var(--gray)">转交</a></td></tr>
+      <tr><td><b>CRM 客户系统</b></td><td>李雷</td><td>OIDC</td><td><span class="pill p-green">已启用</span></td><td>512</td><td>22,180</td><td><a style="color:var(--gray)">详情</a></td></tr>
+      <tr><td><b>老工具站</b></td><td>张伟（已离职）</td><td>CAS</td><td><span class="pill p-red">待转交</span></td><td>45</td><td>120</td><td><a style="color:var(--orange)">强制转交</a></td></tr>
+    </table>
+    <div class="card" style="margin-top:14px"><h4>Key 轮换审计（示例）</h4>
+      <table><tr><th>时间</th><th>应用</th><th>操作</th><th>操作人</th><th>Key 指纹</th></tr>
+      <tr><td>今日 10:24</td><td>PMS</td><td>重置 secret（旧 Key 6h 宽限）</td><td>chuanbin.wu</td><td>SHA256:9f2e…a1</td></tr>
+      <tr><td>07-15</td><td>CRM</td><td>应急作废旧 Key</td><td>li.lei</td><td>SHA256:77b0…3c</td></tr></table></div>
+  </section>
+
+  <section id="a-grant" class="screen">
+    <div class="crumb">管理后台 / 授权管理</div>
+    <div class="ptitle">授权管理 · 项目管理 PMS</div>
+    <div class="toolbar">
+      <select><option>项目管理 PMS</option><option>CRM 客户系统</option></select>
+      <button class="btn btn-line btn-sm">按用户授权</button><button class="btn btn-line btn-sm">按部门批量授权</button>
+      <button class="btn btn-line btn-sm">全员开放（需批准）</button>
+      <button class="btn btn-line btn-sm" onclick="demoSync('权限','manual')">手动同步本应用授权</button>
+      <button class="btn btn-pri btn-sm right" style="width:auto">导出权限报表</button>
+    </div>
+    <table>
+      <tr><th>用户</th><th>授权方式</th><th>应用角色</th><th>授权有效期</th><th>操作</th></tr>
+      <tr><td>吴川斌</td><td>负责人自动</td><td><span class="pill p-blue">admin</span></td><td>长期</td><td><a style="color:var(--blue-d);cursor:pointer" onclick="scr('admin','a-user-detail',document.querySelectorAll('#view-admin .side nav a')[2])">用户权限</a></td></tr>
+      <tr><td>平台研发部（部门 · 214人）</td><td>部门批量</td><td><span class="pill p-gray">viewer</span></td><td>长期</td><td><a style="color:var(--gray)">调整</a></td></tr>
+      <tr><td>王强（外部）</td><td>单独授权</td><td><span class="pill p-gray">viewer</span></td><td>至 2026-07-26（随账号）</td><td><a style="color:var(--red)">回收</a></td></tr>
+      <tr><td>李雷</td><td>单独授权</td><td><span class="pill p-blue">editor</span></td><td>2026-12-31</td><td><a style="color:var(--gray)">调整</a></td></tr>
+    </table>
+    <p style="font-size:12px;color:var(--muted);margin-top:10px">角色经 OIDC id_token claim / userinfo 透传给子系统；应用内细粒度权限由子系统自治（只读聚合，不作实时鉴权）。</p>
+  </section>
+
+  <!-- AI-GEN-BEGIN -->
+  <section id="a-roles" class="screen">
+    <div class="crumb">管理后台 / 角色权限查看</div>
+    <div class="ptitle">角色权限查看 <span class="pill p-blue">只读</span></div>
+    <div class="banner">按<strong>角色</strong>查看其权限点；可反查绑定用户；支持把角色权限<strong>拉取/推送</strong>到业务系统。</div>
+    <div class="toolbar">
+      <select onchange="void(0)"><option>CRM · crm.viewer</option><option>CRM · crm.editor</option><option>PMS · pms.admin</option><option>PMS · pms.viewer</option><option>租户 · admin</option></select>
+      <button class="btn btn-line btn-sm" onclick="demoSync('权限','pull')">⬇ 拉取角色权限</button>
+      <button class="btn btn-line btn-sm" onclick="demoSync('权限','push')">⬆ 推送角色权限</button>
+    </div>
+    <div class="split">
+      <div class="card">
+        <h4>角色：crm.viewer</h4>
+        <div class="kv"><span class="lab">所属系统</span><b>CRM 客户系统</b></div>
+        <div class="kv"><span class="lab">绑定用户</span><b>128 人</b></div>
+        <div class="kv"><span class="lab">最近同步</span><b>今日 14:05 · pull 成功</b></div>
+        <h4 style="margin-top:14px">权限点</h4>
+        <div class="perm-tree">
+          ▾ <b>客户</b><br>
+          &nbsp;&nbsp;· crm.customer.read — 查看客户<br>
+          &nbsp;&nbsp;· crm.customer.export — 导出客户（否）<br>
+          ▾ <b>报表</b><br>
+          &nbsp;&nbsp;· crm.report.view — 查看报表<br>
+          ▾ <b>商机</b><br>
+          &nbsp;&nbsp;· crm.opportunity.read — 只读商机
+        </div>
+      </div>
+      <div class="card">
+        <h4>绑定用户（摘录）</h4>
+        <table>
+          <tr><th>用户</th><th>账号有效期</th><th>授权有效期</th></tr>
+          <tr><td>王强（外部）</td><td><span class="pill p-orange">剩 5 天</span></td><td>随账号</td></tr>
+          <tr><td>刘敏（外部）</td><td><span class="pill p-green">剩 77 天</span></td><td>随账号</td></tr>
+          <tr><td>平台研发部 · 批量</td><td>在职即有效</td><td>长期</td></tr>
+        </table>
+        <p style="font-size:12px;color:var(--muted);margin-top:10px">GET /roles/{roleKey}/permissions · GET /roles/{roleKey}/members</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="a-xperm" class="screen">
+    <div class="crumb">管理后台 / 跨系统权限目录</div>
+    <div class="ptitle">跨系统权限目录 <span class="pill p-gray">只读聚合</span></div>
+    <div class="toolbar">
+      <input placeholder="按系统 / 权限 key / 角色搜索">
+      <select><option>全部系统</option><option>PMS</option><option>CRM</option><option>数据看板</option></select>
+      <button class="btn btn-line btn-sm" onclick="demoSync('权限','pull')">⬇ 拉取全部目录</button>
+      <button class="btn btn-line btn-sm" onclick="demoSync('权限','push')">⬆ 推送变更到应用</button>
+      <button class="btn btn-pri btn-sm right" style="width:auto" onclick="demoSync('权限','manual')">手动同步权限</button>
+    </div>
+    <table>
+      <tr><th>系统</th><th>权限 Key</th><th>名称</th><th>关联角色</th><th>最近上报</th><th>操作</th></tr>
+      <tr><td>CRM</td><td>crm.customer.read</td><td>查看客户</td><td>viewer · editor · admin</td><td>今日 14:05</td><td><a style="color:var(--blue-d);cursor:pointer" onclick="scr('admin','a-roles',document.querySelectorAll('#view-admin .side nav a')[5])">角色</a></td></tr>
+      <tr><td>CRM</td><td>crm.customer.write</td><td>编辑客户</td><td>editor · admin</td><td>今日 14:05</td><td><a style="color:var(--blue-d);cursor:pointer">角色</a></td></tr>
+      <tr><td>PMS</td><td>pms.project.admin</td><td>项目管理</td><td>admin</td><td>昨日 22:10</td><td><a style="color:var(--blue-d);cursor:pointer">角色</a></td></tr>
+      <tr><td>PMS</td><td>pms.task.comment</td><td>任务评论</td><td>viewer · editor · admin</td><td>昨日 22:10</td><td><a style="color:var(--blue-d);cursor:pointer">角色</a></td></tr>
+      <tr><td>数据看板</td><td>dash.board.view</td><td>看板浏览</td><td>viewer</td><td>未上报</td><td><span class="pill p-orange">待接入</span></td></tr>
+    </table>
+    <p style="font-size:12px;color:var(--muted);margin-top:10px">目录仅用于治理与审计展示；业务 API 鉴权仍在子系统本地执行（SEC-09）。</p>
+  </section>
+
+  <section id="a-sync-api" class="screen">
+    <div class="crumb">管理后台 / 手动同步 · 拉推接口</div>
+    <div class="ptitle">手动同步与拉推接口 Console</div>
+    <div class="banner">用户与权限均可<strong>手动同步</strong>；对外提供 <strong>Pull（拉取）</strong> 与 <strong>Push（推送）</strong> 接口，可在此演示触发。</div>
+    <div class="cards g2" style="margin-bottom:14px">
+      <div class="card">
+        <h4>用户同步</h4>
+        <div class="kv"><span>方向</span><b>IdP/连接器 ⇄ 治理层</b></div>
+        <div class="kv"><span>上次 Pull</span><b>今日 14:01 · +2 / -1 / ~14</b></div>
+        <div class="kv"><span>上次 Push</span><b>今日 13:40 · 推送外部账号有效期 12 条</b></div>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <button class="btn btn-pri btn-sm" style="width:auto" onclick="demoSync('用户','pull')">⬇ Pull 用户</button>
+          <button class="btn btn-line btn-sm" onclick="demoSync('用户','push')">⬆ Push 用户</button>
+          <button class="btn btn-line btn-sm" onclick="demoSync('用户','manual')">手动全量</button>
+        </div>
+        <div class="codebox" style="margin-top:12px"><span class="c"># 拉取用户（连接器 → 治理）</span>
+<span class="m">POST</span> <span class="p">/api/tenants/{tid}/sync/users:pull</span>
+{ "source": "connector:feishu", "mode": "incremental" }
+
+<span class="c"># 推送用户（治理 → 下游 / IdP 属性）</span>
+<span class="m">POST</span> <span class="p">/api/tenants/{tid}/sync/users:push</span>
+{ "targets": ["logto","apps:*"], "include": ["validity","status"] }</div>
+      </div>
+      <div class="card">
+        <h4>权限同步</h4>
+        <div class="kv"><span>方向</span><b>业务应用 ⇄ 权限目录</b></div>
+        <div class="kv"><span>上次 Pull</span><b>今日 14:05 · CRM/PMS 快照</b></div>
+        <div class="kv"><span>上次 Push</span><b>今日 12:18 · 推送角色绑定 36 条</b></div>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <button class="btn btn-pri btn-sm" style="width:auto" onclick="demoSync('权限','pull')">⬇ Pull 权限</button>
+          <button class="btn btn-line btn-sm" onclick="demoSync('权限','push')">⬆ Push 权限</button>
+          <button class="btn btn-line btn-sm" onclick="demoSync('权限','manual')">手动同步</button>
+        </div>
+        <div class="codebox" style="margin-top:12px"><span class="c"># 拉取权限目录（应用上报/对账）</span>
+<span class="m">POST</span> <span class="p">/api/tenants/{tid}/sync/permissions:pull</span>
+{ "appIds": ["crm","pms"], "mode": "full" }
+
+<span class="c"># 推送权限/角色绑定到应用</span>
+<span class="m">POST</span> <span class="p">/api/tenants/{tid}/sync/permissions:push</span>
+{ "appIds": ["crm"], "include": ["roles","grants"] }</div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <h4>请求 / 响应示例面板 <span class="pill p-blue" id="rr-badge">等待触发</span></h4>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">点击任意 Pull / Push / 手动同步按钮后，下方展示本次演示的请求体与 202 Accepted 响应（与 OpenAPI Sync 段对齐）。</p>
+      <div class="split">
+        <div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Request</div>
+          <div class="codebox" id="rr-request"><span class="c">// 尚未触发 · 点击上方按钮</span>
+<span class="m">POST</span> <span class="p">/api/tenants/{tid}/sync/…</span>
+{ }</div>
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Response · 202 Accepted</div>
+          <div class="codebox" id="rr-response"><span class="c">// 等待演示触发</span>
+{ }</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h4>同步任务日志（演示）</h4>
+      <table>
+        <tr><th>时间</th><th>对象</th><th>动作</th><th>结果</th><th>详情</th></tr>
+        <tr id="sync-log-row"><td colspan="5" style="color:var(--muted)">点击上方按钮后，此处追加演示日志…</td></tr>
+      </table>
+    </div>
+  </section>
+  <!-- AI-GEN-END -->
+
+  <!-- AI-GEN-BEGIN -->
+  <section id="a-sso" class="screen">
+    <div class="crumb">管理后台 / SSO 适配器配置</div>
+    <div class="ptitle">SSO 适配器配置 <span class="pill p-blue">O-V2.0 · 多协议</span></div>
+    <div class="banner">后台可配置多种 SSO：飞书 / 企业微信 / 北森 / 通用 OIDC。协议采用标准 <strong>OAuth2 / OIDC Authorization Code</strong>（OIDC 启用 PKCE）。登录页按钮由「启用 + 登录可见」驱动。</div>
+    <div class="toolbar">
+      <select id="sso-kind">
+        <option value="feishu">飞书 / Lark（OAuth2）</option>
+        <option value="wecom">企业微信（OAuth2）</option>
+        <option value="beisen">北森（OIDC / OAuth2）</option>
+        <option value="oidc_generic">通用 OIDC（Auth Code + PKCE）</option>
+      </select>
+      <input id="sso-name" placeholder="显示名，如 Azure AD" style="width:180px">
+      <input id="sso-client" placeholder="Client ID / Corp ID" style="width:180px">
+      <button class="btn btn-pri btn-sm right" style="width:auto" onclick="addSsoRow()">＋ 添加适配器</button>
+    </div>
+    <table id="sso-table">
+      <tr><th>显示名</th><th>适配器</th><th>协议</th><th>启用</th><th>登录可见</th><th>凭证</th><th>操作</th></tr>
+      <tr data-kind="feishu">
+        <td><b>飞书登录</b></td><td>feishu</td><td><span class="pill p-blue">OAuth2</span></td>
+        <td><span class="toggle on" onclick="this.classList.toggle('on')"><i></i></span></td>
+        <td><span class="toggle on" onclick="this.classList.toggle('on');refreshLoginSso()"><i></i></span></td>
+        <td><span class="pill p-orange">待配置 Secret</span></td>
+        <td><a style="color:var(--blue-d);cursor:pointer" onclick="toast('已打开飞书应用凭证表单（演示）')">编辑</a></td>
+      </tr>
+      <tr data-kind="wecom">
+        <td><b>企业微信登录</b></td><td>wecom</td><td><span class="pill p-blue">OAuth2</span></td>
+        <td><span class="toggle on" onclick="this.classList.toggle('on')"><i></i></span></td>
+        <td><span class="toggle on" onclick="this.classList.toggle('on');refreshLoginSso()"><i></i></span></td>
+        <td><span class="pill p-orange">待配置 Secret</span></td>
+        <td><a style="color:var(--blue-d);cursor:pointer" onclick="toast('已打开企微 CorpId/AgentId 表单（演示）')">编辑</a></td>
+      </tr>
+      <tr data-kind="beisen">
+        <td><b>北森登录</b></td><td>beisen</td><td><span class="pill p-green">OIDC</span></td>
+        <td><span class="toggle on" onclick="this.classList.toggle('on')"><i></i></span></td>
+        <td><span class="toggle on" onclick="this.classList.toggle('on');refreshLoginSso()"><i></i></span></td>
+        <td><span class="pill p-orange">待配置 Secret</span></td>
+        <td><a style="color:var(--blue-d);cursor:pointer" onclick="toast('已打开北森 Issuer / Client 配置（演示）')">编辑</a></td>
+      </tr>
+      <tr data-kind="oidc_generic">
+        <td><b>示例 · 通用 OIDC</b></td><td>oidc_generic</td><td><span class="pill p-green">OIDC</span></td>
+        <td><span class="toggle" onclick="this.classList.toggle('on')"><i></i></span></td>
+        <td><span class="toggle" onclick="this.classList.toggle('on');refreshLoginSso()"><i></i></span></td>
+        <td><span class="pill p-gray">未启用</span></td>
+        <td><a style="color:var(--blue-d);cursor:pointer" onclick="toast('Issuer / Client 配置（演示）')">编辑</a></td>
+      </tr>
+    </table>
+    <div class="cards g2" style="margin-top:14px">
+      <div class="card">
+        <h4>适配器契约（代码）</h4>
+        <div class="codebox"><span class="c"># apps/web/src/lib/sso/</span>
+adapters/feishu.ts   <span class="c"># OAuth2</span>
+adapters/wecom.ts    <span class="c"># OAuth2</span>
+adapters/beisen.ts   <span class="c"># OIDC / OAuth2</span>
+adapters/oidc.ts     <span class="c"># OIDC + PKCE</span>
+<span class="m">GET</span>  <span class="p">/api/sso/providers</span>
+<span class="m">GET</span>  <span class="p">/api/sso/start/{id}</span>
+<span class="m">GET</span>  <span class="p">/api/admin/sso-providers</span></div>
+      </div>
+      <div class="card">
+        <h4>登录页预览联动</h4>
+        <p style="font-size:12.5px;color:var(--gray);line-height:1.8;margin-bottom:10px">关闭「登录可见」后，切换到「① 登录门户」将隐藏对应 SSO 按钮（本页演示本地联动）。</p>
+        <button class="btn btn-line btn-sm" onclick="go('login',document.querySelectorAll('.role-tabs button')[0]);refreshLoginSso()">预览登录页 SSO 按钮</button>
+      </div>
+    </div>
+  </section>
+  <!-- AI-GEN-END -->
+
+  <section id="a-flow" class="screen">
+    <div class="crumb">管理后台 / 审批管理</div>
+    <div class="ptitle">审批管理</div>
+    <div class="cards g2">
+      <div class="card"><h4>审批模板与路由（全部本系统托管）</h4>
+        <table><tr><th>工单类型</th><th>审批链</th><th>渠道</th></tr>
+        <tr><td>外部账号开通</td><td>sponsor 一级领导 → 管理员</td><td><span class="pill p-blue">飞书审批</span></td></tr>
+        <tr><td>账号延期</td><td>一级领导 → 管理员</td><td><span class="pill p-blue">飞书审批</span></td></tr>
+        <tr><td>应用接入</td><td>平台管理员</td><td><span class="pill p-gray">本系统</span></td></tr>
+        <tr><td>应用权限</td><td>应用管理员</td><td><span class="pill p-gray">本系统</span></td></tr>
+        <tr><td>外部换号</td><td>管理员</td><td><span class="pill p-gray">本系统</span></td></tr></table>
+        <p style="font-size:12px;color:var(--muted);margin-top:10px">一级领导自动取飞书组织架构直属上级，取不到回退平台管理员并告警；模板经飞书 API 同步（附录 C4 风险项）</p></div>
+      <div class="card"><h4>渠道与超时策略</h4>
+        <div class="kv"><span>飞书审批集成</span><b style="color:var(--green)">已连接 · 回调正常</b></div>
+        <div class="kv"><span>回调失败兜底</span><b>每 10 分钟轮询对账</b></div>
+        <div class="kv"><span>超时提醒</span><b>48h 提醒审批人</b></div>
+        <div class="kv"><span>超时升级</span><b>96h 升级直属上级</b></div>
+        <div class="kv"><span>北森 / 致远</span><b class="pill p-gray">二期 · Connector 已预留</b></div></div>
+    </div>
+  </section>
+
+  <section id="a-policy" class="screen">
+    <div class="crumb">管理后台 / 策略配置</div>
+    <div class="ptitle">策略配置 <span style="font-size:12px;color:var(--muted);font-weight:400">变更需二次确认并留痕</span></div>
+    <div class="cards g3">
+      <div class="card"><h4>密码策略</h4>
+        <div class="kv"><span>最小长度 / 复杂度</span><b>8 位 · 三种字符</b></div>
+        <div class="kv"><span>历史不可重用</span><b>近 5 次</b></div>
+        <div class="kv"><span>内部密码有效期</span><b>不强制（可配置）</b></div>
+        <div class="kv"><span>外部密码有效期</span><b>90 天</b></div></div>
+      <div class="card"><h4>会话策略</h4>
+        <div class="kv"><span>全局会话</span><b>12 小时</b></div>
+        <div class="kv"><span>闲置超时</span><b>10 小时</b></div>
+        <div class="kv"><span>记住我</span><b>7 天</b></div>
+        <div class="kv"><span>并发会话</span><b>不限制</b></div></div>
+      <div class="card"><h4>生命周期策略</h4>
+        <div class="kv"><span>外部账号有效期</span><b>90 天（模式 A/B 可选）</b></div>
+        <div class="kv"><span>到期提醒</span><b>7 / 3 / 1 天 + 登录弹窗</b></div>
+        <div class="kv"><span>过期处置</span><b>即刻禁登 · 90 天后自动禁用</b></div>
+        <div class="kv"><span>休眠阈值</span><b>90 天未登录</b></div></div>
+      <div class="card"><h4>Key 策略</h4>
+        <div class="kv"><span>旧 Key 宽限时长</span><b>6 小时（1~72h 可调）</b></div>
+        <div class="kv"><span>重置验证</span><b>飞书敏感操作确认</b></div></div>
+      <div class="card"><h4>MFA 策略 · O-V2.0</h4>
+        <div class="kv"><span>外部人员</span><b>强制 · TOTP / 短信 OTP</b></div>
+        <div class="kv"><span>内部敏感操作</span><b>步进认证（Step-up）</b></div>
+        <div class="kv"><span>敏感应用清单</span><b>3 个应用 ✏️</b></div>
+        <div class="kv"><span>备用码</span><b>一次性恢复码 × 8</b></div></div>
+      <div class="card"><h4>生物识别策略</h4>
+        <div class="kv"><span>人脸（Face ID / WebAuthn）</span><b>允许 · 设备绑定</b></div>
+        <div class="kv"><span>指纹（Touch ID / Platform）</span><b>允许 · 本地校验</b></div>
+        <div class="kv"><span>注册门槛</span><b>需已登录 + MFA 确认</b></div>
+        <div class="kv"><span>失败回退</span><b>回退 MFA / 密码</b></div></div>
+      <div class="card"><h4>登录安全</h4>
+        <div class="kv"><span>失败锁定</span><b>5 次 / 锁 30 分钟</b></div>
+        <div class="kv"><span>验证码触发</span><b>异常 IP / 连续失败</b></div>
+        <div class="kv"><span>手机端生物解锁</span><b>开启 · 会话续期</b></div></div>
+    </div>
+  </section>
+
+  <section id="a-audit" class="screen">
+    <div class="crumb">管理后台 / 审计与报表</div>
+    <div class="ptitle">审计日志 <button class="btn btn-line btn-sm right">导出</button></div>
+    <div class="toolbar">
+      <input placeholder="操作人 / 对象 / IP"><select><option>全部类型</option><option>登录</option><option>授权变更</option><option>Key 操作</option><option>管理员操作</option></select>
+      <select><option>近 7 天</option><option>近 30 天</option><option>近 1 年</option></select>
+    </div>
+    <table>
+      <tr><th>时间</th><th>类型</th><th>操作人</th><th>详情</th><th>IP</th></tr>
+      <tr><td>14:22:31</td><td>授权变更</td><td>platform.admin</td><td>为 李雷 授予 CRM editor 角色</td><td>10.8.1.2</td></tr>
+      <tr><td>10:24:07</td><td>Key 操作</td><td>chuanbin.wu</td><td>重置 PMS secret（旧 Key 6h 宽限）</td><td>10.8.12.33</td></tr>
+      <tr><td>09:15:44</td><td>生命周期</td><td>系统</td><td>飞书离职事件：张伟 → 禁用 + 全局踢出</td><td>—</td></tr>
+      <tr><td>08:52:10</td><td>工单</td><td>吴川斌</td><td>代提 王强 延期申请（+90 天）</td><td>10.8.12.33</td></tr>
+      <tr><td>03:00:00</td><td>同步</td><td>系统</td><td>飞书全量对账成功 · 1,987 人 · 冲突 2</td><td>—</td></tr>
+    </table>
+    <p style="font-size:12px;color:var(--muted);margin-top:10px">日志只增不改 · 保留 ≥ 1 年（多租户 RBAC）· 支持导出复核</p>
+  </section>
+
+  <!-- AI-GEN-BEGIN O-V2.0 identity governance screens -->
+  <section id="a-link" class="screen">
+    <div class="crumb">管理后台 / 账号治理 / 账号关联工作台</div>
+    <div class="ptitle">账号关联工作台 <span class="pill p-blue">可解释匹配</span><span class="pill p-orange">待人工确认 42</span></div>
+    <div class="banner">将各系统账号关联到统一身份主档。强标识自动关联，组合特征进入人工确认；仅姓名匹配<strong>不得自动合并</strong>。</div>
+    <div class="cards g4" style="margin-bottom:14px">
+      <div class="card"><div class="mini-stat"><b>1,287</b><span>本期自动关联<br>分数 ≥ 90</span></div></div>
+      <div class="card"><div class="mini-stat"><b style="color:var(--orange)">42</b><span>待人工确认<br>60–89 分</span></div></div>
+      <div class="card"><div class="mini-stat"><b style="color:var(--red)">7</b><span>字段冲突<br>保持独立</span></div></div>
+      <div class="card"><div class="mini-stat"><b>21</b><span>来源文件<br>已保留原始快照</span></div></div>
+    </div>
+    <div class="toolbar">
+      <input placeholder="系统账号 / 姓名 / ITcode / 手机 / 邮箱">
+      <select><option>全部来源系统</option><option>飞书</option><option>NC</option><option>票通</option><option>SCM</option></select>
+      <select><option>待确认</option><option>已自动关联</option><option>冲突</option><option>保持独立</option></select>
+      <button class="btn btn-line btn-sm" onclick="toast('已导入最新账号清单，进入匹配队列（演示）')">导入账号清单</button>
+      <button class="btn btn-pri btn-sm right" style="width:auto" onclick="batchLink()">批量确认高置信度</button>
+    </div>
+    <table id="link-table">
+      <tr><th>来源账号</th><th>候选统一身份</th><th>命中证据</th><th>置信度</th><th>风险提示</th><th>操作</th></tr>
+      <tr>
+        <td><b>NC · 00010025</b><br><span class="source-chip">人员编码</span><span class="source-chip">李晓杰</span></td>
+        <td>李晓杰 · ITcode lixj8<br>中台交付</td>
+        <td>OA 编号一致<br>姓名一致</td>
+        <td><div class="score"><div class="score-bar"><i style="width:98%"></i></div><b>98</b></div></td>
+        <td><span class="pill p-green">无冲突</span></td>
+        <td><a style="color:var(--green);cursor:pointer" onclick="confirmLink(this,'关联')">确认关联</a></td>
+      </tr>
+      <tr>
+        <td><b>票通 · wutao17</b><br><span class="source-chip">姓名：吴涛</span></td>
+        <td>吴涛 · ITcode wutao17<br>来酷 PC 事业部</td>
+        <td>ITcode 一致<br>姓名一致</td>
+        <td><div class="score"><div class="score-bar"><i style="width:96%"></i></div><b>96</b></div></td>
+        <td><span class="pill p-green">无冲突</span></td>
+        <td><a style="color:var(--green);cursor:pointer" onclick="confirmLink(this,'关联')">确认关联</a></td>
+      </tr>
+      <tr>
+        <td><b>电子价签 · zhangwei</b><br><span class="source-chip">姓名：张伟</span></td>
+        <td>张伟 · 3 个同名候选</td>
+        <td>仅姓名相同<br>无手机 / ITcode</td>
+        <td><div class="score mid"><div class="score-bar"><i style="width:62%"></i></div><b>62</b></div></td>
+        <td><span class="pill p-orange">同名冲突</span></td>
+        <td><a style="color:var(--blue-d);cursor:pointer" onclick="openModal('m-link-review')">人工捏对</a> · <a style="color:var(--gray);cursor:pointer" onclick="confirmLink(this,'保持独立')">保持独立</a></td>
+      </tr>
+      <tr>
+        <td><b>微盟 · store_1026</b><br><span class="source-chip">门店共享账号</span></td>
+        <td>不关联自然人</td>
+        <td>账号用途：门店运营<br>责任部门：线下销售</td>
+        <td><div class="score low"><div class="score-bar"><i style="width:35%"></i></div><b>35</b></div></td>
+        <td><span class="pill p-blue">共享账号</span></td>
+        <td><a style="color:var(--blue-d);cursor:pointer" onclick="confirmLink(this,'绑定责任人')">绑定责任人</a></td>
+      </tr>
+    </table>
+    <div class="card" style="margin-top:14px"><h4>关联证据留痕</h4>
+      <div class="kv"><span>规则版本</span><b>identity-match-rules@2.0</b></div>
+      <div class="kv"><span>记录内容</span><b>命中字段 · 分数 · 冲突 · 确认人 · 原始快照 · 有效时间</b></div>
+      <div class="kv"><span>撤销能力</span><b>允许解除错误关联，不删除历史关系</b></div>
+    </div>
+  </section>
+
+  <section id="a-accounts" class="screen">
+    <div class="crumb">管理后台 / 账号治理 / 系统账号台账</div>
+    <div class="ptitle">系统账号台账 <span class="pill p-blue">接口 + 文件并存</span></div>
+    <div class="toolbar">
+      <input placeholder="系统 / 账号 / 统一身份 / 负责人">
+      <select><option>全部系统</option><option>NC</option><option>票通</option><option>来酷 SCM</option><option>BIP</option><option>电子价签</option></select>
+      <select><option>全部执行方式</option><option>API 自动</option><option>线下人工</option><option>文件导入</option></select>
+      <select><option>全部状态</option><option>启用</option><option>待关闭</option><option>已关闭</option><option>待确认</option></select>
+      <button class="btn btn-line btn-sm right" onclick="toast('已下载账号台账（演示）')">导出台账</button>
+    </div>
+    <table>
+      <tr><th>系统 / 账号</th><th>关联统一身份</th><th>组织 / 负责人</th><th>准入与有效期</th><th>执行方式</th><th>状态</th><th>操作</th></tr>
+      <tr><td><b>NC · 00010025</b><br>最近登录 07-28</td><td>李晓杰 · lixj8<br><span class="pill p-green">置信度 98</span></td><td>中台交付<br>负责人：李晓杰</td><td>指定人员<br>在职有效</td><td><span class="pill p-blue">API</span></td><td><span class="pill p-green">启用</span></td><td><a style="color:var(--blue-d)">详情</a></td></tr>
+      <tr><td><b>票通 · wutao17</b><br>最近登录 07-30</td><td>吴涛 · wutao17<br><span class="pill p-green">置信度 96</span></td><td>来酷 PC 事业部<br>负责人：刘维翰</td><td>按组织授权<br>90 天复核</td><td><span class="pill p-orange">线下</span></td><td><span class="pill p-green">启用</span></td><td><a style="color:var(--blue-d)">发起变更</a></td></tr>
+      <tr><td><b>电子价签 · zhangwei</b><br>最近登录未知</td><td><span class="pill p-orange">待人工确认</span></td><td>所属部门待确认<br>负责人未指定</td><td>来源文件导入</td><td><span class="pill p-gray">文件</span></td><td><span class="pill p-orange">待确认</span></td><td><a style="color:var(--blue-d)" onclick="openModal('m-link-review')">账号关联</a></td></tr>
+      <tr><td><b>堡垒机 · zhangwei-ext</b><br>北森状态：已离职</td><td>张伟 · zhangwei20</td><td>原平台研发部<br>执行人：系统管理员</td><td>离职立即关闭</td><td><span class="pill p-orange">线下</span></td><td><span class="pill p-red">待关闭</span></td><td><a style="color:var(--red)" onclick="openModal('m-offline-proof')">上传关闭回执</a></td></tr>
+    </table>
+    <div class="cards g3" style="margin-top:14px">
+      <div class="card"><h4>系统准入策略</h4><div class="kv"><span>全员登录</span><b>6 系统</b></div><div class="kv"><span>按组织授权</span><b>8 系统</b></div><div class="kv"><span>按人员申请</span><b>7 系统</b></div></div>
+      <div class="card"><h4>认证有效期</h4><div class="kv"><span>跟随在职状态</span><b>12 系统</b></div><div class="kv"><span>90 天复核</span><b>6 系统</b></div><div class="kv"><span>自定义</span><b>3 系统</b></div></div>
+      <div class="card"><h4>接入成熟度</h4><div class="kv"><span>OIDC / API</span><b>5 系统</b></div><div class="kv"><span>仅账号接口</span><b>4 系统</b></div><div class="kv"><span>线下 / 文件</span><b>12 系统</b></div></div>
+    </div>
+  </section>
+
+  <section id="a-lifecycle" class="screen">
+    <div class="crumb">管理后台 / 账号治理 / 生命周期任务</div>
+    <div class="ptitle">账号开通、变更与关闭 <span class="pill p-orange">线上线下统一闭环</span></div>
+    <div class="flowline">
+      <div class="node done"><b>1. 触发</b>申请 / 北森离职事件</div>
+      <div class="node done"><b>2. 审批</b>直属 / 一级 / 财务</div>
+      <div class="node cur"><b>3. 执行</b>API 自动或人工待办</div>
+      <div class="node"><b>4. 回执</b>接口结果 / 截图 / 单号</div>
+      <div class="node"><b>5. 复核</b>系统负责人确认</div>
+      <div class="node"><b>6. 关闭</b>状态生效并审计</div>
+    </div>
+    <div class="toolbar">
+      <select><option>全部任务</option><option>开通</option><option>变更</option><option>关闭</option><option>离职清零</option></select>
+      <select><option>全部执行方式</option><option>API 自动</option><option>线下人工</option></select>
+      <select><option>待执行</option><option>执行中</option><option>待复核</option><option>已完成</option><option>已逾期</option></select>
+      <button class="btn btn-pri btn-sm right" style="width:auto" onclick="toast('已新建账号治理任务（演示）')">＋ 新建任务</button>
+    </div>
+    <table id="lifecycle-table">
+      <tr><th>任务</th><th>触发来源</th><th>系统 / 账号</th><th>执行方式</th><th>当前责任人</th><th>SLA</th><th>状态 / 操作</th></tr>
+      <tr><td><b>离职清零 · 张伟</b><br>LC20260731-009</td><td>北森离职单 BS-8821</td><td>Logto / 飞书 / CRM</td><td><span class="pill p-blue">API</span></td><td>系统自动</td><td>即时</td><td><span class="pill p-green">已关闭 3</span></td></tr>
+      <tr id="offline-task-row"><td><b>离职清零 · 张伟</b><br>LC20260731-010</td><td>北森离职单 BS-8821</td><td>堡垒机 · zhangwei-ext</td><td><span class="pill p-orange">线下</span></td><td>堡垒机管理员</td><td><b style="color:var(--red)">剩 3 小时</b></td><td><span class="pill p-orange">待执行</span> · <a style="color:var(--blue-d);cursor:pointer" onclick="openModal('m-offline-proof')">上传回执</a></td></tr>
+      <tr><td><b>成本权限变更 · 陈通</b><br>LC20260731-006</td><td>权限申请单 P-2618</td><td>BIP · 采购成本查看</td><td><span class="pill p-orange">线下</span></td><td>BIP 系统负责人</td><td>24 小时</td><td><span class="pill p-blue">执行中</span></td></tr>
+      <tr><td><b>外部账号开通 · 王强</b><br>LC20260730-188</td><td>飞书审批 FS-19261</td><td>CRM · wangqiang-ext</td><td><span class="pill p-blue">API</span></td><td>系统自动</td><td>即时</td><td><span class="pill p-green">已完成</span></td></tr>
+    </table>
+    <div class="split" style="margin-top:14px">
+      <div class="card"><h4>离职清零进度 · 张伟</h4>
+        <div class="review-progress"><i style="width:75%"></i></div>
+        <div class="kv"><span>已核验关闭</span><b style="color:var(--green)">6 个系统</b></div>
+        <div class="kv"><span>待回执</span><b style="color:var(--orange)">堡垒机 · 票通</b></div>
+        <div class="kv"><span>未发现账号</span><b>13 个系统</b></div>
+      </div>
+      <div class="card"><h4>证据链</h4><div class="evidence"><div>09:15 北森离职事件进入用户中心</div><div>09:16 禁用统一身份并踢出全局会话</div><div>09:17 生成 21 个系统核查子任务</div><div>10:22 6 个系统完成关闭并回传结果</div><div>待办：2 个线下系统等待执行回执</div></div></div>
+    </div>
+  </section>
+
+  <section id="a-special" class="screen">
+    <div class="crumb">管理后台 / 权限治理 / 成本权限复核</div>
+    <div class="ptitle">成本查看权限责任链复核 <span class="pill p-red">当前范围：仅成本权限</span></div>
+    <div class="cards g4" style="margin-bottom:14px">
+      <div class="card kpi"><b>181</b><span>成本权限记录</span></div>
+      <div class="card kpi"><b>4</b><span>来源权限清单</span></div>
+      <div class="card kpi"><b style="color:var(--orange)">23</b><span>本季度待确认</span></div>
+      <div class="card kpi"><b style="color:var(--red)">3</b><span>责任人缺失</span></div>
+    </div>
+    <div class="toolbar">
+      <select><option>全部成本权限</option><option>查看采购成本</option><option>查看成本</option></select>
+      <select><option>全部系统</option><option>BIP</option><option>来酷 SCM</option><option>联想科技 SCM</option><option>联酷 SCM</option></select>
+      <select><option>全部部门</option><option>中台交付</option><option>产品营销</option><option>财法管理</option><option>来酷 PC 事业部</option></select>
+      <button class="btn btn-pri btn-sm right" style="width:auto" onclick="launchSpecialReview()">发起本季度复核</button>
+    </div>
+    <table>
+      <tr><th>用户 / 部门</th><th>系统与成本权限</th><th>业务依据 / 到期</th><th>责任链</th><th>复核状态</th><th>操作</th></tr>
+      <tr><td><b>李晓杰</b><br>中台交付</td><td>BIP · 查看采购成本<br>来酷 SCM · 查看成本</td><td>库存及供应链运营<br>至 2026-09-30</td><td>直接负责人 → 一级领导<br>→ 财务负责人</td><td><span class="pill p-orange">一级领导待确认</span></td><td><a style="color:var(--blue-d)">催办</a></td></tr>
+      <tr><td><b>陈通</b><br>产品营销 / BTIT</td><td>BIP · 查看采购成本<br>联酷 SCM · 查看成本</td><td>IT 系统运营<br>至 2026-09-30</td><td>直接负责人 → 一级领导<br>→ 财务负责人</td><td><span class="pill p-green">已确认保留</span></td><td><a style="color:var(--blue-d)">查看意见</a></td></tr>
+      <tr><td><b>待确认人员</b><br><span class="pill p-red">部门未匹配</span></td><td>来酷 SCM · 查看成本</td><td>用途待补充<br>无到期时间</td><td><span style="color:var(--red)">负责人未指定</span></td><td><span class="pill p-red">阻塞</span></td><td><a style="color:var(--blue-d)" onclick="toast('已打开部门与负责人指定窗口（演示）')">指定责任人</a></td></tr>
+    </table>
+    <div class="cards g2" style="margin-top:14px">
+      <div class="card"><h4>审批与汇报责任链</h4>
+        <div class="owner-route"><span class="person">直接负责人</span><em>→</em><span class="person">一级领导</span><em>→</em><span class="person">财务负责人</span><em>→</em><span class="person">审计归档</span></div>
+        <p class="note">普通账号由直属负责人确认；成本查看权限增加一级领导、财务负责人或指定审批人。</p>
+      </div>
+      <div class="card"><h4>数据来源</h4>
+        <span class="source-chip">BIP 可查看采购成本 · 42</span><span class="source-chip">来酷 SCM · 62</span><span class="source-chip">联想科技 SCM · 32</span><span class="source-chip">联酷 SCM · 45</span>
+        <p class="note">导入后生成权限快照；复核结论不会直接覆盖业务系统，变更通过生命周期任务执行并收集回执。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="a-quarterly" class="screen">
+    <div class="crumb">管理后台 / 安全审计 / 季度审计核查</div>
+    <div class="ptitle">2026 Q3 账号与权限核查 <span class="pill p-blue">进行中</span><button class="btn btn-pri btn-sm right" style="width:auto" onclick="scr('admin','a-quarter-flow',document.querySelectorAll('#view-admin .side nav a')[19])">进入流程体验</button></div>
+    <div class="flowline">
+      <div class="node done"><b>1. 采集</b>接口 + 文件</div>
+      <div class="node done"><b>2. 归一</b>字段映射</div>
+      <div class="node done"><b>3. 比对</b>上期 / 本期 / 在职</div>
+      <div class="node cur"><b>4. 确认</b>责任人签收</div>
+      <div class="node"><b>5. 整改</b>关闭 / 调整</div>
+      <div class="node"><b>6. 汇报</b>报告归档</div>
+    </div>
+    <div class="cards g4" style="margin-bottom:14px">
+      <div class="card kpi"><b>21 / 21</b><span>系统资料已收集</span></div>
+      <div class="card kpi"><b>92%</b><span>账号身份已关联</span></div>
+      <div class="card kpi"><b style="color:var(--orange)">68%</b><span>部门负责人已确认</span></div>
+      <div class="card kpi"><b style="color:var(--red)">9</b><span>离职账号待核验关闭</span></div>
+    </div>
+    <div class="split">
+      <div class="card"><h4>本期差异结果</h4>
+        <table><tr><th>差异类型</th><th>数量</th><th>处置</th></tr>
+        <tr><td>本期新增账号</td><td>73</td><td><span class="pill p-orange">待认领 18</span></td></tr>
+        <tr><td>上期有、本期无</td><td>24</td><td>核查是否已关闭</td></tr>
+        <tr><td>离职人员仍有账号</td><td>9</td><td><span class="pill p-red">立即整改</span></td></tr>
+        <tr><td>成本权限新增</td><td>11</td><td>责任链复核</td></tr>
+        <tr><td>外部账号责任人失效</td><td>4</td><td>重新指定 sponsor</td></tr></table>
+      </div>
+      <div class="card"><h4>部门确认进度</h4>
+        <div class="kv"><span>财法管理</span><b style="color:var(--green)">100%</b></div><div class="review-progress"><i style="width:100%"></i></div>
+        <div class="kv"><span>中台交付</span><b style="color:var(--green)">86%</b></div><div class="review-progress"><i style="width:86%"></i></div>
+        <div class="kv"><span>产品营销</span><b style="color:var(--orange)">64%</b></div><div class="review-progress"><i style="width:64%;background:#E67E22"></i></div>
+        <div class="kv"><span>来酷 PC 事业部</span><b style="color:var(--orange)">52%</b></div><div class="review-progress"><i style="width:52%;background:#E67E22"></i></div>
+        <button class="btn btn-line btn-sm" style="margin-top:10px" onclick="toast('已向未完成负责人发送催办（演示）')">一键催办未确认部门</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px"><h4>汇报输出</h4>
+      <div class="toolbar" style="margin-bottom:0">
+        <span class="source-chip">系统账号汇总</span><span class="source-chip">离职账号清零报告</span><span class="source-chip">成本权限责任链报告</span><span class="source-chip">逾期整改清单</span><span class="source-chip">签收与审批证据包</span>
+        <button class="btn btn-pri btn-sm right" style="width:auto" onclick="generateQuarterReport()">生成季度审计报告</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="a-quarter-flow" class="screen">
+    <div class="crumb">管理后台 / 安全审计 / 季度核查流程</div>
+    <div class="ptitle">全员系统账号与敏感权限核查流程 <span class="pill p-red">敏感权限当前仅成本权限</span></div>
+    <div class="banner">每季度为<strong>每一位用户</strong>生成个人核查包：汇总其在全部系统的账号与成本查看权限，经过本人确认、负责人复核、成本权限加签、系统整改和审计归档。</div>
+
+    <div class="card" style="margin-bottom:14px">
+      <h4>独立流程图</h4>
+      <div class="flowline">
+        <div class="node done"><b>1. 启动</b>确定季度与全员范围</div>
+        <div class="node done"><b>2. 采集</b>全系统账号/权限快照</div>
+        <div class="node done"><b>3. 归集</b>关联统一身份并比对</div>
+        <div class="node cur"><b>4. 用户确认</b>本人账号与使用必要性</div>
+      </div>
+      <div class="flowline">
+        <div class="node"><b>5. 负责人复核</b>部门责任与业务用途</div>
+        <div class="node"><b>6. 成本权限加签</b>一级领导 + 财务负责人</div>
+        <div class="node"><b>7. 整改闭环</b>关闭/调整并上传证据</div>
+        <div class="node"><b>8. 审计汇报</b>签收、报告和证据归档</div>
+      </div>
+      <div class="owner-route">
+        <span class="person">普通账号：用户本人 → 直接负责人</span>
+        <em>｜</em>
+        <span class="person">成本权限：用户本人 → 直接负责人 → 一级领导 → 财务负责人</span>
+        <em>｜</em>
+        <span class="person">离职人员：跳过本人确认 → 跨系统清零</span>
+      </div>
+    </div>
+
+    <div class="toolbar" id="quarter-stage-tabs">
+      <button class="btn btn-pri btn-sm" style="width:auto" onclick="quarterStage('user',this)">① 用户确认</button>
+      <button class="btn btn-line btn-sm" onclick="quarterStage('manager',this)">② 负责人复核</button>
+      <button class="btn btn-line btn-sm" onclick="quarterStage('remedy',this)">③ 系统整改</button>
+      <button class="btn btn-line btn-sm" onclick="quarterStage('archive',this)">④ 审计归档</button>
+    </div>
+
+    <div id="quarter-user" class="quarter-panel">
+      <div class="split">
+        <div class="card">
+          <h4>我的季度核查包 · 李晓杰 <span class="pill p-orange">待确认</span></h4>
+          <div class="kv"><span>所属部门</span><b>中台交付</b></div>
+          <div class="kv"><span>本期核查范围</span><b>6 个系统账号 · 2 项成本权限</b></div>
+          <div class="kv"><span>截止时间</span><b style="color:var(--orange)">2026-08-07 · 剩 7 天</b></div>
+          <p class="note">请逐项确认：账号属于本人、仍在使用、用途正确；不是本人或不再需要的账号将自动生成整改任务。</p>
+        </div>
+        <div class="card">
+          <h4>确认结果</h4>
+          <div class="kv"><span>已确认保留</span><b style="color:var(--green)">5</b></div>
+          <div class="kv"><span>申请关闭</span><b style="color:var(--orange)">1</b></div>
+          <div class="kv"><span>待确认成本权限</span><b style="color:var(--red)">2</b></div>
+          <button class="btn btn-pri btn-sm" style="width:auto;margin-top:10px" onclick="quarterSubmitUser()">提交本人确认</button>
+        </div>
+      </div>
+      <div class="card" style="margin-top:14px"><h4>本人拥有的全部系统账号</h4>
+        <table><tr><th>系统 / 账号</th><th>账号状态</th><th>最近登录</th><th>用途</th><th>本人确认</th></tr>
+        <tr><td><b>NC · 00010025</b></td><td><span class="pill p-green">启用</span></td><td>07-28</td><td>供应链业务</td><td><select><option>本人使用，继续保留</option><option>本人使用，申请关闭</option><option>不是本人账号</option></select></td></tr>
+        <tr><td><b>BIP · lixj8</b></td><td><span class="pill p-green">启用</span></td><td>07-30</td><td>库存业务</td><td><select><option>本人使用，继续保留</option><option>本人使用，申请关闭</option><option>不是本人账号</option></select></td></tr>
+        <tr><td><b>票通 · lixj</b></td><td><span class="pill p-green">启用</span></td><td>03-12</td><td>历史项目</td><td><select><option>本人使用，申请关闭</option><option>本人使用，继续保留</option><option>不是本人账号</option></select></td></tr>
+        <tr><td><b>来酷 SCM · 00010025</b></td><td><span class="pill p-green">启用</span></td><td>07-31</td><td>供应链运营</td><td><select><option>本人使用，继续保留</option><option>本人使用，申请关闭</option><option>不是本人账号</option></select></td></tr>
+        <tr><td><b>联想科技 SCM · 00010025</b></td><td><span class="pill p-green">启用</span></td><td>07-26</td><td>采购协同</td><td><select><option>本人使用，继续保留</option><option>本人使用，申请关闭</option><option>不是本人账号</option></select></td></tr>
+        <tr><td><b>联酷 SCM · 00010025</b></td><td><span class="pill p-green">启用</span></td><td>07-29</td><td>供应链协同</td><td><select><option>本人使用，继续保留</option><option>本人使用，申请关闭</option><option>不是本人账号</option></select></td></tr></table>
+      </div>
+      <div class="card" style="margin-top:14px"><h4>本人拥有的敏感权限 <span class="pill p-red">当前仅成本权限</span></h4>
+        <table><tr><th>系统</th><th>成本权限</th><th>业务用途</th><th>到期时间</th><th>本人确认</th></tr>
+        <tr><td>BIP</td><td>查看采购成本</td><td><input value="库存及供应链运营" style="padding:6px;border:1px solid var(--line);border-radius:6px"></td><td>2026-09-30</td><td><select><option>仍需使用</option><option>不再需要</option></select></td></tr>
+        <tr><td>来酷 SCM</td><td>查看成本</td><td><input value="供应链运营" style="padding:6px;border:1px solid var(--line);border-radius:6px"></td><td>2026-09-30</td><td><select><option>仍需使用</option><option>不再需要</option></select></td></tr></table>
+      </div>
+    </div>
+
+    <div id="quarter-manager" class="quarter-panel" style="display:none">
+      <div class="card"><h4>负责人复核队列 · 中台交付 <span class="pill p-orange">待处理 18</span></h4>
+        <table><tr><th>用户</th><th>本人确认</th><th>系统账号</th><th>成本权限</th><th>审批路径</th><th>操作</th></tr>
+        <tr><td><b>李晓杰</b></td><td>保留 5 / 关闭 1</td><td>6 个</td><td>2 项</td><td>直接负责人 → 一级领导 → 财务负责人</td><td><a style="color:var(--green);cursor:pointer" onclick="quarterApprove(this)">确认并提交加签</a> · <a style="color:var(--red)">退回</a></td></tr>
+        <tr><td><b>王强（外部）</b></td><td>保留 2</td><td>2 个</td><td>0 项</td><td>sponsor → 直接负责人</td><td><a style="color:var(--green);cursor:pointer" onclick="quarterApprove(this)">确认</a></td></tr>
+        <tr><td><b>张伟（已离职）</b></td><td>跳过本人确认</td><td><span style="color:var(--red)">残留 2 个</span></td><td>0 项</td><td>直接进入清零整改</td><td><span class="pill p-red">立即整改</span></td></tr></table>
+      </div>
+      <div class="card" style="margin-top:14px"><h4>成本权限加签规则</h4>
+        <div class="owner-route"><span class="person">直接负责人 · 吴涛</span><em>→</em><span class="person">一级领导 · 刘维翰</span><em>→</em><span class="person">财务负责人 · 常明明</span><em>→</em><span class="person">生成复核结论</span></div>
+        <p class="note">普通账号在直接负责人确认后结束复核；仅成本查看权限需要继续进入一级领导和财务负责人确认。</p>
+      </div>
+    </div>
+
+    <div id="quarter-remedy" class="quarter-panel" style="display:none">
+      <div class="card"><h4>整改任务队列 <span class="pill p-red">未闭环 12</span></h4>
+        <table><tr><th>整改对象</th><th>整改原因</th><th>目标系统</th><th>执行方式</th><th>责任人 / SLA</th><th>状态</th></tr>
+        <tr><td>李晓杰 · 票通 lixj</td><td>本人申请关闭</td><td>票通</td><td><span class="pill p-orange">线下</span></td><td>票通管理员 · 24h</td><td><a style="color:var(--blue-d)" onclick="openModal('m-offline-proof')">上传回执</a></td></tr>
+        <tr><td>张伟 · 堡垒机</td><td>离职账号残留</td><td>堡垒机</td><td><span class="pill p-orange">线下</span></td><td>堡垒机管理员 · 4h</td><td><span class="pill p-red">即将逾期</span></td></tr>
+        <tr><td>陈通 · BIP 成本权限</td><td>负责人确认不再需要</td><td>BIP</td><td><span class="pill p-blue">API</span></td><td>系统自动</td><td><span class="pill p-green">已回收</span></td></tr></table>
+      </div>
+      <div class="banner" style="margin-top:14px">整改任务只有在业务系统完成执行并取得接口结果或线下回执后才能关闭；逾期任务自动催办并升级责任人。</div>
+    </div>
+
+    <div id="quarter-archive" class="quarter-panel" style="display:none">
+      <div class="cards g4" style="margin-bottom:14px">
+        <div class="card kpi"><b>100%</b><span>用户覆盖率</span></div>
+        <div class="card kpi"><b>96%</b><span>本人确认率</span></div>
+        <div class="card kpi"><b>91%</b><span>负责人复核率</span></div>
+        <div class="card kpi"><b style="color:var(--orange)">12</b><span>整改未闭环</span></div>
+      </div>
+      <div class="card"><h4>审计归档包</h4>
+        <table><tr><th>归档内容</th><th>范围</th><th>证据</th><th>状态</th></tr>
+        <tr><td>全员系统账号清册</td><td>1,987 人 / 21 系统</td><td>采集快照 + 身份关联版本</td><td><span class="pill p-green">已生成</span></td></tr>
+        <tr><td>成本权限责任链报告</td><td>181 条</td><td>本人、负责人、一级领导、财务签收</td><td><span class="pill p-orange">待完成</span></td></tr>
+        <tr><td>离职账号清零报告</td><td>本期离职 12 人</td><td>系统关闭结果 + 线下回执</td><td><span class="pill p-orange">残留 2 项</span></td></tr>
+        <tr><td>整改与例外报告</td><td>新增/关闭/异常</td><td>审批意见 + 执行证据 + 文件摘要</td><td><span class="pill p-blue">生成中</span></td></tr></table>
+        <button class="btn btn-pri btn-sm" style="width:auto;margin-top:12px" onclick="generateQuarterReport()">生成并归档季度报告</button>
+      </div>
+    </div>
+  </section>
+  <!-- AI-GEN-END -->
+
+  </div>
+</div></div>
+<div class="footer-tip">O-V2.0：统一身份主档 · 账号关联 · 组织与负责人 · 生命周期闭环 · 成本权限复核 · 季度审计。侧边栏可切换体验。</div>
+</div>
+
+
+<!-- AI-GEN-BEGIN O-V1.5 mobile + secure auth interaction -->
+<div id="view-mobile" class="view">
+  <div class="phone-stage">
+    <div>
+      <div style="color:#9FB0D8;font-size:12.5px;margin-bottom:10px;text-align:center">手机版 · 登录 / 生物解锁</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="pcontent" id="mphone-login">
+          <div class="ph-header"><span style="font-size:12px;color:#8B96AD">09:41</span><b>统一登录</b><span style="font-size:12px;color:#8B96AD">5G</span></div>
+          <div class="ph-body">
+            <div style="text-align:center;margin:8px 0 4px"><div class="logo" style="width:48px;height:48px;border-radius:14px;margin:0 auto;background:linear-gradient(135deg,#2E9BFF,#7C5CFF);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700">S</div></div>
+            <h3 style="text-align:center;margin:10px 0 4px;font-size:18px">企业统一认证</h3>
+            <p style="text-align:center;color:#8B96AD;font-size:12px;margin-bottom:16px">手机端 · OIDC / 生物识别 / MFA</p>
+            <button class="btn btn-pri" style="margin-bottom:10px" onclick="mphoneShow('bio')">使用面容 / 指纹解锁</button>
+            <button class="btn btn-line" style="width:100%;margin-bottom:10px" onclick="mphoneShow('pwd')">账号密码登录</button>
+            <button class="btn btn-line" style="width:100%;margin-bottom:10px;border-color:#3370FF;color:#3370FF" onclick="toast('→ 飞书 App SSO（演示）')">飞书一键登录</button>
+            <div class="note" style="text-align:center">首次登录需完成 MFA 绑定；之后可用生物识别快速解锁本机会话。</div>
+          </div>
+        </div>
+        <div class="pcontent" id="mphone-bio" style="display:none">
+          <div class="ph-header"><a style="color:#1677E0;font-size:12px;cursor:pointer" onclick="mphoneShow('login')">返回</a><b>生物识别</b><span></span></div>
+          <div class="ph-body" style="text-align:center">
+            <div class="bio-orb face" id="m-bio-orb">☺</div>
+            <div style="font-size:15px;font-weight:700;margin-bottom:6px" id="m-bio-title">面容识别中…</div>
+            <div style="font-size:12px;color:#8B96AD;margin-bottom:16px" id="m-bio-sub">请正对前置摄像头 · WebAuthn / Face ID</div>
+            <div style="display:flex;gap:8px;justify-content:center;margin-bottom:14px">
+              <button class="btn btn-line btn-sm" onclick="setMobileBio('face')">人脸</button>
+              <button class="btn btn-line btn-sm" onclick="setMobileBio('fp')">指纹</button>
+            </div>
+            <button class="btn btn-pri" onclick="mphoneShow('mfa')">模拟识别成功 → MFA</button>
+            <div class="note" style="margin-top:12px">失败 3 次自动回退密码 / MFA；生物特征不出设备，仅存平台凭证引用。</div>
+          </div>
+        </div>
+        <div class="pcontent" id="mphone-pwd" style="display:none">
+          <div class="ph-header"><a style="color:#1677E0;font-size:12px;cursor:pointer" onclick="mphoneShow('login')">返回</a><b>密码登录</b><span></span></div>
+          <div class="ph-body">
+            <div class="field"><label>账号</label><input placeholder="邮箱 / itcode / 手机号"></div>
+            <div class="field"><label>密码</label><input type="password" placeholder="请输入密码"></div>
+            <button class="btn btn-pri" onclick="mphoneShow('mfa')">下一步 · 多因子验证</button>
+          </div>
+        </div>
+        <div class="pcontent" id="mphone-mfa" style="display:none">
+          <div class="ph-header"><a style="color:#1677E0;font-size:12px;cursor:pointer" onclick="mphoneShow('pwd')">返回</a><b>多因子认证</b><span></span></div>
+          <div class="ph-body" style="text-align:center">
+            <p style="font-size:13px;color:#5A6478;margin:8px 0 4px">输入 Authenticator 6 位动态码</p>
+            <div class="mfa-digits"><span>4</span><span>8</span><span>2</span><span>9</span><span>1</span><span>_</span></div>
+            <div style="font-size:12px;color:#8B96AD;margin-bottom:14px">也可切换：短信 OTP · 邮箱 OTP · 备用恢复码</div>
+            <div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px;flex-wrap:wrap">
+              <button class="btn btn-line btn-sm" onclick="toast('已发送短信 OTP（演示）')">短信 OTP</button>
+              <button class="btn btn-line btn-sm" onclick="toast('已发送邮箱 OTP（演示）')">邮箱 OTP</button>
+              <button class="btn btn-line btn-sm" onclick="toast('请输入一次性恢复码（演示）')">备用码</button>
+            </div>
+            <button class="btn btn-pri" onclick="mphoneShow('home')">验证并进入</button>
+          </div>
+        </div>
+        <div class="pcontent" id="mphone-home" style="display:none;padding-top:0">
+          <div class="ph-header" style="padding-top:44px"><b>工作台</b><span class="device-chip">已生物解锁</span></div>
+          <div class="ph-body">
+            <div class="card" style="margin-bottom:12px"><div style="font-size:12px;color:#8B96AD">你好，吴川斌</div><b style="font-size:16px">Acme Corp · Owner</b></div>
+            <div class="appgrid" style="grid-template-columns:1fr 1fr;gap:10px">
+              <div class="appitem"><div class="ic" style="background:#2E9BFF">P</div><b>项目管理</b><span>OIDC</span></div>
+              <div class="appitem"><div class="ic" style="background:#27AE60">C</div><b>CRM</b><span>OIDC</span></div>
+              <div class="appitem"><div class="ic" style="background:#E67E22">H</div><b>HR</b><span>OIDC</span></div>
+              <div class="appitem"><div class="ic" style="background:#7C5CFF">A</div><b>审批</b><span>需 Step-up</span></div>
+            </div>
+            <button class="btn btn-line" style="width:100%;margin-top:14px" onclick="mphoneShow('secset')">安全与生物识别设置</button>
+          </div>
+          <div class="ph-tabbar">
+            <button class="on">首页</button><button>应用</button><button onclick="mphoneShow('secset')">安全</button><button>我的</button>
+          </div>
+        </div>
+        <div class="pcontent" id="mphone-secset" style="display:none">
+          <div class="ph-header"><a style="color:#1677E0;font-size:12px;cursor:pointer" onclick="mphoneShow('home')">返回</a><b>安全设置</b><span></span></div>
+          <div class="ph-body">
+            <div class="kv"><span class="lab">面容识别</span><b>已开启</b></div>
+            <div class="kv"><span class="lab">指纹解锁</span><b>已开启 · 本机</b></div>
+            <div class="kv"><span class="lab">TOTP MFA</span><b>已绑定</b></div>
+            <div class="kv"><span class="lab">短信 OTP</span><b>备用通道</b></div>
+            <div class="kv"><span class="lab">可信设备</span><b>iPhone 15 · 本机</b></div>
+            <button class="btn btn-pri" style="margin-top:16px" onclick="toast('已进入个人中心安全设置：注册 Passkey / 人脸 / 指纹（演示）')">管理安全凭证</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="max-width:420px;color:#DCE5FA;padding-top:40px">
+      <h3 style="color:#fff;margin-bottom:10px">手机版交互要点</h3>
+      <p style="line-height:1.8;font-size:13.5px;color:#AFC3EE">覆盖 C 端移动登录闭环：启动页 → 生物识别 / 密码 → MFA 挑战 → 工作台 → 安全设置。敏感应用可触发 Step-up（再次人脸或 TOTP）。</p>
+      <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:8px">
+        <span class="device-chip">响应式 ≤ 430px</span>
+        <span class="device-chip">WebAuthn / Passkey</span>
+        <span class="device-chip">TOTP · SMS · Email</span>
+        <span class="device-chip">设备绑定</span>
+      </div>
+      <div class="card" style="margin-top:18px;background:#182352;border-color:#2A3766;color:#DCE5FA">
+        <h4 style="color:#fff">演示路径</h4>
+        <ol style="margin:8px 0 0 18px;line-height:1.9;font-size:13px;color:#AFC3EE">
+          <li>点「使用面容 / 指纹解锁」</li>
+          <li>切换人脸 / 指纹动画</li>
+          <li>进入 MFA 六位码挑战</li>
+          <li>进入工作台与安全设置</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+  <div class="footer-tip">O-V2.0 手机版原型：可点击切换登录 / 生物识别 / MFA / 工作台。</div>
+</div>
+
+<div id="view-secure" class="view">
+<div class="stage"><div class="flow-board">
+  <aside class="flow-nav">
+    <div class="brand" style="display:flex;gap:9px;align-items:center;padding:6px 8px 18px;color:#fff;font-weight:700"><i style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#2E9BFF,#7C5CFF);display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:12px">S</i>安全认证交互</div>
+    <a class="on" id="nav-sf-mfa" onclick="showSecure('sf-mfa')">① MFA 多因子挑战</a>
+    <a id="nav-sf-face" onclick="showSecure('sf-face')">② 人脸识别登录</a>
+    <a id="nav-sf-fp" onclick="showSecure('sf-fp')">③ 指纹解锁</a>
+    <a id="nav-sf-enroll" onclick="showSecure('sf-enroll')">④ 生物识别注册</a>
+    <a id="nav-sf-stepup" onclick="showSecure('sf-stepup')">⑤ 敏感操作 Step-up</a>
+    <a id="nav-sf-admin" onclick="showSecure('sf-admin')">⑥ 管理端策略配置</a>
+  </aside>
+  <div class="flow-main">
+    <div id="sf-mfa" class="secure-panel show">
+      <div class="crumb">安全认证交互 / MFA</div>
+      <div class="ptitle">多因子认证（MFA）交互原型</div>
+      <div class="flow-steps">
+        <div class="fs done" data-n="1">身份校验</div>
+        <div class="fs cur" data-n="2">第二因子</div>
+        <div class="fs" data-n="3">签发会话</div>
+        <div class="fs" data-n="4">进入应用</div>
+      </div>
+      <div class="cards g2">
+        <div class="card">
+          <h4>挑战面板</h4>
+          <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">密码已通过 · 需完成第二因子</p>
+          <div class="mfa-digits"><span>6</span><span>1</span><span>0</span><span>3</span><span>8</span><span>4</span></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+            <span class="pill p-blue">TOTP</span><span class="pill p-green">短信 OTP</span><span class="pill p-orange">邮箱 OTP</span><span class="pill p-gray">备用码</span>
+          </div>
+          <button class="btn btn-pri" onclick="toast('MFA 通过 · 签发租户会话（演示）')">验证通过</button>
+        </div>
+        <div class="card">
+          <h4>规则说明</h4>
+          <div class="kv"><span class="lab">外部成员</span><b>强制 MFA</b></div>
+          <div class="kv"><span class="lab">内部默认</span><b>按租户策略</b></div>
+          <div class="kv"><span class="lab">敏感应用</span><b>始终 Step-up</b></div>
+          <div class="kv"><span class="lab">审计</span><b>challenge / success / fail</b></div>
+          <div class="note">实现落在 Logto MFA + 自研策略网关；原型仅演示交互。</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="sf-face" class="secure-panel">
+      <div class="crumb">安全认证交互 / 人脸</div>
+      <div class="ptitle">人脸识别登录交互原型</div>
+      <div class="flow-steps">
+        <div class="fs done" data-n="1">唤起相机</div>
+        <div class="fs cur" data-n="2">活体检测</div>
+        <div class="fs" data-n="3">平台断言</div>
+        <div class="fs" data-n="4">会话续期</div>
+      </div>
+      <div class="cards g2">
+        <div class="card" style="text-align:center">
+          <div class="bio-orb face">☺</div>
+          <b>请正对屏幕 · 眨眼确认</b>
+          <p class="note">WebAuthn platform authenticator / Face ID；人脸模板不出设备。</p>
+          <button class="btn btn-pri" style="width:auto;margin-top:8px" onclick="toast('人脸断言成功（演示）')">模拟识别成功</button>
+        </div>
+        <div class="card">
+          <h4>失败与回退</h4>
+          <div class="kv"><span class="lab">失败 1–2 次</span><b>重试提示</b></div>
+          <div class="kv"><span class="lab">失败 ≥3 次</span><b>回退 MFA/密码</b></div>
+          <div class="kv"><span class="lab">设备变更</span><b>需重新注册</b></div>
+          <div class="kv"><span class="lab">合规</span><b>仅存 credentialId</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="sf-fp" class="secure-panel">
+      <div class="crumb">安全认证交互 / 指纹</div>
+      <div class="ptitle">指纹解锁交互原型</div>
+      <div class="flow-steps">
+        <div class="fs done" data-n="1">请求断言</div>
+        <div class="fs cur" data-n="2">指纹传感器</div>
+        <div class="fs" data-n="3">校验通过</div>
+        <div class="fs" data-n="4">进入门户</div>
+      </div>
+      <div class="cards g2">
+        <div class="card" style="text-align:center">
+          <div class="bio-orb">指纹</div>
+          <b>请将手指放在传感器上</b>
+          <p class="note">Touch ID / Android BiometricPrompt / Windows Hello。</p>
+          <button class="btn btn-pri" style="width:auto;margin-top:8px" onclick="toast('指纹断言成功（演示）')">模拟解锁成功</button>
+        </div>
+        <div class="card">
+          <h4>适用场景</h4>
+          <div class="kv"><span class="lab">冷启动</span><b>快速解锁本机会话</b></div>
+          <div class="kv"><span class="lab">后台回前台</span><b>闲置超时后重验</b></div>
+          <div class="kv"><span class="lab">与 MFA 关系</span><b>可替代第二因子（策略可配）</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="sf-enroll" class="secure-panel">
+      <div class="crumb">安全认证交互 / 注册</div>
+      <div class="ptitle">生物识别注册流</div>
+      <div class="flow-steps">
+        <div class="fs done" data-n="1">已登录</div>
+        <div class="fs done" data-n="2">MFA 确认</div>
+        <div class="fs cur" data-n="3">设备注册</div>
+        <div class="fs" data-n="4">完成</div>
+      </div>
+      <div class="card">
+        <h4>注册清单</h4>
+        <table>
+          <tr><th>因子</th><th>状态</th><th>设备</th><th>操作</th></tr>
+          <tr><td>面容 Face ID</td><td><span class="pill p-green">已注册</span></td><td>iPhone 15</td><td><a style="color:var(--blue-d);cursor:pointer" onclick="toast('已吊销面容凭证（演示）')">吊销</a></td></tr>
+          <tr><td>指纹 Touch ID</td><td><span class="pill p-green">已注册</span></td><td>MacBook Pro</td><td><a style="color:var(--blue-d);cursor:pointer" onclick="toast('已吊销指纹凭证（演示）')">吊销</a></td></tr>
+          <tr><td>平台 Passkey</td><td><span class="pill p-orange">待注册</span></td><td>—</td><td><a style="color:var(--blue-d);cursor:pointer" onclick="toast('唤起 WebAuthn.create（演示）')">注册</a></td></tr>
+          <tr><td>TOTP Authenticator</td><td><span class="pill p-green">已绑定</span></td><td>Authenticator App</td><td><a style="color:var(--blue-d);cursor:pointer">查看备用码</a></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div id="sf-stepup" class="secure-panel">
+      <div class="crumb">安全认证交互 / Step-up</div>
+      <div class="ptitle">敏感操作步进认证</div>
+      <div class="banner"><b>场景：</b>重置 client_secret / 踢人 / 导出权限目录 — 需再次人脸或 TOTP。</div>
+      <div class="cards g2">
+        <div class="card">
+          <h4>挑战选择</h4>
+          <button class="btn btn-pri" style="margin-bottom:8px" onclick="toast('Step-up Face 通过（演示）')">使用人脸确认</button>
+          <button class="btn btn-line" style="width:100%;margin-bottom:8px" onclick="toast('Step-up TOTP 通过（演示）')">使用 TOTP 确认</button>
+          <button class="btn btn-line" style="width:100%" onclick="toast('已取消敏感操作')">取消</button>
+        </div>
+        <div class="card">
+          <h4>审计字段</h4>
+          <div class="kv"><span class="lab">action</span><b>secret.reset</b></div>
+          <div class="kv"><span class="lab">amr</span><b>face / otp</b></div>
+          <div class="kv"><span class="lab">acr</span><b>step-up</b></div>
+          <div class="kv"><span class="lab">result</span><b>success</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="sf-admin" class="secure-panel">
+      <div class="crumb">安全认证交互 / 管理策略</div>
+      <div class="ptitle">管理端 · MFA / 生物识别策略</div>
+      <div class="cards g3">
+        <div class="card"><h4>强制范围</h4>
+          <div class="kv"><span class="lab">外部成员</span><b>强制</b></div>
+          <div class="kv"><span class="lab">Owner/Admin</span><b>强制</b></div>
+          <div class="kv"><span class="lab">普通成员</span><b>可选</b></div></div>
+        <div class="card"><h4>允许因子</h4>
+          <div class="kv"><span class="lab">TOTP</span><b>开</b></div>
+          <div class="kv"><span class="lab">短信 / 邮箱 OTP</span><b>开</b></div>
+          <div class="kv"><span class="lab">人脸 / 指纹</span><b>开</b></div>
+          <div class="kv"><span class="lab">备用码</span><b>开</b></div></div>
+        <div class="card"><h4>手机端</h4>
+          <div class="kv"><span class="lab">生物快速解锁</span><b>开</b></div>
+          <div class="kv"><span class="lab">闲置重验</span><b>10 分钟</b></div>
+          <div class="kv"><span class="lab">越狱/Root 检测</span><b>告警（二期）</b></div></div>
+      </div>
+      <button class="btn btn-pri" style="width:auto;margin-top:14px" onclick="scr('admin','a-policy',document.querySelectorAll('#view-admin .side nav a')[document.querySelectorAll('#view-admin .side nav a').length-2]);go('admin',document.querySelectorAll('.role-tabs button')[2]);toast('已跳转管理端策略页')">打开管理端策略配置页</button>
+    </div>
+  </div>
+</div></div>
+<div class="footer-tip">O-V2.0 安全认证交互：MFA · 人脸 · 指纹 · 注册 · Step-up · 管理策略。</div>
+</div>
+<!-- AI-GEN-END -->
+
+
+<div class="toast" id="demo-toast"></div>
+
+<!-- ================= 弹窗集 ================= -->
+<div class="mask" id="m-expire"><div class="modal">
+  <h3>⏳ 账号即将到期提醒</h3>
+  <div class="sub">你的账号将于 <b style="color:var(--red)">5 天后（2026-07-26）</b>到期。当前策略为模式 B（强制有效期）：<b>过期后将完全无法登录</b>，仅归属负责人可代为申请恢复。</div>
+  <div class="warn">到期前 7 天内每次登录都会出现本提醒（FR-LC-04），需手动确认后才能继续。</div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-expire')">我知道了，继续访问</button>
+    <button class="btn btn-pri" style="width:auto" onclick="closeModal('m-expire')">立即发起延期申请</button>
+  </div>
+</div></div>
+
+<div class="mask" id="m-skill"><div class="modal">
+  <h3>⬇ 下载对接 Skill · 项目管理 PMS</h3>
+  <div class="sub">Skill 包含：SKILL.md（端点 / 协议流程 / 唯一标识 / 错误码 / 自检清单）+ Java·PHP·Python·Node 示例 + 配置模板（凭证为占位符）。</div>
+  <div class="warn">🔐 Skill <b>不包含 client_secret</b>。对接执行时 AI 会询问你输入凭证，并引导写入本地环境变量——请自行妥善保存，切勿提交至代码仓库（已附 .gitignore 建议）。secret 丢失只能回控制台重置。</div>
+  <div class="field" style="margin-top:14px"><label>保存位置（必选）</label><input value="D:\projects\pms\.claude\skills\sso-connect\"></div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-skill')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="closeModal('m-skill')">确认下载</button>
+  </div>
+</div></div>
+
+<div class="mask" id="m-reset"><div class="modal">
+  <h3>🔁 重置 client_secret</h3>
+  <div class="sub">重置后：<b>新 secret 立即生效</b>并仅完整展示一次；旧 secret 保留 <b>6 小时</b>宽限（新旧并行可用），到期自动失效。可随时应急作废旧 Key。</div>
+  <div class="secretbox">pms_secret_Kx91mQ7vB3nT5wYz2aH8eLpR4cU0dSfG（示例 · 关闭后不再显示）</div>
+  <div class="warn">本操作需飞书敏感操作确认，并将通知应用全部负责人；全程审计留痕。</div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-reset')">取消</button>
+    <button class="btn btn-danger" style="width:auto" onclick="closeModal('m-reset')">已复制，确认重置</button>
+  </div>
+</div></div>
+
+<div class="mask" id="m-approve"><div class="modal">
+  <h3>📦 应用接入审核 · 数据看板</h3>
+  <div class="sub">申请人：吴川斌（平台研发部）· 协议：OAuth2+PKCE · 唯一标识：itcode<br>回调：https://dash.company.com/auth/callback（域名白名单 ✔）· 预计用户：200</div>
+  <div class="field"><label>审核意见</label><input placeholder="驳回时必填"></div>
+  <div class="sub" style="margin-top:4px">通过后：自动生成凭证与沙箱测试账号，申请人自动成为应用管理员并收到通知。</div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-approve')">驳回</button>
+    <button class="btn btn-pri" style="width:auto" onclick="closeModal('m-approve')">通过并生成凭证</button>
+  </div>
+</div></div>
+
+<div class="mask" id="m-extend"><div class="modal">
+  <h3>📋 发起延期申请</h3>
+  <div class="sub">审批链：一级领导（飞书直属上级自动获取：李总监）→ 平台管理员 · 渠道：飞书审批</div>
+  <div class="field"><label>延期时长</label><input value="90 天"></div>
+  <div class="field"><label>延期理由（必填）</label><input placeholder="项目合作延续至 Q4…"></div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-extend')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="closeModal('m-extend')">提交（推送至飞书审批）</button>
+  </div>
+</div></div>
+
+
+<!-- AI-GEN-BEGIN -->
+<div class="mask" id="m-mfa-challenge"><div class="modal">
+  <h3>🔐 多因子认证</h3>
+  <div class="sub">密码已校验通过。请完成第二因子后继续（外部成员 / 敏感策略强制）。</div>
+  <div class="mfa-digits"><span>4</span><span>8</span><span>2</span><span>9</span><span>1</span><span>7</span></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+    <button class="btn btn-line btn-sm" onclick="toast('切换 TOTP（演示）')">TOTP</button>
+    <button class="btn btn-line btn-sm" onclick="toast('已发送短信 OTP（演示）')">短信</button>
+    <button class="btn btn-line btn-sm" onclick="toast('唤起人脸确认（演示）')">人脸</button>
+    <button class="btn btn-line btn-sm" onclick="toast('唤起指纹确认（演示）')">指纹</button>
+  </div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-mfa-challenge')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="closeModal('m-mfa-challenge');openModal('m-expire')">验证并继续</button>
+  </div>
+</div></div>
+<!-- AI-GEN-END -->
+
+<!-- AI-GEN-BEGIN O-V2.0 governance dialogs -->
+<div class="mask" id="m-link-review"><div class="modal">
+  <h3>🔗 人工捏对 · 电子价签 zhangwei</h3>
+  <div class="sub">当前仅命中姓名“张伟”，共找到 3 个候选统一身份。请选择正确人员，或保持独立账号。</div>
+  <div class="radio-cards" id="link-candidates">
+    <div class="on" onclick="pickCandidate(this)"><b>张伟 · zhangwei20</b>原平台研发部 · 北森状态：已离职<br>手机号尾号 7788</div>
+    <div onclick="pickCandidate(this)"><b>张伟 · zhangwei31</b>线下销售 · 在职<br>手机号尾号 1026</div>
+    <div onclick="pickCandidate(this)"><b>保持独立</b>暂不关联自然人<br>后续由系统负责人继续确认</div>
+  </div>
+  <div class="field" style="margin-top:14px"><label>确认依据（必填）</label><input value="系统负责人确认 + 历史账号导出记录"></div>
+  <div class="warn">确认后将记录候选列表、命中字段、操作人、依据和原始快照；后续可撤销关联，但历史记录不可删除。</div>
+  <div class="foot"><button class="btn btn-line" onclick="closeModal('m-link-review')">取消</button><button class="btn btn-pri" style="width:auto" onclick="closeModal('m-link-review');toast('人工捏对已完成，审计证据已保存（演示）')">确认关联</button></div>
+</div></div>
+
+<div class="mask" id="m-offline-proof"><div class="modal">
+  <h3>📎 上传线下关闭回执 · 堡垒机</h3>
+  <div class="sub">任务 LC20260731-010 · 张伟 / zhangwei-ext。该系统暂无关闭接口，由堡垒机管理员线下执行。</div>
+  <div class="field"><label>执行结果</label><select style="width:100%;padding:11px;border:1px solid var(--line);border-radius:9px"><option>已关闭账号</option><option>账号不存在</option><option>无法关闭，需升级</option></select></div>
+  <div class="field"><label>外部单号 / 邮件主题</label><input value="BASTION-20260731-028"></div>
+  <div class="field"><label>回执证据</label><input type="file"></div>
+  <div class="field"><label>执行说明</label><input value="已于 16:40 禁用账号并清理登录会话"></div>
+  <div class="warn">上传后进入系统负责人复核；证据文件按季度审计周期归档，并记录文件摘要防篡改。</div>
+  <div class="foot"><button class="btn btn-line" onclick="closeModal('m-offline-proof')">取消</button><button class="btn btn-pri" style="width:auto" onclick="completeOfflineTask()">提交回执并进入复核</button></div>
+</div></div>
+
+<div class="mask" id="m-team-bulk"><div class="modal">
+  <h3 id="team-bulk-title">团队账号批量操作</h3>
+  <div class="sub" id="team-bulk-sub">操作对象：当前已选择人员。系统将校验人员管理范围、现有账号和审批要求。</div>
+  <div class="field"><label>目标系统（可多选）</label>
+    <div class="chip-row"><label class="source-chip"><input type="checkbox" checked> CRM</label><label class="source-chip"><input type="checkbox"> PMS</label><label class="source-chip"><input type="checkbox"> NC</label><label class="source-chip"><input type="checkbox"> BIP</label><label class="source-chip"><input type="checkbox"> SCM</label></div>
+  </div>
+  <div class="field"><label>账号 / 准入有效期</label><select id="team-bulk-validity" style="width:100%;padding:11px;border:1px solid var(--line);border-radius:9px"><option>跟随在职状态</option><option>90 天</option><option>180 天</option><option>指定日期：2026-12-31</option></select></div>
+  <div class="field"><label>业务理由（批量操作必填）</label><input value="项目组成员系统账号统一配置"></div>
+  <div class="warn" id="team-bulk-warning">批量操作会逐人生成执行结果；接口系统自动执行，非接口系统派发线下待办。成本查看权限不在本弹窗直接授予，需单独走一级领导和财务负责人复核。</div>
+  <div class="foot"><button class="btn btn-line" onclick="closeModal('m-team-bulk')">取消</button><button class="btn btn-pri" style="width:auto" onclick="submitTeamBulk()">提交批量操作</button></div>
+</div></div>
+<!-- AI-GEN-END -->
+
+<script>
+function go(v,btn){
+  document.querySelectorAll('.view').forEach(e=>e.classList.remove('show'));
+  document.getElementById('view-'+v).classList.add('show');
+  document.querySelectorAll('.role-tabs button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  window.scrollTo(0,0);
+}
+function ltab(i,el){
+  document.getElementById('lt0').style.display=i===0?'block':'none';
+  document.getElementById('lt1').style.display=i===1?'block':'none';
+  document.querySelectorAll('.ltabs div').forEach(d=>d.classList.remove('on'));
+  el.classList.add('on');
+}
+function scr(view,id,link){
+  document.querySelectorAll('#view-'+view+' .screen').forEach(e=>e.classList.remove('show'));
+  document.getElementById(id).classList.add('show');
+  document.querySelectorAll('#view-'+view+' .side nav a').forEach(a=>a.classList.remove('on'));
+  if(link)link.classList.add('on');
+}
+function openModal(id){document.getElementById(id).classList.add('show')}
+function closeModal(id){document.getElementById(id).classList.remove('show')}
+document.querySelectorAll('.mask').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show')}));
+/* AI-GEN-BEGIN */
+function toast(msg){
+  const el=document.getElementById('demo-toast');
+  if(!el){alert(msg);return;}
+  el.textContent=msg;
+  el.classList.add('show');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer=setTimeout(()=>el.classList.remove('show'),2600);
+}
+function demoSso(kind){
+  const map={
+    feishu:'飞书 OAuth2 authorize（open.feishu.cn）',
+    wecom:'企业微信 OAuth2 authorize（open.weixin.qq.com）',
+    beisen:'北森 OIDC authorize（企业租户 Issuer）'
+  };
+  toast('→ 跳转 '+ (map[kind]||kind) +' · 适配器构造授权 URL（演示）');
+}
+function refreshLoginSso(){
+  const box=document.getElementById('login-sso-btns');
+  if(!box)return;
+  const rows=[...document.querySelectorAll('#sso-table tr[data-kind]')];
+  box.innerHTML='';
+  rows.forEach(row=>{
+    const toggles=row.querySelectorAll('.toggle');
+    const enabled=toggles[0]?.classList.contains('on');
+    const visible=toggles[1]?.classList.contains('on');
+    if(!enabled||!visible)return;
+    const kind=row.getAttribute('data-kind');
+    const name=row.querySelector('b')?.textContent||kind;
+    const proto=(kind==='oidc_generic'||kind==='beisen')?'OIDC':'OAuth2';
+    const color=kind==='feishu'?'#3370FF':kind==='wecom'?'#07C160':kind==='beisen'?'#FF7A45':'#7C5CFF';
+    const btn=document.createElement('button');
+    btn.className='sso-btn';
+    btn.type='button';
+    btn.onclick=()=>demoSso(kind);
+    btn.innerHTML='<span class="dot" style="background:'+color+'"></span><span>'+name+'</span><span class="proto">'+proto+'</span>';
+    box.appendChild(btn);
+  });
+  if(!box.children.length){
+    box.innerHTML='<div class="note" style="text-align:center">当前无启用且登录可见的 SSO 提供方</div>';
+  }
+}
+function addSsoRow(){
+  const kind=document.getElementById('sso-kind').value;
+  const name=document.getElementById('sso-name').value.trim()||('新 '+kind);
+  const client=document.getElementById('sso-client').value.trim();
+  const table=document.getElementById('sso-table');
+  const tr=document.createElement('tr');
+  tr.setAttribute('data-kind',kind);
+  const proto=(kind==='oidc_generic'||kind==='beisen')?'OIDC':'OAuth2';
+  const pill=(kind==='oidc_generic'||kind==='beisen')?'p-green':'p-blue';
+  tr.innerHTML='<td><b>'+name+'</b></td><td>'+kind+'</td><td><span class="pill '+pill+'">'+proto+'</span></td>'+
+    '<td><span class="toggle on" onclick="this.classList.toggle(\'on\')"><i></i></span></td>'+
+    '<td><span class="toggle on" onclick="this.classList.toggle(\'on\');refreshLoginSso()"><i></i></span></td>'+
+    '<td><span class="pill p-orange">'+(client?'已填 Client':'待配置')+'</span></td>'+
+    '<td><a style="color:var(--blue-d);cursor:pointer" onclick="this.closest(\'tr\').remove();refreshLoginSso();toast(\'已移除（演示）\')">删除</a></td>';
+  table.appendChild(tr);
+  document.getElementById('sso-name').value='';
+  document.getElementById('sso-client').value='';
+  refreshLoginSso();
+  toast('已添加 SSO 适配器：'+name);
+}
+function demoSync(obj, action){
+  const map={pull:'拉取 Pull',push:'推送 Push',manual:'手动同步'};
+  const label=map[action]||action;
+  const toast=document.getElementById('demo-toast');
+  toast.textContent='✓ '+obj+' · '+label+' 已触发（演示）· 审计已记一条';
+  toast.classList.add('show');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer=setTimeout(()=>toast.classList.remove('show'),2600);
+  // 刷新请求/响应面板
+  const jobId='sync_'+Date.now().toString(36);
+  const path=obj==='用户'
+    ? (action==='push'?'/api/tenants/{tid}/sync/users:push':'/api/tenants/{tid}/sync/users:pull')
+    : (action==='push'?'/api/tenants/{tid}/sync/permissions:push':'/api/tenants/{tid}/sync/permissions:pull');
+  let body;
+  if(obj==='用户'){
+    body=action==='push'
+      ? {targets:['logto','apps:*'],include:['validity','status']}
+      : {source:'connector:feishu',mode: action==='manual'?'full':'incremental'};
+  }else{
+    body=action==='push'
+      ? {appIds:['crm','pms'],include:['roles','grants']}
+      : {appIds:['crm','pms'],mode: action==='manual'?'full':'incremental'};
+  }
+  const reqEl=document.getElementById('rr-request');
+  const resEl=document.getElementById('rr-response');
+  const badge=document.getElementById('rr-badge');
+  if(reqEl){
+    reqEl.innerHTML='<span class="m">POST</span> <span class="p">'+path+'</span>\n'
+      +JSON.stringify(body,null,2);
+  }
+  if(resEl){
+    resEl.innerHTML=JSON.stringify({
+      jobId: jobId,
+      status: 'accepted',
+      object: obj==='用户'?'users':'permissions',
+      action: action,
+      acceptedAt: new Date().toISOString(),
+      estimatedSeconds: action==='manual'?90:12,
+      auditEventId: 'aud_'+jobId
+    },null,2);
+  }
+  if(badge){ badge.textContent=obj+' · '+label; badge.className='pill p-green'; }
+  const table=document.querySelector('#a-sync-api table');
+  if(!table) return;
+  const placeholder=document.getElementById('sync-log-row');
+  if(placeholder) placeholder.remove();
+  const now=new Date();
+  const ts=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+  const tr=document.createElement('tr');
+  tr.innerHTML='<td>'+ts+'</td><td>'+obj+'</td><td>'+label+'</td><td><span class="pill p-green">成功</span></td><td>'+jobId+' · 0 冲突</td>';
+  if(table.rows.length>1) table.insertBefore(tr, table.rows[1]);
+  else table.appendChild(tr);
+}
+
+/* O-V1.3 集中权限查看 */
+const PE_DATA={
+  users:[
+    {id:'usr_wu',name:'吴川斌',itcode:'chuanbin.wu',org:'集团总部 / 平台研发部 / 产品组',owned:['crm.customer.read','crm.customer.write','crm.customer.export','crm.report.view','pms.project.admin','pms.project.read','pms.task.comment','dash.board.view']},
+    {id:'usr_li',name:'李雷',itcode:'lei.li',org:'集团总部 / 平台研发部 / 后端组',owned:['crm.customer.read','crm.customer.write','crm.report.view','pms.project.read','pms.task.comment']},
+    {id:'usr_wang',name:'王强（供应商A）',itcode:'138****5566',org:'集团总部 / 外部协作',owned:['crm.customer.read','crm.report.view','pms.project.read','pms.task.comment']},
+    {id:'usr_liu',name:'刘敏（合作方C）',itcode:'137****8899',org:'集团总部 / 外部协作',owned:['crm.customer.read','crm.report.view']}
+  ],
+  perms:[
+    {key:'crm.customer.read',name:'查看客户',app:'CRM 客户系统',group:'客户'},
+    {key:'crm.customer.write',name:'编辑客户',app:'CRM 客户系统',group:'客户'},
+    {key:'crm.customer.export',name:'导出客户',app:'CRM 客户系统',group:'客户'},
+    {key:'crm.report.view',name:'查看报表',app:'CRM 客户系统',group:'报表'},
+    {key:'pms.project.admin',name:'项目管理',app:'项目管理 PMS',group:'项目'},
+    {key:'pms.project.read',name:'查看项目',app:'项目管理 PMS',group:'项目'},
+    {key:'pms.task.comment',name:'任务评论',app:'项目管理 PMS',group:'任务'},
+    {key:'dash.board.view',name:'看板浏览',app:'数据看板',group:'看板'}
+  ],
+  orgs:[
+    {id:'org_root',name:'集团总部',members:['usr_wu','usr_li','usr_wang','usr_liu']},
+    {id:'org_rd',name:'平台研发部',members:['usr_wu','usr_li']},
+    {id:'org_ext',name:'外部协作',members:['usr_wang','usr_liu']}
+  ]
+};
+let peView='by_user';
+function peSetView(v){
+  peView=v;
+  ['user','perm','org'].forEach(function(k){
+    const btn=document.getElementById('pe-tab-'+k);
+    if(!btn) return;
+    const on=(k==='user'&&v==='by_user')||(k==='perm'&&v==='by_permission')||(k==='org'&&v==='by_org');
+    btn.className=on?'btn btn-pri btn-sm':'btn btn-line btn-sm';
+    btn.style.width='auto';
+  });
+  const sel=document.getElementById('pe-subject');
+  if(!sel) return;
+  sel.innerHTML='';
+  const items=v==='by_user'?PE_DATA.users.map(u=>({id:u.id,label:u.name+' · '+u.itcode}))
+    :v==='by_permission'?PE_DATA.perms.map(p=>({id:p.key,label:p.app+' · '+p.key}))
+    :PE_DATA.orgs.map(o=>({id:o.id,label:o.name}));
+  items.forEach(function(it){const o=document.createElement('option');o.value=it.id;o.textContent=it.label;sel.appendChild(o);});
+  peRender();
+}
+function peBuildTreeHtml(ownedSet, mode){
+  const byApp={};
+  PE_DATA.perms.forEach(function(p){(byApp[p.app]=byApp[p.app]||[]).push(p);});
+  let html='';
+  Object.keys(byApp).forEach(function(app){
+    const groups={};
+    byApp[app].forEach(function(p){(groups[p.group]=groups[p.group]||[]).push(p);});
+    let appBody='';
+    Object.keys(groups).forEach(function(g){
+      let gBody='';
+      groups[g].forEach(function(p){
+        const owned=ownedSet.has(p.key);
+        if(mode==='owned_only'&&!owned) return;
+        gBody+='&nbsp;&nbsp;&nbsp;&nbsp;· '+p.key+' — '+p.name+' <span class="pill '+(owned?'p-green':'p-gray')+'">'+(owned?'✓ 已有':'○ 无')+'</span><br>';
+      });
+      if(!gBody) return;
+      appBody+='&nbsp;&nbsp;▾ <b>'+g+'</b><br>'+gBody;
+    });
+    if(!appBody) return;
+    html+='▾ <b>'+app+'</b><br>'+appBody;
+  });
+  return html||'<span style="color:var(--muted)">（无权限）</span>';
+}
+function peRender(){
+  const subjectId=(document.getElementById('pe-subject')||{}).value;
+  const display=(document.getElementById('pe-display')||{}).value||'tree';
+  const mode=(document.getElementById('pe-tree-mode')||{}).value||'all_marked';
+  const titleEl=document.getElementById('pe-title');
+  const subEl=document.getElementById('pe-sub');
+  const treeEl=document.getElementById('pe-tree');
+  const listWrap=document.getElementById('pe-list-wrap');
+  const listEl=document.getElementById('pe-list');
+  if(!titleEl||!treeEl||!listEl) return;
+  let title='', sub='', treeHtml='', headers=[], rows=[];
+  if(peView==='by_user'){
+    const u=PE_DATA.users.find(x=>x.id===subjectId)||PE_DATA.users[0];
+    const owned=new Set(u.owned);
+    title='按用户 · '+u.name;
+    sub=u.itcode+' · '+u.org;
+    treeHtml=peBuildTreeHtml(owned, mode);
+    headers=['系统','权限 Key','名称','状态'];
+    PE_DATA.perms.forEach(function(p){
+      if(mode==='owned_only'&&!owned.has(p.key)) return;
+      rows.push([p.app,p.key,p.name,owned.has(p.key)?'已有':'未授予']);
+    });
+  }else if(peView==='by_permission'){
+    const p=PE_DATA.perms.find(x=>x.key===subjectId)||PE_DATA.perms[0];
+    const holders=PE_DATA.users.filter(u=>u.owned.indexOf(p.key)>=0);
+    title='按权限 · '+p.key;
+    sub=p.app+' · '+p.name;
+    treeHtml='▾ <b>'+p.app+'</b><br>&nbsp;&nbsp;▾ <b>'+p.group+'</b><br>&nbsp;&nbsp;&nbsp;&nbsp;· '+p.key+' — '+p.name+' <span class="pill p-green">✓</span><br><br>▾ <b>持有人（'+holders.length+'）</b><br>'+
+      holders.map(h=>'&nbsp;&nbsp;· '+h.name+' · '+h.itcode).join('<br>');
+    headers=['用户','标识','组织','状态'];
+    holders.forEach(h=>rows.push([h.name,h.itcode,h.org,'已有']));
+  }else{
+    const o=PE_DATA.orgs.find(x=>x.id===subjectId)||PE_DATA.orgs[0];
+    const members=PE_DATA.users.filter(u=>o.members.indexOf(u.id)>=0);
+    title='按组织 · '+o.name;
+    sub='含 '+members.length+' 人';
+    treeHtml=members.map(function(u){
+      return '▾ <b>'+u.name+'</b>（'+u.owned.length+' 权限）<br>'+peBuildTreeHtml(new Set(u.owned), mode);
+    }).join('<br>');
+    headers=['用户','系统','权限 Key','状态'];
+    members.forEach(function(u){
+      const owned=new Set(u.owned);
+      PE_DATA.perms.forEach(function(p){
+        if(!owned.has(p.key)) return;
+        rows.push([u.name,p.app,p.key,'已有']);
+      });
+    });
+  }
+  titleEl.textContent=title;
+  subEl.textContent=sub;
+  if(display==='tree'){
+    treeEl.style.display='block'; listWrap.style.display='none'; treeEl.innerHTML=treeHtml;
+  }else{
+    treeEl.style.display='none'; listWrap.style.display='block';
+    listEl.querySelector('thead').innerHTML='<tr>'+headers.map(h=>'<th>'+h+'</th>').join('')+'</tr>';
+    listEl.querySelector('tbody').innerHTML=rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')||'<tr><td colspan="4" style="color:var(--muted)">无数据</td></tr>';
+  }
+}
+function peExport(){
+  const subjectId=(document.getElementById('pe-subject')||{}).value||'demo';
+  const mode=(document.getElementById('pe-tree-mode')||{}).value||'all_marked';
+  toast('已导出 permission-explorer_'+peView+'_'+subjectId+'_'+mode+'.csv（演示）');
+}
+document.addEventListener('DOMContentLoaded', function(){ if(document.getElementById('pe-subject')) peSetView('by_user'); });
+/* AI-GEN-END */
+/* 双 Key 倒计时演示 */
+let t=5*3600+12*60+33;
+setInterval(()=>{t--;if(t<0)t=0;const h=String(Math.floor(t/3600)).padStart(2,'0'),m=String(Math.floor(t%3600/60)).padStart(2,'0'),s=String(t%60).padStart(2,'0');const el=document.getElementById('cd');if(el)el.textContent=h+':'+m+':'+s;},1000);
+
+/* AI-GEN-BEGIN O-V1.5 */
+function showSecure(id){
+  document.querySelectorAll('.secure-panel').forEach(e=>e.classList.remove('show'));
+  const el=document.getElementById(id);
+  if(el)el.classList.add('show');
+  document.querySelectorAll('.flow-nav a').forEach(a=>a.classList.remove('on'));
+  const nav=document.getElementById('nav-'+id);
+  if(nav)nav.classList.add('on');
+}
+function mphoneShow(name){
+  ['login','bio','pwd','mfa','home','secset'].forEach(n=>{
+    const el=document.getElementById('mphone-'+n);
+    if(el)el.style.display=(n===name)?'flex':'none';
+  });
+}
+function setMobileBio(kind){
+  const orb=document.getElementById('m-bio-orb');
+  const title=document.getElementById('m-bio-title');
+  const sub=document.getElementById('m-bio-sub');
+  if(kind==='fp'){
+    orb.className='bio-orb'; orb.textContent='指纹';
+    title.textContent='指纹识别中…';
+    sub.textContent='请将手指放在传感器上 · Touch ID / BiometricPrompt';
+  }else{
+    orb.className='bio-orb face'; orb.textContent='☺';
+    title.textContent='面容识别中…';
+    sub.textContent='请正对前置摄像头 · WebAuthn / Face ID';
+  }
+}
+/* AI-GEN-END */
+
+/* AI-GEN-BEGIN O-V2.0 governance interactions */
+function confirmLink(el, action){
+  const cell=el.closest('td');
+  if(!cell)return;
+  const cls=action==='保持独立'?'p-gray':'p-green';
+  cell.innerHTML='<span class="pill '+cls+'">已'+action+'</span>';
+  toast('账号'+action+'完成，关联证据与规则版本已记录（演示）');
+}
+function batchLink(){
+  let count=0;
+  document.querySelectorAll('#link-table a').forEach(function(el){
+    if(el.textContent.trim()==='确认关联'){
+      confirmLink(el,'关联');
+      count++;
+    }
+  });
+  toast('已批量确认 '+count+' 条高置信度关联（演示）');
+}
+function pickCandidate(el){
+  document.querySelectorAll('#link-candidates > div').forEach(function(item){item.classList.remove('on');});
+  el.classList.add('on');
+}
+function orgSync(source){
+  const name=source==='beisen'?'北森人员状态':'飞书组织架构';
+  toast(name+'同步已触发：新增 2 · 变更 14 · 离职 1（演示）');
+}
+function saveOwnerRoute(){
+  toast('部门责任链已保存：直接负责人 → 一级领导 → 财务负责人；审计已记一条（演示）');
+}
+function completeOfflineTask(){
+  closeModal('m-offline-proof');
+  const row=document.getElementById('offline-task-row');
+  if(row){
+    const cell=row.cells[row.cells.length-1];
+    cell.innerHTML='<span class="pill p-blue">待系统负责人复核</span>';
+  }
+  toast('线下关闭回执已提交，证据摘要已归档（演示）');
+}
+function launchSpecialReview(){
+  toast('2026 Q3 成本权限复核已发起，共 181 条，已按责任链分发待办（演示）');
+}
+function generateQuarterReport(){
+  toast('季度审计报告已生成：账号汇总、离职清零、成本权限、整改与签收证据（演示）');
+}
+function quarterStage(stage, button){
+  document.querySelectorAll('.quarter-panel').forEach(function(panel){panel.style.display='none';});
+  const panel=document.getElementById('quarter-'+stage);
+  if(panel)panel.style.display='block';
+  document.querySelectorAll('#quarter-stage-tabs button').forEach(function(item){
+    item.className='btn btn-line btn-sm';
+    item.style.width='auto';
+  });
+  if(button){
+    button.className='btn btn-pri btn-sm';
+    button.style.width='auto';
+  }
+}
+function quarterSubmitUser(){
+  toast('本人确认已提交：保留 5 个账号、申请关闭 1 个账号、2 项成本权限进入责任链复核（演示）');
+  const managerButton=document.querySelectorAll('#quarter-stage-tabs button')[1];
+  quarterStage('manager',managerButton);
+}
+function quarterApprove(el){
+  const cell=el.closest('td');
+  if(cell)cell.innerHTML='<span class="pill p-green">已复核</span>';
+  toast('负责人复核完成；成本权限已提交一级领导与财务负责人加签（演示）');
+}
+function teamSelectionChanged(){
+  const count=document.querySelectorAll('.team-check:checked').length;
+  const label=document.getElementById('team-selected');
+  if(label)label.textContent='已选择 '+count+' 人';
+}
+function teamSelectAll(master){
+  document.querySelectorAll('.team-check').forEach(function(item){item.checked=master.checked;});
+  teamSelectionChanged();
+}
+function openTeamBulk(action){
+  const count=document.querySelectorAll('.team-check:checked').length;
+  const title=document.getElementById('team-bulk-title');
+  const sub=document.getElementById('team-bulk-sub');
+  const warning=document.getElementById('team-bulk-warning');
+  if(title)title.textContent=action+(count>1?' · 批量':'');
+  if(sub)sub.textContent=count>0
+    ? '操作对象：已选择 '+count+' 人。系统将逐人校验管理范围、现有账号与审批要求。'
+    : '操作对象：当前人员。勾选多人后可执行批量操作。';
+  if(warning)warning.style.borderColor=action==='关闭账号'?'#E7A5A5':'#F2D4AC';
+  openModal('m-team-bulk');
+}
+function submitTeamBulk(){
+  const action=(document.getElementById('team-bulk-title')||{}).textContent||'团队账号操作';
+  const count=document.querySelectorAll('.team-check:checked').length||1;
+  closeModal('m-team-bulk');
+  toast(action+'已提交，共 '+count+' 人；自动执行与线下待办结果将在工单中心汇总（演示）');
+}
+/* AI-GEN-END */
+</script>
+</body>
+</html>

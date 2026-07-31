@@ -1,0 +1,60 @@
+<!DOCTYPE html><html lang='zh-CN'><head><meta charset='UTF-8'>
+<title>lecoo统一登录-架构与资源方案-O-V1.0</title>
+<style>body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;max-width:860px;margin:40px auto;padding:0 24px;line-height:1.7;color:#1B2340}
+h1{font-size:28px}h2{font-size:20px;margin-top:28px;border-bottom:1px solid #E5ECF7;padding-bottom:6px}h3{font-size:16px}
+table{border-collapse:collapse;width:100%;margin:12px 0}th,td{border:1px solid #DDE7F7;padding:8px 10px;text-align:left;font-size:13.5px}
+th{background:#F7FAFF}code{background:#F2F6FD;padding:1px 6px;border-radius:4px}ul,ol{padding-left:22px}blockquote{border-left:3px solid #2E9BFF;margin:12px 0;padding:6px 14px;color:#5A6478;background:#F7FAFF}</style></head><body>
+<h1>lecoo 统一登录 · 架构与资源方案（方案 O）V1.0</h1>
+<br>
+<h2>1. 逻辑架构</h2>
+<br>
+<pre><code>
+[登录门户 / C端 / 管理后端]
+        │
+   ┌────┴────┐
+   ▼         ▼
+治理服务(TS)  Logto
+   │         │
+   └────┬────┘
+        ▼
+   PostgreSQL + Redis
+</code></pre>
+<br>
+<p>详情：`架构图/01-总体架构图.html`、`02-部署架构图.html`。</p>
+<br>
+<h2>2. 部署</h2>
+<br>
+<li>`apps/web`：Next.js BFF + UI  </li>
+<li>Logto：独立容器（见仓库 `docker-compose.logto.yml`）  </li>
+<li>PostgreSQL：gov + audit schema  </li>
+<li>Redis：限流 / 踢人指令辅助  </li>
+<br>
+<h2>3. 资源估算（MVP）</h2>
+<br>
+<table>
+<tr><th>资源</th><th>规格建议</th><th>备注</th></tr>
+<tr><td>Web/API</td><td>2 × 小规格容器</td><td>可与现有 monorepo 同部署</td></tr>
+<tr><td>Logto</td><td>1 × 中规格</td><td>生产建议 2 副本</td></tr>
+<tr><td>PostgreSQL</td><td>托管 2 vCPU / 4–8GB</td><td>治理 + 审计分区</td></tr>
+<tr><td>Redis</td><td>托管 1GB</td><td>非会话权威源</td></tr>
+</table>
+<br>
+<h2>4. 安全基线</h2>
+<br>
+<li>仅 Auth Code + PKCE；禁 Implicit / ROPC  </li>
+<li>redirect_uri 精确匹配；state/nonce 强制  </li>
+<li>RT 轮换 + 重放检测；AT 短 TTL  </li>
+<li>secret 一次展示 + 哈希存储  </li>
+<li>高危操作二次确认 + 全量审计  </li>
+<br>
+<h2>5. 观测</h2>
+<br>
+<li>登录漏斗：发码 / 验码 / bootstrap / 选租户成功率  </li>
+<li>延迟：token exchange P95  </li>
+<li>安全：锁定、踢人、secret rotate 计数</li>
+<br>
+<h2>O-V1.5 安全认证补充</h2>
+<br>
+<li>MFA 与生物识别策略由管理端配置，执行面结合 Logto MFA + WebAuthn/平台生物 API。</li>
+<li>手机端支持生物快速解锁与 Step-up；生物特征模板不出设备，仅持久化 credential 引用与审计事件。</li>
+</body></html>

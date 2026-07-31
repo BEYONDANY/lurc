@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>01 · 总体架构图（方案 O）</title><style>
+body{margin:0;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;background:#0B1126;color:#E8EEFF}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 24px 48px}
+h1{font-size:22px;margin:0 0 6px}
+.sub{color:#8FA3D9;font-size:13px;margin-bottom:22px}
+.card{background:#121A38;border:1px solid #24315F;border-radius:14px;padding:22px}
+svg{width:100%;height:auto;display:block}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:16px;font-size:12px;color:#AFC3EE}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+</style></head>
+<body><div class="wrap">
+<h1>01 · 总体架构图（方案 O）</h1>
+<p class="sub">lecoo｜Logto 认证核心 + 自研治理层｜无 CAS/SAML｜一期多租户</p>
+<div class="card"><svg viewBox="0 0 980 520" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#2E9BFF"/><stop offset="1" stop-color="#7C5CFF"/></linearGradient></defs>
+  <rect x="40" y="30" width="900" height="70" rx="12" fill="#1A2450" stroke="#2E9BFF"/>
+  <text x="490" y="72" text-anchor="middle" fill="#fff" font-size="18" font-weight="700">登录门户 / C 端门户 / 管理后端 / 开发者文档</text>
+  <path d="M490 100 v40" stroke="#5A74C8" stroke-width="2"/>
+  <rect x="80" y="150" width="380" height="220" rx="14" fill="#152047" stroke="#3D8BFF"/>
+  <text x="270" y="182" text-anchor="middle" fill="#9FD0FF" font-size="16" font-weight="700">自研治理服务（TS）</text>
+  <text x="110" y="220" fill="#D7E3FF" font-size="13">• Tenant / Membership / Invite</text>
+  <text x="110" y="248" fill="#D7E3FF" font-size="13">• App registry &amp; keys（一次展示）</text>
+  <text x="110" y="276" fill="#D7E3FF" font-size="13">• 权限只读聚合目录</text>
+  <text x="110" y="304" fill="#D7E3FF" font-size="13">• Audit / webhook / 踢人指令</text>
+  <text x="110" y="332" fill="#D7E3FF" font-size="13">• 企业连接器适配（可选）</text>
+  <rect x="520" y="150" width="380" height="220" rx="14" fill="#1A1538" stroke="#8B6CFF"/>
+  <text x="710" y="182" text-anchor="middle" fill="#D2C4FF" font-size="16" font-weight="700">Logto 认证核心</text>
+  <text x="550" y="220" fill="#E6DEFF" font-size="13">• OIDC Auth Code + PKCE</text>
+  <text x="550" y="248" fill="#E6DEFF" font-size="13">• Session / MFA hooks</text>
+  <text x="550" y="276" fill="#E6DEFF" font-size="13">• Token 签发与 RT 轮换</text>
+  <text x="550" y="304" fill="#E6DEFF" font-size="13">• Social / 企业连接器钩子</text>
+  <text x="550" y="332" fill="#E6DEFF" font-size="13">• 凭证只存 IdP（硬边界）</text>
+  <path d="M270 370 v40" stroke="#5A74C8" stroke-width="2"/>
+  <path d="M710 370 v40" stroke="#5A74C8" stroke-width="2"/>
+  <rect x="180" y="420" width="620" height="70" rx="12" fill="url(#g)" opacity="0.35" stroke="#2E9BFF"/>
+  <text x="490" y="462" text-anchor="middle" fill="#fff" font-size="16" font-weight="700">PostgreSQL（治理数据） + Redis（限流/业务会话辅助）</text>
+</svg><div class="legend"><span><i style="background:#3D8BFF"></i>自研治理</span><span><i style="background:#8B6CFF"></i>Logto IdP</span><span><i style="background:#2E9BFF"></i>数据面</span></div></div>
+</div></body></html>

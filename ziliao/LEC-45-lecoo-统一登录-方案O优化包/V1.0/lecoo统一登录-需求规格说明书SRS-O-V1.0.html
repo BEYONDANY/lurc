@@ -1,0 +1,83 @@
+<!DOCTYPE html><html lang='zh-CN'><head><meta charset='UTF-8'>
+<title>lecoo统一登录-需求规格说明书SRS-O-V1.0</title>
+<style>body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;max-width:860px;margin:40px auto;padding:0 24px;line-height:1.7;color:#1B2340}
+h1{font-size:28px}h2{font-size:20px;margin-top:28px;border-bottom:1px solid #E5ECF7;padding-bottom:6px}h3{font-size:16px}
+table{border-collapse:collapse;width:100%;margin:12px 0}th,td{border:1px solid #DDE7F7;padding:8px 10px;text-align:left;font-size:13.5px}
+th{background:#F7FAFF}code{background:#F2F6FD;padding:1px 6px;border-radius:4px}ul,ol{padding-left:22px}blockquote{border-left:3px solid #2E9BFF;margin:12px 0;padding:6px 14px;color:#5A6478;background:#F7FAFF}</style></head><body>
+<h1>lecoo 统一登录 · 需求规格说明书 SRS（方案 O）V1.0</h1>
+<br>
+<blockquote>版本注记：O-V1.5 增量 — 手机版 + 人脸/指纹/多因子（MFA）</blockquote>
+<br>
+<h2>1. 引言</h2>
+<br>
+<p>本文是方案 A SRS 的 **SaaS / Logto 裁剪版**。FR 编号以 O- 前缀标识；原 CAS/飞书主路径 FR 标记为 Out-of-Scope。</p>
+<br>
+<h2>2. 总体描述</h2>
+<br>
+<li>角色：Visitor / Member / Admin / Owner / System  </li>
+<li>约束：不自研 OIDC 协议核心；不实现 CAS/SAML  </li>
+<li>客户端：桌面 Web + 手机 Web（响应式 / 独立手机原型）  </li>
+<li>安全因子：密码 / OTP / TOTP / 短信 / 邮箱 / 人脸 / 指纹 / 备用码  </li>
+<br>
+<h2>3. 功能需求</h2>
+<br>
+<h3>O-AUTH 认证</h3>
+<li>O-AUTH-01 邮箱 OTP 登录  </li>
+<li>O-AUTH-02 密码登录（凭证在 Logto）  </li>
+<li>O-AUTH-03 防爆破与可配置锁定  </li>
+<li>O-AUTH-04 OIDC Auth Code + PKCE  </li>
+<li>O-AUTH-05 登出与管理员踢人  </li>
+<li>O-AUTH-06 **MFA 多因子挑战**（TOTP / 短信 OTP / 邮箱 OTP / 备用恢复码）  </li>
+<li>O-AUTH-07 **人脸识别登录 / 解锁**（WebAuthn platform / Face ID；特征不出设备）  </li>
+<li>O-AUTH-08 **指纹解锁**（Touch ID / BiometricPrompt / Windows Hello）  </li>
+<li>O-AUTH-09 **生物识别注册与吊销**（需已登录 + MFA 确认）  </li>
+<li>O-AUTH-10 **敏感操作 Step-up**（重置密钥 / 踢人 / 导出等再次挑战）  </li>
+<li>O-AUTH-11 **手机端登录闭环**（生物优先 → 回退密码/MFA → 工作台）</li>
+<br>
+<h3>O-TENANT 租户</h3>
+<li>O-TENANT-01 创建租户  </li>
+<li>O-TENANT-02 邀请成员（角色 owner/admin/member）  </li>
+<li>O-TENANT-03 接受邀请 / 邀请过期  </li>
+<li>O-TENANT-04 禁用成员  </li>
+<li>O-TENANT-05 租户级 MFA / 生物识别强制策略  </li>
+<br>
+<h3>O-APP 应用</h3>
+<li>O-APP-01 注册应用与回调白名单  </li>
+<li>O-APP-02 secret 一次展示与轮换  </li>
+<li>O-APP-03 应用状态机 draft→pending→active/rejected  </li>
+<br>
+<h3>O-PERM 权限目录</h3>
+<li>O-PERM-01 应用上报权限快照  </li>
+<li>O-PERM-02 管理端只读聚合展示  </li>
+<li>O-PERM-03 明确不参与业务实时鉴权  </li>
+<br>
+<h3>O-AUDIT 审计</h3>
+<li>O-AUDIT-01 登录/成员/密钥/踢人事件  </li>
+<li>O-AUDIT-02 MFA / 生物识别 challenge·success·fail 事件  </li>
+<li>O-AUDIT-03 只增不改不物理删  </li>
+<br>
+<h2>4. 明确 Out-of-Scope（原方案 A）</h2>
+<br>
+<li>FR-CAS-* 全部  </li>
+<li>FR-SAML-* 全部  </li>
+<li>飞书扫码/免登作为唯一主路径  </li>
+<li>外部 90 天延期引擎（企业版）  </li>
+<li>服务端保存原始人脸/指纹模板（禁止）  </li>
+<br>
+<h2>5. 接口与数据</h2>
+<br>
+<p>见 `开发开工包/01-接口契约-openapi-v1.yaml` 与 `02-数据库设计-ddl-v1.sql`。</p>
+<br>
+<h2>6. 验收追溯</h2>
+<br>
+<table>
+<tr><th>FR</th><th>原型页面</th><th>测试</th></tr>
+<tr><td>O-AUTH-01..05</td><td>登录门户</td><td>SEC-01..03,06,07</td></tr>
+<tr><td>O-AUTH-06..10</td><td>⑤ 安全认证交互</td><td>SEC-MFA / BIO</td></tr>
+<tr><td>O-AUTH-11</td><td>④ 手机版</td><td>移动冒烟</td></tr>
+<tr><td>O-TENANT-*</td><td>C端/管理端成员</td><td>功能冒烟</td></tr>
+<tr><td>O-APP-*</td><td>应用详情/管理端应用</td><td>SEC-04,08</td></tr>
+<tr><td>O-PERM-*</td><td>管理端授权/目录</td><td>SEC-09</td></tr>
+<tr><td>O-AUDIT-*</td><td>管理端审计</td><td>SEC-10</td></tr>
+</table>
+</body></html>

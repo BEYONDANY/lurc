@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>04 · 成员邀请 / 审批流程图（方案 O）</title><style>
+body{margin:0;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;background:#0B1126;color:#E8EEFF}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 24px 48px}
+h1{font-size:22px;margin:0 0 6px}
+.sub{color:#8FA3D9;font-size:13px;margin-bottom:22px}
+.card{background:#121A38;border:1px solid #24315F;border-radius:14px;padding:22px}
+svg{width:100%;height:auto;display:block}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:16px;font-size:12px;color:#AFC3EE}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+</style></head>
+<body><div class="wrap">
+<h1>04 · 成员邀请 / 审批流程图（方案 O）</h1>
+<p class="sub">替代方案 A「外部账号延期审批」主路径；企业时效账号作二期连接器能力</p>
+<div class="card"><svg viewBox="0 0 980 520" xmlns="http://www.w3.org/2000/svg">
+  <rect x="60" y="40" width="160" height="60" rx="10" fill="#152047" stroke="#2E9BFF"/>
+  <text x="140" y="75" text-anchor="middle" fill="#fff" font-size="13">Owner 发起邀请</text>
+  <path d="M220 70 H300" stroke="#5A74C8" stroke-width="2"/>
+  <rect x="300" y="40" width="180" height="60" rx="10" fill="#152047" stroke="#2E9BFF"/>
+  <text x="390" y="75" text-anchor="middle" fill="#fff" font-size="13">邮件 magic link</text>
+  <path d="M480 70 H560" stroke="#5A74C8" stroke-width="2"/>
+  <rect x="560" y="40" width="180" height="60" rx="10" fill="#1A1538" stroke="#8B6CFF"/>
+  <text x="650" y="75" text-anchor="middle" fill="#fff" font-size="13">Logto 建/绑身份</text>
+  <path d="M740 70 H820" stroke="#5A74C8" stroke-width="2"/>
+  <rect x="820" y="40" width="120" height="60" rx="10" fill="#152047" stroke="#27AE60"/>
+  <text x="880" y="75" text-anchor="middle" fill="#fff" font-size="13">加入租户</text>
+  <rect x="60" y="180" width="220" height="80" rx="10" fill="#152047" stroke="#E67E22"/>
+  <text x="170" y="215" text-anchor="middle" fill="#FFD7A8" font-size="13">应用接入审核</text>
+  <text x="170" y="238" text-anchor="middle" fill="#D7E3FF" font-size="12">Admin 通过 → 发密钥</text>
+  <rect x="320" y="180" width="220" height="80" rx="10" fill="#152047" stroke="#E67E22"/>
+  <text x="430" y="215" text-anchor="middle" fill="#FFD7A8" font-size="13">权限目录变更</text>
+  <text x="430" y="238" text-anchor="middle" fill="#D7E3FF" font-size="12">只展示；不实时鉴权</text>
+  <rect x="580" y="180" width="220" height="80" rx="10" fill="#152047" stroke="#E67E22"/>
+  <text x="690" y="215" text-anchor="middle" fill="#FFD7A8" font-size="13">高危操作确认</text>
+  <text x="690" y="238" text-anchor="middle" fill="#D7E3FF" font-size="12">重置 secret / 踢人</text>
+  <rect x="60" y="320" width="880" height="140" rx="12" fill="#121A38" stroke="#24315F"/>
+  <text x="90" y="360" fill="#9FD0FF" font-size="14" font-weight="700">与方案 A 的映射</text>
+  <text x="90" y="390" fill="#D7E3FF" font-size="13">A「外部 90 天延期审批」→ O 一期用「邀请过期 + 席位续期」；完整 sponsor/延期引擎放企业版连接器。</text>
+  <text x="90" y="420" fill="#D7E3FF" font-size="13">A「飞书审批双通道」→ O 一期站内工单 + 邮件；飞书审批作可选插件。</text>
+  <text x="90" y="450" fill="#D7E3FF" font-size="13">全程写 audit；管理员操作可二次确认。</text>
+</svg><div class="legend"><span><i style="background:#2E9BFF"></i>邀请</span><span><i style="background:#8B6CFF"></i>IdP</span><span><i style="background:#E67E22"></i>治理工单</span></div></div>
+</div></body></html>

@@ -1,0 +1,522 @@
+openapi: 3.0.3
+info:
+  title: lecoo 统一登录 · 治理 API 契约（方案 O）
+  version: 1.3.0-o
+  description: |
+    方案 O 冻结契约（LEC-45 O-V1.3 · 集中权限查看）。
+    - 认证协议（/oidc/*、/oauth2/*）由 **Logto** 提供，本文件不复刻 CAS。
+    - 本契约覆盖自研治理层：Tenant / Member / Invite / Apps / PermissionCatalog / Role view / Sync pull·push / Audit / Session bootstrap / SSO adapters / **Permission Explorer**。
+    - 企业 SSO（飞书 / 企微 / 通用 OIDC）走标准 OAuth2 / OIDC Authorization Code；后台可配置多提供方。
+    - 集中权限查看：按用户 / 按权限 / 按组织；树形（全部标记 | 仅有权限）与列表；CSV 导出。只读聚合，不作实时鉴权。
+    - 错误体统一 {code, message, trace_id}；时间 RFC3339。
+    - Sync 拉推接口返回 202 + SyncJobAccepted（jobId / status / auditEventId）。
+servers:
+  - url: https://app.lecoo.example
+tags:
+  - {name: Session, description: 业务会话引导}
+  - {name: Tenants, description: 租户与成员}
+  - {name: Apps, description: 应用注册与密钥}
+  - {name: Permissions, description: 跨应用权限只读目录 / 角色查看 / 集中权限查看}
+  - {name: Sync, description: 用户与权限手动同步 · 拉推接口}
+  - {name: SSO, description: 企业 SSO 适配器（OAuth2 / OIDC）}
+  - {name: Audit, description: 审计查询}
+  - {name: Admin, description: 高危管理操作}
+
+paths:
+  /api/session/bootstrap:
+    get:
+      tags: [Session]
+      summary: 登录后引导（身份 + 可用租户列表）
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: {type: object}
+                  tenants: {type: array, items: {type: object}}
+                  activeTenantId: {type: string, nullable: true}
+        "401": {description: 未登录}
+  /api/session/logout:
+    post:
+      tags: [Session]
+      summary: 销毁业务会话并触发 IdP 登出（如配置）
+      responses: {"204": {description: Logged out}}
+
+  /api/tenants:
+    get:
+      tags: [Tenants]
+      summary: 当前用户可见租户
+      responses: {"200": {description: Tenant list}}
+    post:
+      tags: [Tenants]
+      summary: 创建租户（调用者成为 Owner）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string}
+                slug: {type: string}
+      responses: {"201": {description: Created}}
+
+  /api/tenants/{tenantId}/members:
+    get:
+      tags: [Tenants]
+      summary: 成员列表（含账号有效期字段）
+      parameters: [{name: tenantId, in: path, required: true, schema: {type: string}}]
+      responses:
+        "200":
+          description: Members with validity
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: {type: string}
+                        email: {type: string}
+                        role: {type: string, enum: [owner, admin, member]}
+                        status: {type: string, enum: [active, expiring, expired, disabled]}
+                        validityMode: {type: string, enum: [employment, force_days, password_renew], description: 在职即有效 / 强制有效期 / 改密续期}
+                        validFrom: {type: string, format: date-time, nullable: true}
+                        validUntil: {type: string, format: date-time, nullable: true}
+                        daysRemaining: {type: integer, nullable: true}
+    post:
+      tags: [Tenants]
+      summary: 邀请成员（发邮件 magic link）
+      parameters: [{name: tenantId, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: {type: string, format: email}
+                role: {type: string, enum: [owner, admin, member]}
+                validUntil: {type: string, format: date-time, description: 外部账号可指定到期}
+      responses: {"201": {description: Invite created}}
+
+  /api/tenants/{tenantId}/members/{memberId}/cross-permissions:
+    get:
+      tags: [Permissions]
+      summary: 按用户查看跨系统角色与权限（只读聚合）
+      parameters:
+        - {name: tenantId, in: path, required: true, schema: {type: string}}
+        - {name: memberId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: Cross-system permission view
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  memberId: {type: string}
+                  validUntil: {type: string, format: date-time, nullable: true}
+                  apps:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        appId: {type: string}
+                        appName: {type: string}
+                        roles: {type: array, items: {type: string}}
+                        permissions: {type: array, items: {type: string}}
+                        grantValidUntil: {type: string, format: date-time, nullable: true}
+
+  /api/tenants/{tenantId}/permission-explorer:
+    get:
+      tags: [Permissions]
+      summary: 集中权限查看（按用户 / 按权限 / 按组织）
+      description: |
+        只读聚合。view=by_user|by_permission|by_org；
+        treeMode=all_marked（全部权限并标记已有）|owned_only（仅已有权限）；
+        meta=1 返回主体列表。
+      parameters:
+        - {name: tenantId, in: path, required: true, schema: {type: string}}
+        - {name: view, in: query, schema: {type: string, enum: [by_user, by_permission, by_org]}}
+        - {name: subjectId, in: query, schema: {type: string}}
+        - {name: treeMode, in: query, schema: {type: string, enum: [all_marked, owned_only]}}
+        - {name: meta, in: query, schema: {type: string, enum: ["1"]}}
+      responses:
+        "200":
+          description: Explorer tree + list payload, or meta subjects
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  view: {type: string}
+                  treeMode: {type: string}
+                  subject: {type: object}
+                  tree: {type: array, items: {type: object}}
+                  list: {type: array, items: {type: object}}
+                  exportHint: {type: string}
+
+  /api/tenants/{tenantId}/permission-explorer/export:
+    get:
+      tags: [Permissions]
+      summary: 导出集中权限查看结果（CSV）
+      parameters:
+        - {name: tenantId, in: path, required: true, schema: {type: string}}
+        - {name: view, in: query, schema: {type: string, enum: [by_user, by_permission, by_org]}}
+        - {name: subjectId, in: query, schema: {type: string}}
+        - {name: treeMode, in: query, schema: {type: string, enum: [all_marked, owned_only]}}
+      responses:
+        "200":
+          description: CSV download
+          content:
+            text/csv:
+              schema: {type: string}
+
+  /api/tenants/{tenantId}/roles:
+    get:
+      tags: [Permissions]
+      summary: 角色列表（租户 + 各应用角色）
+      parameters: [{name: tenantId, in: path, required: true, schema: {type: string}}]
+      responses: {"200": {description: Roles}}
+
+  /api/tenants/{tenantId}/roles/{roleKey}/permissions:
+    get:
+      tags: [Permissions]
+      summary: 查看角色权限点
+      parameters:
+        - {name: tenantId, in: path, required: true, schema: {type: string}}
+        - {name: roleKey, in: path, required: true, schema: {type: string}}
+      responses: {"200": {description: Role permission tree}}
+
+  /api/tenants/{tenantId}/roles/{roleKey}/members:
+    get:
+      tags: [Permissions]
+      summary: 查看角色绑定用户（含账号有效期）
+      parameters:
+        - {name: tenantId, in: path, required: true, schema: {type: string}}
+        - {name: roleKey, in: path, required: true, schema: {type: string}}
+      responses: {"200": {description: Role members}}
+
+  /api/invites/{token}:
+    get:
+      tags: [Tenants]
+      summary: 查看邀请
+      parameters: [{name: token, in: path, required: true, schema: {type: string}}]
+      responses: {"200": {description: Invite}, "410": {description: Expired}}
+    post:
+      tags: [Tenants]
+      summary: 接受邀请（需已登录同一邮箱身份）
+      parameters: [{name: token, in: path, required: true, schema: {type: string}}]
+      responses: {"200": {description: Joined}}
+
+  /api/tenants/{tenantId}/apps:
+    get:
+      tags: [Apps]
+      summary: 租户应用列表
+      parameters: [{name: tenantId, in: path, required: true, schema: {type: string}}]
+      responses: {"200": {description: Apps}}
+    post:
+      tags: [Apps]
+      summary: 注册应用（回调白名单精确匹配）
+      parameters: [{name: tenantId, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, redirectUris]
+              properties:
+                name: {type: string}
+                redirectUris: {type: array, items: {type: string}}
+                logoutUris: {type: array, items: {type: string}}
+                type: {type: string, enum: [web, spa, native]}
+      responses:
+        "201":
+          description: Created；secret 仅此响应返回一次
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  app: {type: object}
+                  clientId: {type: string}
+                  clientSecret: {type: string, description: 明文仅一次}
+
+  /api/tenants/{tenantId}/apps/{appId}/rotate-secret:
+    post:
+      tags: [Apps]
+      summary: 重置 client_secret（二次确认 + 审计）
+      parameters:
+        - {name: tenantId, in: path, required: true, schema: {type: string}}
+        - {name: appId, in: path, required: true, schema: {type: string}}
+      responses: {"200": {description: New secret once}}
+
+  /api/tenants/{tenantId}/permission-catalog:
+    get:
+      tags: [Permissions]
+      summary: 跨应用权限只读聚合目录
+      parameters: [{name: tenantId, in: path, required: true, schema: {type: string}}]
+      responses: {"200": {description: Catalog tree/list}}
+    put:
+      tags: [Permissions]
+      summary: 应用上报权限快照（非实时鉴权）
+      parameters: [{name: tenantId, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [appId, permissions]
+              properties:
+                appId: {type: string}
+                permissions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      key: {type: string}
+                      name: {type: string}
+                      description: {type: string}
+      responses: {"204": {description: Upserted}}
+
+  # AI-GEN-BEGIN
+  /api/tenants/{tenantId}/sync/users:pull:
+    post:
+      tags: [Sync]
+      summary: 拉取用户（连接器/IdP → 治理层）
+      parameters: [{name: tenantId, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source: {type: string, example: "connector:feishu"}
+                mode: {type: string, enum: [incremental, full], default: incremental}
+                memberId: {type: string, description: 可选，单用户同步}
+      responses:
+        "202":
+          description: Sync job accepted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SyncJobAccepted'}
+
+  /api/tenants/{tenantId}/sync/users:push:
+    post:
+      tags: [Sync]
+      summary: 推送用户（治理层 → IdP/下游，含有效期与状态）
+      parameters: [{name: tenantId, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                targets: {type: array, items: {type: string}, example: ["logto","apps:*"]}
+                include: {type: array, items: {type: string}, example: ["validity","status"]}
+                memberIds: {type: array, items: {type: string}}
+      responses:
+        "202":
+          description: Sync job accepted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SyncJobAccepted'}
+
+  /api/tenants/{tenantId}/sync/permissions:pull:
+    post:
+      tags: [Sync]
+      summary: 拉取权限目录（应用 → 治理目录）
+      parameters: [{name: tenantId, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                appIds: {type: array, items: {type: string}}
+                mode: {type: string, enum: [incremental, full], default: full}
+      responses:
+        "202":
+          description: Sync job accepted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SyncJobAccepted'}
+
+  /api/tenants/{tenantId}/sync/permissions:push:
+    post:
+      tags: [Sync]
+      summary: 推送权限/角色绑定到应用
+      parameters: [{name: tenantId, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                appIds: {type: array, items: {type: string}}
+                include: {type: array, items: {type: string}, example: ["roles","grants"]}
+      responses:
+        "202":
+          description: Sync job accepted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SyncJobAccepted'}
+  # AI-GEN-END
+
+  /api/tenants/{tenantId}/audit-events:
+    get:
+      tags: [Audit]
+      summary: 审计事件查询（只增不改）
+      parameters:
+        - {name: tenantId, in: path, required: true, schema: {type: string}}
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: action, in: query, schema: {type: string}}
+      responses: {"200": {description: Events}}
+
+  /api/admin/kick:
+    post:
+      tags: [Admin]
+      summary: 踢出指定用户业务会话并请求 IdP 撤销
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId: {type: string}
+                tenantId: {type: string}
+                reason: {type: string}
+      responses: {"204": {description: Kicked}}
+
+  # AI-GEN-BEGIN
+  /api/sso/providers:
+    get:
+      tags: [SSO]
+      summary: 登录页可用的企业 SSO 提供方（无密钥）
+      responses:
+        "200":
+          description: Public SSO catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: {type: string}
+                        displayName: {type: string}
+                        adapterKind: {type: string, enum: [feishu, wecom, oidc_generic]}
+                        protocol: {type: string, enum: [oauth2, oidc]}
+                        startPath: {type: string}
+                  adapterKinds: {type: array, items: {type: object}}
+                  protocols:
+                    type: array
+                    items: {type: string}
+
+  /api/sso/start/{providerId}:
+    get:
+      tags: [SSO]
+      summary: 启动 SSO（302 → IdP authorize）
+      parameters: [{name: providerId, in: path, required: true, schema: {type: string}}]
+      responses:
+        "302": {description: Redirect to OAuth2/OIDC authorize URL}
+        "403": {description: Provider disabled}
+        "404": {description: Unknown provider}
+
+  /api/sso/callback/{providerId}:
+    get:
+      tags: [SSO]
+      summary: SSO 回调（授权码兑换 + 适配器取画像）
+      parameters:
+        - {name: providerId, in: path, required: true, schema: {type: string}}
+        - {name: code, in: query, required: true, schema: {type: string}}
+        - {name: state, in: query, schema: {type: string}}
+      responses:
+        "200": {description: Profile proof (PoC); production mints local session}
+        "400": {description: state/code error}
+
+  /api/admin/sso-providers:
+    get:
+      tags: [Admin, SSO]
+      summary: 管理端列出 SSO 适配器配置（不含 secret 明文）
+      parameters: [{name: x-admin-token, in: header, schema: {type: string}}]
+      responses: {"200": {description: Admin SSO list}}
+    post:
+      tags: [Admin, SSO]
+      summary: 创建/更新 SSO 适配器（飞书/企微/通用 OIDC）
+      parameters: [{name: x-admin-token, in: header, schema: {type: string}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [displayName, adapterKind, clientId]
+              properties:
+                id: {type: string}
+                displayName: {type: string}
+                adapterKind: {type: string, enum: [feishu, wecom, oidc_generic]}
+                protocol: {type: string, enum: [oauth2, oidc]}
+                enabled: {type: boolean}
+                showOnLogin: {type: boolean}
+                clientId: {type: string}
+                clientSecret: {type: string}
+                issuer: {type: string}
+                authorizeUrl: {type: string}
+                tokenUrl: {type: string}
+                userInfoUrl: {type: string}
+                scopes: {type: array, items: {type: string}}
+                extras:
+                  type: object
+                  properties:
+                    corpId: {type: string}
+                    agentId: {type: string}
+                    appId: {type: string}
+      responses: {"201": {description: Saved}}
+    delete:
+      tags: [Admin, SSO]
+      summary: 删除 SSO 适配器
+      parameters:
+        - {name: id, in: query, required: true, schema: {type: string}}
+        - {name: x-admin-token, in: header, schema: {type: string}}
+      responses: {"200": {description: Deleted}}
+  # AI-GEN-END
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: lecoo_session
+  schemas:
+    Error:
+      type: object
+      properties:
+        code: {type: string}
+        message: {type: string}
+        trace_id: {type: string}
+    # AI-GEN-BEGIN
+    SyncJobAccepted:
+      type: object
+      required: [jobId, status, object, action, acceptedAt]
+      properties:
+        jobId: {type: string}
+        status: {type: string, enum: [accepted, running, succeeded, failed]}
+        object: {type: string, enum: [users, permissions]}
+        action: {type: string, enum: [pull, push, manual]}
+        acceptedAt: {type: string, format: date-time}
+        estimatedSeconds: {type: integer}
+        auditEventId: {type: string}
+    # AI-GEN-END

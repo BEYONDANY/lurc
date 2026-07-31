@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>02 · 部署架构图（方案 O）</title><style>
+body{margin:0;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;background:#0B1126;color:#E8EEFF}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 24px 48px}
+h1{font-size:22px;margin:0 0 6px}
+.sub{color:#8FA3D9;font-size:13px;margin-bottom:22px}
+.card{background:#121A38;border:1px solid #24315F;border-radius:14px;padding:22px}
+svg{width:100%;height:auto;display:block}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:16px;font-size:12px;color:#AFC3EE}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+</style></head>
+<body><div class="wrap">
+<h1>02 · 部署架构图（方案 O）</h1>
+<p class="sub">建议：Logto 独立部署；治理 API 与 Web 同 monorepo；按租户逻辑隔离，物理库可共享</p>
+<div class="card"><svg viewBox="0 0 980 480" xmlns="http://www.w3.org/2000/svg">
+  <rect x="40" y="40" width="200" height="90" rx="10" fill="#152047" stroke="#2E9BFF"/>
+  <text x="140" y="80" text-anchor="middle" fill="#fff" font-size="14">用户浏览器</text>
+  <text x="140" y="102" text-anchor="middle" fill="#AFC3EE" font-size="12">C 端 / 管理端</text>
+  <path d="M240 85 H300" stroke="#5A74C8" stroke-width="2" marker-end="url(#a)"/>
+  <rect x="300" y="30" width="280" height="110" rx="10" fill="#152047" stroke="#3D8BFF"/>
+  <text x="440" y="70" text-anchor="middle" fill="#9FD0FF" font-size="14" font-weight="700">Edge / CDN</text>
+  <text x="440" y="96" text-anchor="middle" fill="#D7E3FF" font-size="12">apps/web（Next.js）</text>
+  <text x="440" y="118" text-anchor="middle" fill="#D7E3FF" font-size="12">BFF：/api/tenants /session /admin</text>
+  <path d="M580 85 H640" stroke="#5A74C8" stroke-width="2"/>
+  <rect x="640" y="30" width="300" height="110" rx="10" fill="#1A1538" stroke="#8B6CFF"/>
+  <text x="790" y="70" text-anchor="middle" fill="#D2C4FF" font-size="14" font-weight="700">Logto</text>
+  <text x="790" y="96" text-anchor="middle" fill="#E6DEFF" font-size="12">OIDC + Admin API</text>
+  <text x="790" y="118" text-anchor="middle" fill="#E6DEFF" font-size="12">独立进程 / 容器</text>
+  <rect x="300" y="220" width="280" height="100" rx="10" fill="#152047" stroke="#27AE60"/>
+  <text x="440" y="265" text-anchor="middle" fill="#B8F0D0" font-size="14" font-weight="700">PostgreSQL</text>
+  <text x="440" y="290" text-anchor="middle" fill="#D7E3FF" font-size="12">governance schema + audit</text>
+  <rect x="640" y="220" width="300" height="100" rx="10" fill="#152047" stroke="#E67E22"/>
+  <text x="790" y="265" text-anchor="middle" fill="#FFD7A8" font-size="14" font-weight="700">Redis</text>
+  <text x="790" y="290" text-anchor="middle" fill="#D7E3FF" font-size="12">限流 / 业务会话辅助 / 锁</text>
+  <path d="M440 140 v80" stroke="#5A74C8" stroke-width="2"/>
+  <path d="M790 140 v80" stroke="#5A74C8" stroke-width="2"/>
+  <rect x="300" y="370" width="640" height="70" rx="10" fill="#121A38" stroke="#24315F"/>
+  <text x="620" y="412" text-anchor="middle" fill="#AFC3EE" font-size="13">Secrets：仅环境变量 / Vault；client_secret 一次展示后仅存哈希</text>
+</svg><div class="legend"><span><i style="background:#3D8BFF"></i>应用面</span><span><i style="background:#8B6CFF"></i>IdP</span><span><i style="background:#27AE60"></i>PG</span><span><i style="background:#E67E22"></i>Redis</span></div></div>
+</div></body></html>
