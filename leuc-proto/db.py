@@ -603,6 +603,14 @@ def ensure_roles_seeded(conn: sqlite3.Connection) -> None:
     conn.execute(
         "UPDATE roles SET label='部门负责人' WHERE code='dept_owner' AND label='组织负责人'"
     )
+    # AI-GEN-BEGIN
+    # 软补：北森消息菜单（不覆盖角色其它菜单配置）
+    for role in ("hr_specialist", "system_owner", "super_admin"):
+        conn.execute(
+            "INSERT OR IGNORE INTO role_menus (role, menu_id) VALUES (?, 'oa_forms')",
+            (role,),
+        )
+    # AI-GEN-END
     # 兼容旧演示角色：若库里仍有人占用则登记，否则忽略
     for code, label in (("employee_a", "普通员工A"), ("employee_b", "普通员工B")):
         n = conn.execute("SELECT COUNT(*) AS c FROM users WHERE role=?", (code,)).fetchone()
@@ -691,7 +699,7 @@ def seed(conn: sqlite3.Connection) -> None:
     )
     root_id = 1
     btit_id = 1
-    # 系统超管：全权限，不在「人员管理」展示
+    # 系统超管：全权限，不在「部门和人员」展示
     conn.execute(
         """INSERT INTO users
         (id, username, password, display_name, role, dept_id, phone, email, itcode,
@@ -863,9 +871,10 @@ ALL_MENUS = [
     {"id": "security", "label": "安全管理", "group": "个人"},
     {"id": "todo", "label": "我的待办", "group": "个人"},
     {"id": "apply", "label": "自助申请", "group": "个人"},
-    {"id": "my_org", "label": "人员管理", "group": "个人"},
+    {"id": "my_org", "label": "部门和人员", "group": "个人"},
     {"id": "my_systems", "label": "业务系统管理", "group": "业务系统"},
     {"id": "sys_accounts", "label": "系统账号管理", "group": "业务系统"},
+    {"id": "oa_forms", "label": "北森消息", "group": "业务系统"},
     {"id": "admin_sensitive", "label": "敏感审批链", "group": "系统设置"},
     {"id": "admin_roles", "label": "角色与权限", "group": "系统设置"},
 ]
@@ -894,11 +903,11 @@ ALL_CAPS = ALL_BUTTONS  # 兼容旧名
 DEFAULT_ROLE_MENUS = {
     "employee": ["home", "security", "todo", "apply", "my_org"],
     "finance": ["home", "security", "todo", "apply", "my_org"],
-    "hr_specialist": ["home", "security", "todo", "apply", "my_org"],
-    "system_owner": ["home", "security", "todo", "apply", "my_org", "my_systems", "sys_accounts"],
+    "hr_specialist": ["home", "security", "todo", "apply", "my_org", "oa_forms"],
+    "system_owner": ["home", "security", "todo", "apply", "my_org", "my_systems", "sys_accounts", "oa_forms"],
     "super_admin": [
         "home", "security", "todo", "apply", "my_org",
-        "my_systems", "sys_accounts",
+        "my_systems", "sys_accounts", "oa_forms",
         "admin_sensitive", "admin_roles",
     ],
     "employee_a": ["home", "security", "todo", "apply", "my_org"],

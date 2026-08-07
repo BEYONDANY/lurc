@@ -271,7 +271,6 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   <span class="tag">SQLite 多角色原型</span>
   <span class="tag" id="bar-source">来源：直登 LEUC</span>
   <a class="tag" href="/demo/home" style="text-decoration:none;color:#A8D9C4;border-color:#2A5544">业务系统导航</a>
-  <a class="tag" href="/demo/oa" style="text-decoration:none;color:#F5D48A;border-color:#5A4A20">OA单据</a>
   <div class="role-switch" id="role-switch"><span style="font-size:11px;color:#6B7AA8">快速切换角色</span></div>
 </div>
 
@@ -284,8 +283,8 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
     <div class="login-wrap">
       <div class="login-left">
         <h1>Lecoo 用户中心<br>LEUC</h1>
-        <p>账号为姓名拼音全拼。全员可看「人员管理」；员工只读+即时聊天；上级可管下级；系统消息右下角弹出提醒。</p>
-        <div class="caps"><span>错≥10次验证</span><span>忘记密码</span><span>拼音账号</span><span>人员管理</span></div>
+        <p>账号为姓名拼音全拼。全员可看「部门和人员」；员工只读+即时聊天；上级可管下级；系统消息右下角弹出提醒。</p>
+        <div class="caps"><span>错≥10次验证</span><span>忘记密码</span><span>拼音账号</span><span>部门和人员</span></div>
       </div>
       <div class="login-right">
         <div class="login-card">
@@ -390,7 +389,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 </div>
 
 <div class="screen" id="sc-home">
-  <div class="guide"><b>个人中心</b>：待办 / 自助申请 / 人员管理；右下角即时聊天，系统消息会弹出并带提示音。</div>
+  <div class="guide"><b>个人中心</b>：待办 / 自助申请 / 部门和人员；右下角即时聊天，系统消息会弹出并带提示音。</div>
   <div class="stage">
     <div class="app">
       <div class="side">
@@ -408,7 +407,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 
 <div class="footer-tip">
   账号：xuhaohao / maning / wujinzhi / gaojia / changmingming · 密码 123456<br>
-  超管：admin（全权限，不在「人员管理」通讯录）· 密码 123456<br>
+  超管：admin（全权限，不在「部门和人员」通讯录）· 密码 123456<br>
   登录验证码 888888 · 找回密码 666666 · 启动 <code>cd leuc-proto && python3 app.py</code>
 </div>
 <div class="toast" id="toast"></div>
@@ -977,7 +976,7 @@ function renderSide() {
         { id: 'security', label: '安全管理' },
         { id: 'todo', label: '我的待办' },
         { id: 'apply', label: '自助申请' },
-        { id: 'my_org', label: '人员管理' },
+        { id: 'my_org', label: '部门和人员' },
       ],
     },
     {
@@ -985,6 +984,7 @@ function renderSide() {
       items: [
         { id: 'my_systems', label: '业务系统管理' },
         { id: 'sys_accounts', label: '系统账号管理' },
+        { id: 'oa_forms', label: '北森消息' },
       ],
     },
     {
@@ -1048,7 +1048,7 @@ async function renderMain() {
           <div class="org-tree home-org-tree" style="max-height:180px;border:0;padding:0;background:transparent;margin-top:8px">
             ${renderHomeOrgTree(h.org_tree)}
           </div>` : ''}
-          <button class="btn btn-sm btn-line" style="margin-top:10px" onclick="nav('my_org')">进入人员管理</button>
+          <button class="btn btn-sm btn-line" style="margin-top:10px" onclick="nav('my_org')">进入部门和人员</button>
         </div>
       </div>`;
     // AI-GEN-END
@@ -1774,7 +1774,7 @@ function toggleHomeOrgNode(id, ev){
 
 async function renderOrg(el) {
   // AI-GEN-BEGIN
-  el.innerHTML = `<div class="ptitle">人员管理</div><div class="note">加载中…</div>`;
+  el.innerHTML = `<div class="ptitle">部门和人员</div><div class="note">加载中…</div>`;
   const canAllOrg = hasBtn('manage_all_org') || ['hr_specialist','super_admin'].includes(state.user.role);
   const showSync = hasBtn('org_sync') || canAllOrg;
   const showAdd = hasBtn('org_add');
@@ -1784,7 +1784,7 @@ async function renderOrg(el) {
   // 探测是否可管；无管理权则展示本人所属部门（只读）
   const { data: probe } = await api('/api/org/overview?scope=mine');
   if (!probe.ok) {
-    el.innerHTML = `<div class="ptitle">人员管理</div><div class="warn">${probe.error||'加载失败'}</div>`;
+    el.innerHTML = `<div class="ptitle">部门和人员</div><div class="warn">${probe.error||'加载失败'}</div>`;
     return;
   }
   const canManage = !!probe.can_manage;
@@ -1795,7 +1795,7 @@ async function renderOrg(el) {
     const path = probe.dept_path || '';
     const me = (probe.members || [])[0];
     el.innerHTML = `
-      <div class="ptitle">人员管理
+      <div class="ptitle">部门和人员
         ${probe.unread_messages?`<span class="pill p-red">未读 ${probe.unread_messages}</span>`:''}</div>
       <div class="callout">当前账号无部门管理权限，仅展示<strong>本人</strong>与<strong>所属部门</strong>。</div>
       <div class="card" style="margin-bottom:14px">
@@ -1831,7 +1831,7 @@ async function renderOrg(el) {
     state.leorgSync = results[2].data.sync_state || null;
   }
   if (!data.ok) {
-    el.innerHTML = `<div class="ptitle">人员管理</div><div class="warn">${data.error||'无权'}</div>`;
+    el.innerHTML = `<div class="ptitle">部门和人员</div><div class="warn">${data.error||'无权'}</div>`;
     return;
   }
   state.deptData = data;
@@ -1842,7 +1842,7 @@ async function renderOrg(el) {
     : '<span class="pill p-orange">可管理下级</span>';
   const roster = (syncData && syncData.ok) ? (syncData.roster || []) : [];
   el.innerHTML = `
-    <div class="ptitle">人员管理 ${mode}
+    <div class="ptitle">部门和人员 ${mode}
       ${data.unread_messages?`<span class="pill p-red">未读 ${data.unread_messages}</span>`:''}</div>
     <div class="callout">${canAllOrg
       ? '<strong>可管全部部门</strong>：按角色按钮权限显示添加/导入/同步/直接绑定/代人申请/有效期。'

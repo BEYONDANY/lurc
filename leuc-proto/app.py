@@ -117,7 +117,7 @@ CAPTCHA_THRESHOLD = 1  # 失败 ≥1 次需图片验证码
 FAIL_VERIFY_THRESHOLD = 10
 CAPTCHA_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 # AI-GEN-BEGIN
-# 系统超管：不进「人员管理」通讯录
+# 系统超管：不进「部门和人员」通讯录
 SYSTEM_ADMIN_USERNAME = "admin"
 
 
@@ -8503,9 +8503,9 @@ def demo_home_callback():
 
 @app.get("/demo/oa")
 def demo_oa():
-    """独立 OA 单据页（风格对齐业务系统导航）。"""
+    """旧独立 OA 页已废弃，改到用户中心「北森消息」。"""
     # AI-GEN-BEGIN
-    return send_from_directory(STATIC, "oa.html")
+    return redirect("/?view=oa_forms")
     # AI-GEN-END
 
 
