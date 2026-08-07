@@ -494,27 +494,85 @@ def build_apply_form_view(db, meta: dict | None, app=None) -> dict:
         "account_close",
         "sensitive_close",
         "account_close_sensitive",
-    ) or meta.get("close_login") or meta.get("close_sensitive"):
-        section_title = "关闭明细"
-        row("applicant", "申请人", _user_label(db, uid))
-        sys_name = meta.get("system_name") or _sys_label(
-            db, meta.get("system_id") or app.get("system_id")
+    ) or meta.get("close_login") or meta.get("close_sensitive") or (
+        isinstance(meta.get("items"), list)
+        and any(
+            isinstance(it, dict) and it.get("close_type") in ("account", "perm")
+            for it in (meta.get("items") or [])
         )
-        acct_name = meta.get("account_name") or "—"
-        action = []
-        if meta.get("close_login"):
-            action.append("关闭登录")
-        if meta.get("close_sensitive"):
-            action.append("关闭敏感权限")
-        if not action:
-            action.append("关闭权限")
+    ):
+        # AI-GEN-BEGIN
+        section_title = "关闭明细"
+        raw_items = meta.get("items") or meta.get("lines") or []
+        if not isinstance(raw_items, list):
+            raw_items = []
+        lines = []
+        if raw_items:
+            for i, it in enumerate(raw_items, start=1):
+                if not isinstance(it, dict):
+                    continue
+                person = it.get("display_name") or _user_label(
+                    db, it.get("leuc_user_id") or uid
+                )
+                if it.get("username") and "（" not in str(person):
+                    person = f"{person}（{it['username']}）"
+                sys_name = it.get("system_name") or _sys_label(db, it.get("system_id"))
+                acct = it.get("account_name") or (
+                    f"账号#{it['account_id']}" if it.get("account_id") else "—"
+                )
+                close_type = (it.get("close_type") or "").strip()
+                if close_type == "account" or (
+                    not close_type and it.get("close_login") and not it.get("perm_ids")
+                ):
+                    type_txt = "关闭账号"
+                    perm_txt = "—"
+                    sens = "—"
+                else:
+                    type_txt = "关闭权限"
+                    perms = it.get("perm_names") or []
+                    if isinstance(perms, str):
+                        perms = [perms]
+                    perm_txt = "、".join(str(x) for x in perms if x) or "—"
+                    sens = "是" if it.get("close_sensitive") else "否"
+                lines.append([str(i), person, sys_name, acct, type_txt, perm_txt, sens])
+        if not lines:
+            # 兼容旧单行 meta
+            sys_name = meta.get("system_name") or _sys_label(
+                db, meta.get("system_id") or app.get("system_id")
+            )
+            acct_name = meta.get("account_name") or "—"
+            if meta.get("close_login") and not meta.get("close_sensitive"):
+                type_txt, perm_txt, sens = "关闭账号", "—", "—"
+            elif meta.get("close_sensitive"):
+                type_txt, perm_txt, sens = "关闭权限", "—", "是"
+            else:
+                type_txt, perm_txt, sens = "关闭权限", (meta.get("remark") or "—"), "否"
+            lines = [
+                [
+                    "1",
+                    _user_label(db, uid),
+                    sys_name,
+                    acct_name,
+                    type_txt,
+                    perm_txt,
+                    sens,
+                ]
+            ]
         table = {
-            "title": "关闭明细",
-            "headers": ["#", "人员", "业务系统", "系统账号", "操作"],
-            "rows": [
-                ["1", _user_label(db, uid), sys_name, acct_name, "、".join(action)]
+            "title": f"关闭明细（共 {len(lines)} 行）",
+            "headers": [
+                "#",
+                "人员",
+                "业务系统",
+                "业务系统账号",
+                "关闭类型",
+                "权限",
+                "敏感权限",
             ],
+            "rows": lines,
         }
+        row("applicant", "申请人", _user_label(db, uid))
+        row("line_count", "明细行数", str(len(lines)))
         if meta.get("remark"):
             row("remark", "备注", meta.get("remark"), editable=True, input_type="textarea")
         return {
@@ -524,6 +582,7 @@ def build_apply_form_view(db, meta: dict | None, app=None) -> dict:
             "line_headers": None,
             "lines": None,
         }
+        # AI-GEN-END
 
     # —— 账号、权限申请 ——
     if flow in (

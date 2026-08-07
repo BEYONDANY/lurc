@@ -1628,6 +1628,7 @@ def preview_apply_flow(
             title = f"账号延期 {days} 天"
     elif apply_type in (
         "account_close",
+        "account_perm_close",
         "account",
         "normal_perm",
         "system_access",
@@ -1640,14 +1641,20 @@ def preview_apply_flow(
         flow_code = apply_type
         title = {
             "account_close": "账号、权限关闭（关登录）",
+            "account_perm_close": "账号、权限关闭",
         }.get(apply_type, "直属审批")
-    elif apply_type in ("sensitive_close", "sensitive", "external"):
+    elif apply_type in (
+        "sensitive_close",
+        "account_close_sensitive",
+        "sensitive",
+        "external",
+    ):
         code = "external" if apply_type == "external" else "sensitive"
         steps = materialize_approval_chain(db, code, subject_id)
         flow_code = apply_type
         title = (
             "账号、权限关闭（敏感）"
-            if apply_type == "sensitive_close"
+            if apply_type in ("sensitive_close", "account_close_sensitive")
             else "敏感/外部审批链"
         )
     elif apply_type in ("account_apply", "account_apply_sensitive"):
@@ -1975,6 +1982,120 @@ def close_user_system_account(db, user_id, account_id):
         "closed_leuc": False,
     }
     # AI-GEN-END
+
+
+# AI-GEN-BEGIN
+def _strip_perm_names_from_summary(summary, perm_names):
+    """从 perm_summary 文本中尽量移除已关闭的权限名。"""
+    text = (summary or "").strip()
+    if not text or not perm_names:
+        return text or "普通权限"
+    for name in perm_names:
+        if not name:
+            continue
+        text = text.replace(str(name), "")
+    for sep in ("、", ",", "，", "/", "|", "·"):
+        while sep + sep in text:
+            text = text.replace(sep + sep, sep)
+        text = text.strip(sep + " ")
+    return text or "普通权限"
+
+
+def execute_account_perm_close_items(db, application, meta=None):
+    """审批通过后按明细行执行关闭账号 / 普通权限 / 敏感权限。"""
+    meta = meta if isinstance(meta, dict) else {}
+    uid = int(meta.get("leuc_user_id") or application["applicant_id"])
+    items = meta.get("items") or []
+    if not isinstance(items, list):
+        items = []
+    results = []
+    errors = []
+    if not items:
+        # 兼容旧单行：仅 account_id + close_login / close_sensitive
+        aid = meta.get("account_id")
+        if meta.get("close_login") and aid:
+            r = close_user_system_account(db, uid, int(aid))
+            if r.get("ok"):
+                results.append(f"关登录 {r['system']}/{r['account']}")
+            else:
+                errors.append(r.get("error") or "关闭登录失败")
+        if meta.get("close_sensitive") and aid:
+            r = auto_revoke_sensitive(db, application, account_id=int(aid))
+            if r.get("ok"):
+                results.append(f"关敏感 {r.get('system')}")
+            else:
+                errors.append(r.get("error") or "关闭敏感失败")
+        if errors and not results:
+            return {"ok": False, "error": errors[0], "results": results}
+        db.execute(
+            """UPDATE todos SET status = 'approved', title = ?
+            WHERE application_id = ? AND bucket = 'initiated'""",
+            (f"账号、权限关闭（已关闭）", application["id"]),
+        )
+        db.execute(
+            "UPDATE applications SET status = 'provisioned', provisioned = 1, updated_at = ? WHERE id = ?",
+            (datetime.now().strftime("%Y-%m-%d"), application["id"]),
+        )
+        return {
+            "ok": True,
+            "results": results,
+            "summary": "；".join(results) if results else "已关闭",
+            "error": "; ".join(errors) if errors else None,
+        }
+
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        aid = it.get("account_id")
+        if not aid:
+            continue
+        close_type = (it.get("close_type") or "").strip()
+        if close_type == "account" or it.get("close_login"):
+            r = close_user_system_account(db, uid, int(aid))
+            if r.get("ok"):
+                results.append(f"关登录 {r['system']}/{r['account']}")
+            else:
+                errors.append(r.get("error") or "关闭登录失败")
+            continue
+        # 关闭权限行
+        if it.get("close_sensitive"):
+            r = auto_revoke_sensitive(db, application, account_id=int(aid))
+            if r.get("ok"):
+                results.append(f"关敏感 {r.get('system')}")
+            else:
+                errors.append(r.get("error") or "关闭敏感失败")
+        perm_names = it.get("perm_names") or []
+        if perm_names:
+            row = db.execute(
+                "SELECT id, perm_summary FROM user_system_accounts WHERE id = ?",
+                (int(aid),),
+            ).fetchone()
+            if row:
+                new_summary = _strip_perm_names_from_summary(row["perm_summary"], perm_names)
+                db.execute(
+                    "UPDATE user_system_accounts SET perm_summary = ? WHERE id = ?",
+                    (new_summary, int(aid)),
+                )
+            results.append("关权限 " + "、".join(str(x) for x in perm_names if x))
+    # 更新发起待办标题
+    db.execute(
+        """UPDATE todos SET status = 'approved', title = ?
+        WHERE application_id = ? AND bucket = 'initiated'""",
+        (f"账号、权限关闭（已关闭·{len(results)}项）", application["id"]),
+    )
+    db.execute(
+        "UPDATE applications SET status = 'provisioned', provisioned = 1, updated_at = ? WHERE id = ?",
+        (datetime.now().strftime("%Y-%m-%d"), application["id"]),
+    )
+    if errors and not results:
+        return {"ok": False, "error": errors[0], "results": results}
+    return {
+        "ok": True,
+        "results": results,
+        "error": "; ".join(errors) if errors else None,
+        "summary": "；".join(results) if results else "已处理",
+    }
+# AI-GEN-END
 
 
 # AI-GEN-BEGIN
@@ -5045,6 +5166,151 @@ def apply_submit(user):
             }
         )
 
+    # AI-GEN-BEGIN
+    # 账号、权限关闭（多行）：与申请同款 items 落库，详情按行展示
+    if apply_type == "account_perm_close":
+        raw_items = data.get("items") or []
+        if not isinstance(raw_items, list) or not raw_items:
+            return jsonify({"ok": False, "error": "请至少填写一行关闭明细"}), 400
+        line_items = []
+        any_sens = False
+        any_login = False
+        for it in raw_items:
+            if not isinstance(it, dict):
+                continue
+            account_id = it.get("account_id")
+            if not account_id:
+                return jsonify({"ok": False, "error": "每一行须选择业务系统账号"}), 400
+            acct = db.execute(
+                """SELECT a.*, s.name AS system_name, s.has_sensitive AS sys_has_sensitive
+                FROM user_system_accounts a
+                JOIN systems s ON s.id = a.system_id WHERE a.id = ?""",
+                (int(account_id),),
+            ).fetchone()
+            if not acct or int(acct["user_id"]) != int(subject["id"]):
+                return jsonify({"ok": False, "error": "账号不存在或不属于该用户"}), 400
+            close_type = (it.get("close_type") or "").strip()
+            if close_type not in ("account", "perm"):
+                return jsonify({"ok": False, "error": "请选择关闭账号或关闭权限"}), 400
+            close_login = close_type == "account" or bool(it.get("close_login"))
+            close_sensitive = close_type == "perm" and bool(it.get("close_sensitive"))
+            perm_ids = [int(x) for x in (it.get("perm_ids") or []) if x is not None]
+            perm_names = list(it.get("perm_names") or [])
+            if close_type == "account":
+                if not acct["can_login"]:
+                    return jsonify(
+                        {
+                            "ok": False,
+                            "error": f"{acct['system_name']} / {acct['account_name']} 已不可登录",
+                        }
+                    ), 400
+                close_sensitive = False
+                perm_ids = []
+                perm_names = []
+                any_login = True
+            else:
+                if not perm_ids and not close_sensitive:
+                    return jsonify(
+                        {"ok": False, "error": "关闭权限时请选择权限或勾选关闭敏感"}
+                    ), 400
+                if close_sensitive and not int(acct["has_sensitive"] or 0):
+                    return jsonify(
+                        {
+                            "ok": False,
+                            "error": f"{acct['system_name']} / {acct['account_name']} 当前无敏感权限",
+                        }
+                    ), 400
+                if perm_ids and not perm_names:
+                    for pid in perm_ids:
+                        pr = db.execute(
+                            "SELECT perm_name FROM sensitive_perm_defs WHERE id = ?",
+                            (int(pid),),
+                        ).fetchone()
+                        if pr:
+                            perm_names.append(pr["perm_name"])
+                if close_sensitive:
+                    any_sens = True
+            line_items.append(
+                {
+                    "leuc_user_id": subject["id"],
+                    "display_name": subject["display_name"],
+                    "username": subject["username"],
+                    "system_id": int(acct["system_id"]),
+                    "system_name": acct["system_name"],
+                    "account_id": int(acct["id"]),
+                    "account_name": acct["account_name"],
+                    "close_type": close_type,
+                    "close_login": close_login,
+                    "close_sensitive": close_sensitive,
+                    "perm_ids": perm_ids,
+                    "perm_names": perm_names,
+                }
+            )
+        if not line_items:
+            return jsonify({"ok": False, "error": "请至少填写一行关闭明细"}), 400
+        todo_type = "账号、权限关闭"
+        names = "、".join(
+            dict.fromkeys(
+                f"{x['system_name']}/{x['account_name']}" for x in line_items
+            )
+        )
+        if any_sens:
+            flow_code = "account_close_sensitive"
+            steps = materialize_approval_chain(db, "sensitive", subject["id"])
+            title = f"{subject['display_name']} · 账号、权限关闭 · {names}（含敏感）"
+        else:
+            flow_code = "account_close"
+            approver_id = find_approver(db, subject["id"])
+            if not approver_id or int(approver_id) == int(subject["id"]):
+                return jsonify({"ok": False, "error": "未找到直属审批人"}), 400
+            steps = [("direct_leader", "直属领导", int(approver_id))]
+            title = f"{subject['display_name']} · 账号、权限关闭 · {names}"
+        if not steps:
+            return jsonify({"ok": False, "error": "审批链为空"}), 400
+        init_title = f"账号、权限关闭 · {len(line_items)} 行（审批中）"
+        primary = line_items[0]
+        meta_extra = {
+            "account_id": primary["account_id"],
+            "system_id": primary["system_id"],
+            "account_name": primary["account_name"],
+            "system_name": primary["system_name"],
+            "leuc_user_id": subject["id"],
+            "close_login": any_login or any(x.get("close_login") for x in line_items),
+            "close_sensitive": any_sens,
+            "items": line_items,
+        }
+        app_id, first_todo, first_assignee, step_preview = start_multi_step_apply(
+            db,
+            flow_code=flow_code,
+            todo_type=todo_type,
+            title=title,
+            init_title=init_title,
+            subject_id=subject["id"],
+            initiator_id=user["id"],
+            system_id=primary["system_id"],
+            steps=steps,
+            meta_extra=meta_extra,
+        )
+        db.commit()
+        au = db.execute(
+            "SELECT display_name, username FROM users WHERE id = ?", (first_assignee,)
+        ).fetchone()
+        return jsonify(
+            {
+                "ok": True,
+                "application_id": app_id,
+                "todo_id": first_todo,
+                "chain": step_preview,
+                "approver": dict(au) if au else None,
+                "message": (
+                    f"账号、权限关闭已提交（{len(line_items)} 行），等待 "
+                    f"{au['display_name']}（{step_preview[0]['label']}）；"
+                    f"链：{' → '.join(s['label'] for s in step_preview)}"
+                ),
+            }
+        )
+    # AI-GEN-END
+
     # 账号关闭：直属一步 application，待办类型与「账号、权限申请」对齐
     if apply_type == "account_close":
         account_id = data.get("account_id")
@@ -5075,6 +5341,22 @@ def apply_submit(user):
             "system_name": acct["system_name"],
             "leuc_user_id": subject["id"],
             "close_login": True,
+            "items": [
+                {
+                    "leuc_user_id": subject["id"],
+                    "display_name": subject["display_name"],
+                    "username": subject["username"],
+                    "system_id": acct["system_id"],
+                    "system_name": acct["system_name"],
+                    "account_id": acct["id"],
+                    "account_name": acct["account_name"],
+                    "close_type": "account",
+                    "close_login": True,
+                    "close_sensitive": False,
+                    "perm_ids": [],
+                    "perm_names": [],
+                }
+            ],
         }
         steps = [("direct_leader", "直属领导", int(approver_id))]
         app_id, first_todo, first_assignee, step_preview = start_multi_step_apply(
@@ -5131,6 +5413,23 @@ def apply_submit(user):
             "account_name": acct["account_name"],
             "system_name": acct["system_name"],
             "close_sensitive": True,
+            "leuc_user_id": subject["id"],
+            "items": [
+                {
+                    "leuc_user_id": subject["id"],
+                    "display_name": subject["display_name"],
+                    "username": subject["username"],
+                    "system_id": acct["system_id"],
+                    "system_name": acct["system_name"],
+                    "account_id": acct["id"],
+                    "account_name": acct["account_name"],
+                    "close_type": "perm",
+                    "close_login": False,
+                    "close_sensitive": True,
+                    "perm_ids": [],
+                    "perm_names": [],
+                }
+            ],
         }
         steps = materialize_approval_chain(db, "sensitive", subject["id"])
         if not steps:
@@ -6012,66 +6311,35 @@ def todo_decide(user, tid):
                     "new_expire": result["new_expire"],
                 }
             )
-        if app_row["flow_code"] == "account_close":
+        if app_row["flow_code"] in (
+            "account_close",
+            "sensitive_close",
+            "account_close_sensitive",
+        ):
+            # AI-GEN-BEGIN
             try:
                 meta = json.loads(row["meta"] or "{}")
             except Exception:
                 meta = {}
             uid = meta.get("leuc_user_id") or app_row["applicant_id"]
-            aid = meta.get("account_id")
-            if not aid:
-                return jsonify({"ok": False, "error": "申请单缺少账号"}), 400
-            result = close_user_system_account(db, int(uid), int(aid))
+            result = execute_account_perm_close_items(db, app_row, meta)
             if not result.get("ok"):
-                return jsonify({"ok": False, "error": result.get("error") or "关闭失败"}), 400
-            push_system_message(
-                db,
-                int(uid),
-                "账号已关闭",
-                f"{result['system']} / {result['account']} 已按申请关闭登录",
-            )
-            # AI-GEN-BEGIN
-            _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
-            # AI-GEN-END
-            db.commit()
-            return jsonify(
-                {
-                    "ok": True,
-                    "message": f"审批完成，已关闭：{result['system']} / {result['account']}",
-                    "revoked": True,
-                }
-            )
-        if app_row["flow_code"] == "sensitive_close":
-            try:
-                meta = json.loads(row["meta"] or "{}")
-            except Exception:
-                meta = {}
-            result = auto_revoke_sensitive(
-                db, app_row, account_id=meta.get("account_id")
-            )
-            if not result.get("ok"):
-                # AI-GEN-BEGIN
                 _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
-                # AI-GEN-END
                 db.commit()
-                return jsonify({"ok": False, "error": result.get("error") or "关闭失败"}), 500
-            push_system_message(
-                db,
-                app_row["applicant_id"],
-                "敏感权限已关闭",
-                f"审批已通过：{result['system']}",
-            )
-            # AI-GEN-BEGIN
+                return jsonify({"ok": False, "error": result.get("error") or "关闭失败"}), 400
+            summary = result.get("summary") or "；".join(result.get("results") or []) or "已关闭"
+            push_system_message(db, int(uid), "账号、权限关闭已生效", summary)
             _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
-            # AI-GEN-END
             db.commit()
             return jsonify(
                 {
                     "ok": True,
-                    "message": f"审批完成，已关闭敏感：{result['system']}",
+                    "message": f"审批完成：{summary}",
                     "revoked": True,
+                    "results": result.get("results") or [],
                 }
             )
+            # AI-GEN-END
         if app_row["flow_code"] in ("beisen_leave", "beisen_leave_sensitive"):
             # AI-GEN-BEGIN
             try:

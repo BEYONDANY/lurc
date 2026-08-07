@@ -3019,22 +3019,14 @@ async function refreshCloseFlowPreview(){
   const d = state.closeDraft;
   if (!wrap || !body || state._bindMode !== 'close') return;
   wrap.style.display = 'block';
-  if (!d || !d.selectedAcct) {
-    body.innerHTML = '<div class="note" style="margin:0">选择系统账号后预览</div>';
+  const lines = (d && d.lines) || [];
+  const ready = lines.find(ln => ln.system_id && ln.account_id && ln.close_type);
+  if (!ready) {
+    body.innerHTML = '<div class="note" style="margin:0">选择系统、账号与关闭类型后预览审批链</div>';
     return;
   }
-  const acct = (d.accounts||[]).find(a => a.id === d.selectedAcct);
-  if (!acct) return;
-  const permIds = d.perm_ids || [];
-  const perms = acct.permissions || [];
-  let type = null;
-  if (d.close_login) type = 'account_close';
-  else if (permIds.some(pid => (perms.find(p => p.id === Number(pid))||{}).is_sensitive)) type = 'sensitive_close';
-  else if (permIds.length) type = 'normal_perm';
-  if (!type) {
-    body.innerHTML = '<div class="note" style="margin:0">勾选关闭登录或权限后预览审批链</div>';
-    return;
-  }
+  const anySens = lines.some(ln => ln.close_type === 'perm' && ln.close_sensitive);
+  const type = anySens ? 'sensitive_close' : 'account_close';
   body.innerHTML = '<div class="note" style="margin:0">加载中…</div>';
   const { data } = await api('/api/apply/preview-flow', {
     method:'POST',
@@ -3986,15 +3978,26 @@ function systemOptionsHtml(selectedSid, personType){
   return opts.join('');
 }
 
+function draftForLines(){
+  // AI-GEN-BEGIN
+  if (state._bindMode === 'close') return state.closeDraft;
+  return state.bindDraft;
+  // AI-GEN-END
+}
+
 function permSummaryHtml(ln, s){
   // AI-GEN-BEGIN
+  if (state._bindMode === 'close') {
+    if (!ln.close_type) return '<span class="note">先选关闭类型</span>';
+    if (ln.close_type === 'account') return '<span class="note">关闭账号无需选权限</span>';
+  }
   if (!s) return '<span class="note">先选系统</span>';
   const perms = s.permissions || [];
   if (!perms.length) return '<span class="note">无可选权限</span>';
   const selected = (ln.perm_ids || []).map(id => perms.find(p => p.id === Number(id))).filter(Boolean);
   const label = selected.length
     ? (selected.map(p => p.perm_name).slice(0, 2).join('、') + (selected.length > 2 ? ` 等${selected.length}项` : ''))
-    : '点击选择权限';
+    : (state._bindMode === 'close' ? '点击选择要关闭的权限' : '点击选择权限');
   return `<button type="button" class="btn btn-sm btn-line" style="width:100%;text-align:left;white-space:normal;height:auto;line-height:1.35;padding:8px 10px"
     onclick="openPickPerms(${ln.key})">${label}</button>
     <div class="note" style="margin-top:4px">${selected.length ? '已选 '+selected.length+' 项' : '树状多选'}</div>`;
@@ -4138,6 +4141,9 @@ function renderBindLines(){
 }
 
 function addBindLine(rerender=true){
+  // AI-GEN-BEGIN
+  if (state._bindMode === 'close') return addCloseLine(rerender);
+  // AI-GEN-END
   if (!state.bindDraft._lineSeq) state.bindDraft._lineSeq = 1;
   const defaultUid = state.bindDraft.selfOnly && state.bindDraft.peoplePool[0]
     ? state.bindDraft.peoplePool[0].id
@@ -4227,15 +4233,20 @@ function toggleBindLinePerm(key, permId, on){
 
 function openPickPerms(key){
   // AI-GEN-BEGIN
-  const ln = (state.bindDraft.lines||[]).find(x => x.key === key);
+  const draft = draftForLines();
+  const ln = (draft?.lines||[]).find(x => x.key === key);
   if (!ln || !ln.system_id) return toast('请先选择业务系统');
-  const s = (state.bindDraft.systems||[]).find(x => x.id === ln.system_id);
+  if (state._bindMode === 'close' && ln.close_type !== 'perm') {
+    return toast('请先将关闭类型选为「关闭权限」');
+  }
+  const s = (draft.systems||[]).find(x => x.id === ln.system_id);
   if (!s) return toast('业务系统不存在');
   if (!(s.permissions||[]).length) return toast('该系统暂无权限目录');
   state.pickPermLineKey = key;
   state.pickPermIds = new Set((ln.perm_ids || []).map(Number));
   state.pickPermCollapsed = {};
-  document.getElementById('pick-perm-title').textContent = `选择权限 · ${s.name}`;
+  document.getElementById('pick-perm-title').textContent =
+    (state._bindMode === 'close' ? '选择要关闭的权限 · ' : '选择权限 · ') + s.name;
   renderPickPermTree();
   openModal('m-pick-perms');
   // AI-GEN-END
@@ -4243,8 +4254,9 @@ function openPickPerms(key){
 
 function pickPermExpandAll(expand){
   // AI-GEN-BEGIN
-  const ln = (state.bindDraft.lines||[]).find(x => x.key === state.pickPermLineKey);
-  const s = ln && (state.bindDraft.systems||[]).find(x => x.id === ln.system_id);
+  const draft = draftForLines();
+  const ln = (draft?.lines||[]).find(x => x.key === state.pickPermLineKey);
+  const s = ln && (draft.systems||[]).find(x => x.id === ln.system_id);
   const perms = (s && s.permissions) || [];
   const collapsed = {};
   if (!expand) {
@@ -4280,8 +4292,9 @@ function renderPickPermTree(){
   // AI-GEN-BEGIN
   const box = document.getElementById('pick-perm-tree');
   const countEl = document.getElementById('pick-perm-count');
-  const ln = (state.bindDraft.lines||[]).find(x => x.key === state.pickPermLineKey);
-  const s = ln && (state.bindDraft.systems||[]).find(x => x.id === ln.system_id);
+  const draft = draftForLines();
+  const ln = (draft?.lines||[]).find(x => x.key === state.pickPermLineKey);
+  const s = ln && (draft.systems||[]).find(x => x.id === ln.system_id);
   const perms = (s && s.permissions) || [];
   if (countEl) countEl.textContent = `已选 ${(state.pickPermIds||new Set()).size}`;
   if (!perms.length) {
@@ -4311,6 +4324,7 @@ function renderPickPermTree(){
               onchange="togglePickPermCheck(${p.id}, this.checked)">
             <b>${p.perm_name}</b>
             <code class="note">${p.perm_code||''}</code>
+            ${p.is_sensitive?' <span class="pill p-red">敏感</span>':''}
           </label>
         </div>
         ${hasKids && !isCollapsed ? `<div class="kids">${walk(p.id, depth+1)}</div>` : ''}
@@ -4323,17 +4337,22 @@ function renderPickPermTree(){
 
 function confirmPickPerms(){
   // AI-GEN-BEGIN
-  const ln = (state.bindDraft.lines||[]).find(x => x.key === state.pickPermLineKey);
+  const draft = draftForLines();
+  const ln = (draft?.lines||[]).find(x => x.key === state.pickPermLineKey);
   if (!ln) return closeModal('m-pick-perms');
   ln.perm_ids = [...(state.pickPermIds || [])];
   closeModal('m-pick-perms');
-  renderBindLines();
+  if (state._bindMode === 'close') renderCloseLines();
+  else renderBindLines();
   // AI-GEN-END
 }
 
 function removeBindLine(key){
+  // AI-GEN-BEGIN
+  if (state._bindMode === 'close') return removeCloseLine(key);
   state.bindDraft.lines = (state.bindDraft.lines||[]).filter(ln => ln.key !== key);
   renderBindLines();
+  // AI-GEN-END
 }
 
 function toggleBindLineSens(key, on){
@@ -4735,140 +4754,318 @@ async function submitAccountExtend(){
 }
 
 async function openAccountPermClose(){
+  // AI-GEN-BEGIN
   const { data } = await api('/api/apply/my-accounts');
   if (!data.ok) return toast(data.error);
   const accounts = data.accounts || [];
   if (!accounts.length) return toast('暂无关联系统账号');
+  // 从账号列表推导可选系统（含权限目录）
+  const sysMap = new Map();
+  for (const a of accounts) {
+    const sid = Number(a.system_id);
+    if (!sysMap.has(sid)) {
+      sysMap.set(sid, {
+        id: sid,
+        name: a.system_name,
+        code: a.system_code,
+        has_sensitive: !!(a.sys_has_sensitive || a.has_sensitive),
+        is_builtin: !!a.system_is_builtin,
+        permissions: (a.permissions || []).filter(
+          p => p.perm_code && !['biz_root','kj_root','hr_root'].includes(p.perm_code)
+        ),
+      });
+    }
+  }
   state._bindMode = 'close';
   state.bindDraft = null;
   state.closeDraft = {
     accounts,
-    selectedAcct: accounts[0].id,
-    close_login: false,
-    perm_ids: [],
+    systems: [...sysMap.values()],
+    lines: [],
+    _lineSeq: 1,
   };
   document.getElementById('bg-title').textContent = '账号、权限关闭';
   document.getElementById('bg-hint').textContent =
-    '仅本人。先选系统账号（含本系统 LEUC），再勾选关闭登录或权限；关闭本系统将无法再登录用户中心。敏感项走直属→一级→财务。';
+    '仅本人。点「新建一行」：先选业务系统与账号，再下拉选择关闭账号或关闭权限；关闭权限时可树选权限并勾选是否关闭敏感。关闭本系统（LEUC）将无法再登录用户中心。';
   const label = document.getElementById('bg-lines-label');
   if (label) label.textContent = '关闭明细';
   const addBtn = document.getElementById('bg-add-line');
-  if (addBtn) addBtn.style.display = 'none';
-  renderPermCloseBody();
+  if (addBtn) addBtn.style.display = '';
+  addCloseLine(false);
+  renderCloseLines();
   document.getElementById('bg-foot').innerHTML =
     `<button class="btn btn-line" onclick="closeModal('m-batch-grant');restoreBatchGrantApplyChrome()">取消</button>
      <button class="btn btn-pri" style="width:auto" onclick="submitPermClose()">提交账号、权限关闭</button>`;
   openModal('m-batch-grant');
+  // AI-GEN-END
 }
 
-function renderPermCloseBody(){
+function closeAccountsForLine(ln){
+  // AI-GEN-BEGIN
+  if (!ln || !ln.system_id) return [];
+  return (state.closeDraft?.accounts || []).filter(a => Number(a.system_id) === Number(ln.system_id));
+  // AI-GEN-END
+}
+
+function closeSystemOptionsHtml(selectedSid){
+  // AI-GEN-BEGIN
+  const systems = state.closeDraft?.systems || [];
+  const opts = ['<option value="">请选择业务系统</option>'].concat(
+    systems.map(s => {
+      const sel = String(s.id) === String(selectedSid) ? 'selected' : '';
+      const tag = s.code === 'leuc' ? ' ·本系统' : '';
+      return `<option value="${s.id}" ${sel}>${s.name}${tag}</option>`;
+    })
+  );
+  return opts.join('');
+  // AI-GEN-END
+}
+
+function closeAccountOptionsHtml(ln){
+  // AI-GEN-BEGIN
+  if (!ln.system_id) return '<option value="">请先选业务系统</option>';
+  const list = closeAccountsForLine(ln);
+  if (!list.length) return '<option value="">该系统暂无账号</option>';
+  const opts = ['<option value="">请选择业务系统账号</option>'].concat(
+    list.map(a => {
+      const sel = String(a.id) === String(ln.account_id) ? 'selected' : '';
+      const tags = [
+        a.system_code === 'leuc' ? '本系统' : '',
+        a.has_sensitive ? '含敏感' : '',
+        !a.can_login ? '已关登录' : '',
+      ].filter(Boolean).join('·');
+      const label = a.account_label ? `${a.account_name}（${a.account_label}）` : a.account_name;
+      return `<option value="${a.id}" ${sel}>${label}${tags ? ' ·' + tags : ''}</option>`;
+    })
+  );
+  return opts.join('');
+  // AI-GEN-END
+}
+
+function closeSensCellHtml(ln, s){
+  // AI-GEN-BEGIN
+  if (!ln.close_type || ln.close_type === 'account') {
+    return '<span class="note">—</span>';
+  }
+  if (!s) return '<span class="note">先选系统</span>';
+  if (!s.has_sensitive) {
+    return `<label class="note" style="opacity:.45;cursor:not-allowed" title="该业务系统未开启敏感权限">
+      <input type="checkbox" disabled> 不可选
+    </label>`;
+  }
+  const acct = (state.closeDraft?.accounts || []).find(a => Number(a.id) === Number(ln.account_id));
+  if (acct && !acct.has_sensitive) {
+    return `<span class="note" title="该账号当前无敏感权限">账号无敏感</span>`;
+  }
+  return `<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px">
+    <input type="checkbox" ${ln.close_sensitive ? 'checked' : ''}
+      onchange="toggleCloseLineSens(${ln.key}, this.checked)">
+    <span>关闭敏感 <span class="pill p-red">关</span></span>
+  </label>`;
+  // AI-GEN-END
+}
+
+function renderCloseLines(){
+  // AI-GEN-BEGIN
   const d = state.closeDraft;
   if (!d) return;
-  const acct = (d.accounts||[]).find(a => a.id === d.selectedAcct) || d.accounts[0];
-  if (acct && d.selectedAcct !== acct.id) d.selectedAcct = acct.id;
-  const perms = ((acct && acct.permissions) || []).filter(
-    p => p.perm_code && !['biz_root','kj_root','hr_root'].includes(p.perm_code)
-  );
-  const selected = new Set((d.perm_ids||[]).map(Number));
-  const sysSens = !!(acct && (acct.sys_has_sensitive || acct.has_sensitive));
-  const isLeuc = !!(acct && (acct.system_code === 'leuc' || acct.system_is_builtin));
-  document.getElementById('bg-lines').innerHTML = `
-    <div style="padding:14px 16px">
-      <div class="kv"><span class="lab">申请人</span>
-        <b>${state.user.display_name}（${state.user.username}）</b></div>
-      <div class="kv" style="margin-top:8px"><span class="lab">系统账号</span>
-        <select style="min-width:260px;padding:6px 8px;border:1px solid var(--line);border-radius:8px"
-          onchange="changeCloseAcct(this.value)">
-          ${(d.accounts||[]).map(a =>
-            `<option value="${a.id}" ${a.id===acct.id?'selected':''}>${a.system_name} / ${a.account_name}${a.system_code==='leuc'?' ·本系统':''}${a.has_sensitive?' ·含敏感':''}${!a.can_login?' ·已关登录':''}</option>`
-          ).join('')}
-        </select>
-      </div>
-      ${isLeuc?'<div class="callout" style="margin:10px 0 0">关闭<strong>本系统（LEUC）</strong>后将无法再登录用户中心（等同账号注销）。离职流程会在关完业务系统后最后执行此步。</div>':''}
-      <div class="kv" style="margin-top:10px"><span class="lab">关闭登录</span>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px">
-          <input type="checkbox" ${d.close_login?'checked':''} ${acct && acct.can_login?'':'disabled'}
-            onchange="state.closeDraft.close_login=this.checked;refreshCloseFlowPreview()">
-          ${acct && acct.can_login
-            ? (isLeuc ? '关闭本系统账号（审批通过后不可再登录 LEUC）' : '关闭本账号登录能力（直属审批）')
-            : '当前已不可登录'}
-        </label>
-      </div>
-      <div style="margin-top:14px"><b>选择要关闭的权限</b>
-        <div class="note">${sysSens?'勾选敏感项后走直属→一级→财务，与敏感申请同链':''}</div>
-        <div style="max-height:260px;overflow:auto;margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:10px">
-          ${perms.length ? perms.map(p => {
-            const sens = !!p.is_sensitive;
-            const disabled = sens && !sysSens && !acct.has_sensitive ? 'disabled' : '';
-            return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:6px 0;${disabled?'opacity:.4':''}">
-              <input type="checkbox" ${selected.has(p.id)?'checked':''} ${disabled}
-                onchange="toggleClosePerm(${p.id},this.checked)">
-              ${p.perm_name}${sens?' <span class="pill p-red">敏感</span>':' <span class="pill p-gray">普通</span>'}
-            </label>`;
-          }).join('') : '<div class="note">该系统暂无权限目录项（仍可仅关闭登录）</div>'}
-        </div>
-      </div>
-    </div>`;
-  refreshCloseFlowPreview();
-}
-function changeCloseAcct(id){
-  state.closeDraft.selectedAcct = Number(id);
-  state.closeDraft.perm_ids = [];
-  state.closeDraft.close_login = false;
-  renderPermCloseBody();
-}
-function toggleClosePerm(pid, on){
-  const id = Number(pid);
-  if (!state.closeDraft.perm_ids) state.closeDraft.perm_ids = [];
-  if (on) { if (!state.closeDraft.perm_ids.includes(id)) state.closeDraft.perm_ids.push(id); }
-  else state.closeDraft.perm_ids = state.closeDraft.perm_ids.filter(x => x !== id);
-  refreshCloseFlowPreview();
-}
-async function submitPermClose(){
-  const d = state.closeDraft;
-  if (!d || !d.selectedAcct) return toast('请选择系统账号');
-  const acct = (d.accounts||[]).find(a => a.id === d.selectedAcct);
-  if (!acct) return toast('账号不存在');
-  const permIds = d.perm_ids || [];
-  if (!d.close_login && !permIds.length) return toast('请勾选关闭登录或至少一项权限');
-  const msgs = [];
-  if (d.close_login) {
-    const r = await api('/api/apply/submit', {
-      method:'POST', body: JSON.stringify({ type:'account_close', account_id: acct.id })
-    });
-    msgs.push(r.data?.message || r.data?.error || '');
+  const lines = d.lines || [];
+  const box = document.getElementById('bg-lines');
+  if (!lines.length) {
+    box.innerHTML = '<div class="note" style="padding:12px">点击「新建一行」开始填写</div>';
+    refreshCloseFlowPreview();
+    return;
   }
-  const perms = acct.permissions || [];
-  let anySens = false;
-  for (const pid of permIds) {
-    const p = perms.find(x => x.id === Number(pid));
-    if (!p) continue;
-    if (p.is_sensitive) anySens = true;
-    else {
-      const r = await api('/api/apply/submit', {
-        method:'POST', body: JSON.stringify({
-          type:'normal_perm',
-          system_name: acct.system_name,
-          remark: '关闭权限：' + p.perm_name,
-          for_user_id: state.user.id
-        })
-      });
-      msgs.push(r.data?.message || r.data?.error || '');
+  const sysMap = Object.fromEntries((d.systems || []).map(s => [s.id, s]));
+  box.innerHTML = `<table>
+    <thead><tr>
+      <th style="width:40px">#</th>
+      <th style="min-width:140px">人员</th>
+      <th style="min-width:150px">业务系统</th>
+      <th style="min-width:180px">业务系统账号</th>
+      <th style="min-width:120px">关闭类型</th>
+      <th style="min-width:180px">权限</th>
+      <th style="min-width:110px">敏感权限</th>
+      <th style="width:72px"></th>
+    </tr></thead>
+    <tbody>${lines.map((ln, i) => {
+      const s = sysMap[ln.system_id];
+      const isLeuc = !!(s && (s.code === 'leuc' || s.is_builtin));
+      return `<tr>
+        <td>${i+1}</td>
+        <td><b style="font-size:13px">${state.user.display_name}</b>
+          <div class="note">${state.user.username}</div></td>
+        <td>
+          <select style="width:100%;min-width:140px"
+            onchange="changeCloseLineSystem(${ln.key}, this.value)">
+            ${closeSystemOptionsHtml(ln.system_id)}
+          </select>
+          ${isLeuc ? '<div class="note" style="margin-top:4px;color:#b45309">关闭本系统将无法登录</div>' : ''}
+        </td>
+        <td>
+          <select style="width:100%;min-width:160px" ${ln.system_id?'':'disabled'}
+            onchange="changeCloseLineAccount(${ln.key}, this.value)">
+            ${closeAccountOptionsHtml(ln)}
+          </select>
+        </td>
+        <td>
+          <select style="width:100%;min-width:110px" ${ln.account_id?'':'disabled'}
+            onchange="changeCloseLineType(${ln.key}, this.value)">
+            <option value="">请选择</option>
+            <option value="account" ${ln.close_type==='account'?'selected':''}>关闭账号</option>
+            <option value="perm" ${ln.close_type==='perm'?'selected':''}>关闭权限</option>
+          </select>
+        </td>
+        <td style="min-width:160px">${permSummaryHtml(ln, s)}</td>
+        <td>${closeSensCellHtml(ln, s)}</td>
+        <td><button class="btn btn-sm btn-line" onclick="removeCloseLine(${ln.key})">移除</button></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+  refreshCloseFlowPreview();
+  // AI-GEN-END
+}
+
+function addCloseLine(rerender=true){
+  // AI-GEN-BEGIN
+  const d = state.closeDraft;
+  if (!d) return;
+  if (!d._lineSeq) d._lineSeq = 1;
+  d.lines.push({
+    key: d._lineSeq++,
+    uid: state.user.id,
+    system_id: '',
+    account_id: '',
+    close_type: '',
+    perm_ids: [],
+    close_sensitive: false,
+  });
+  if (rerender) renderCloseLines();
+  // AI-GEN-END
+}
+
+function removeCloseLine(key){
+  // AI-GEN-BEGIN
+  if (!state.closeDraft) return;
+  state.closeDraft.lines = (state.closeDraft.lines || []).filter(ln => ln.key !== key);
+  renderCloseLines();
+  // AI-GEN-END
+}
+
+function changeCloseLineSystem(key, sid){
+  // AI-GEN-BEGIN
+  const ln = (state.closeDraft?.lines || []).find(x => x.key === key);
+  if (!ln) return;
+  ln.system_id = sid ? Number(sid) : '';
+  ln.account_id = '';
+  ln.close_type = '';
+  ln.perm_ids = [];
+  ln.close_sensitive = false;
+  renderCloseLines();
+  // AI-GEN-END
+}
+
+function changeCloseLineAccount(key, aid){
+  // AI-GEN-BEGIN
+  const ln = (state.closeDraft?.lines || []).find(x => x.key === key);
+  if (!ln) return;
+  if (!ln.system_id) return toast('请先选择业务系统');
+  ln.account_id = aid ? Number(aid) : '';
+  ln.close_type = '';
+  ln.perm_ids = [];
+  ln.close_sensitive = false;
+  renderCloseLines();
+  // AI-GEN-END
+}
+
+function changeCloseLineType(key, typ){
+  // AI-GEN-BEGIN
+  const ln = (state.closeDraft?.lines || []).find(x => x.key === key);
+  if (!ln) return;
+  if (!ln.account_id) return toast('请先选择业务系统账号');
+  ln.close_type = typ || '';
+  if (ln.close_type === 'account') {
+    ln.perm_ids = [];
+    ln.close_sensitive = false;
+    const acct = (state.closeDraft.accounts || []).find(a => Number(a.id) === Number(ln.account_id));
+    if (acct && !acct.can_login) {
+      ln.close_type = '';
+      renderCloseLines();
+      return toast('该账号已不可登录，无需再关闭账号');
     }
   }
-  if (anySens) {
-    const r = await api('/api/apply/submit', {
-      method:'POST', body: JSON.stringify({ type:'sensitive_close', account_id: acct.id })
-    });
-    msgs.push(r.data?.message || r.data?.error || '');
+  if (ln.close_type !== 'perm') ln.close_sensitive = false;
+  renderCloseLines();
+  // AI-GEN-END
+}
+
+function toggleCloseLineSens(key, on){
+  // AI-GEN-BEGIN
+  const ln = (state.closeDraft?.lines || []).find(x => x.key === key);
+  if (!ln) return;
+  ln.close_sensitive = !!on;
+  refreshCloseFlowPreview();
+  // AI-GEN-END
+}
+
+async function submitPermClose(){
+  // AI-GEN-BEGIN
+  const d = state.closeDraft;
+  const lines = (d && d.lines) || [];
+  if (!lines.length) return toast('请先新建一行');
+  const items = [];
+  for (const ln of lines) {
+    if (!ln.system_id) return toast('请为每一行选择业务系统');
+    if (!ln.account_id) return toast('请为每一行选择业务系统账号');
+    if (!ln.close_type) return toast('请为每一行选择关闭类型');
+    const acct = (d.accounts || []).find(a => Number(a.id) === Number(ln.account_id));
+    if (!acct) return toast('账号不存在');
+    const s = (d.systems || []).find(x => Number(x.id) === Number(ln.system_id));
+    if (ln.close_type === 'account') {
+      if (!acct.can_login) return toast(`${acct.system_name} / ${acct.account_name} 已不可登录`);
+      items.push({
+        account_id: Number(ln.account_id),
+        system_id: Number(ln.system_id),
+        close_type: 'account',
+        close_login: true,
+        close_sensitive: false,
+        perm_ids: [],
+      });
+    } else {
+      const permIds = (ln.perm_ids || []).map(Number);
+      if (!permIds.length && !ln.close_sensitive) {
+        return toast('关闭权限时请选择权限，或勾选关闭敏感权限');
+      }
+      if (ln.close_sensitive && !acct.has_sensitive) {
+        return toast(`${acct.system_name} / ${acct.account_name} 当前无敏感权限可关`);
+      }
+      const permNames = permIds.map(pid => {
+        const p = ((s && s.permissions) || []).find(x => Number(x.id) === pid);
+        return p ? p.perm_name : null;
+      }).filter(Boolean);
+      items.push({
+        account_id: Number(ln.account_id),
+        system_id: Number(ln.system_id),
+        close_type: 'perm',
+        close_login: false,
+        close_sensitive: !!ln.close_sensitive,
+        perm_ids: permIds,
+        perm_names: permNames,
+      });
+    }
   }
+  const { data } = await api('/api/apply/submit', {
+    method: 'POST',
+    body: JSON.stringify({ type: 'account_perm_close', items }),
+  });
+  if (!data.ok) return toast(data.error || '提交失败');
   closeModal('m-batch-grant');
   restoreBatchGrantApplyChrome();
-  toast(msgs.filter(Boolean)[0] || '已提交');
+  toast(data.message || '已提交');
   state.closeDraft = null;
   state._bindMode = null;
   state.view = 'todo'; state.todoTab = 'initiated';
   renderSide(); renderMain();
+  // AI-GEN-END
 }
 async function openAccountClose(){ return openAccountPermClose(); }
 async function openSensitiveClose(){ return openAccountPermClose(); }
