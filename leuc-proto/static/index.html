@@ -157,11 +157,33 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 .home-org-tree .node:hover{background:#F7F9FC}
 .home-org-tree .owner{margin-left:auto;font-size:12px;color:var(--muted);font-weight:400}
 /* AI-GEN-BEGIN */
-.role-perm-tree .node{cursor:default}
+.role-perm-tree .node{cursor:default;justify-content:flex-start;white-space:nowrap}
 .role-perm-tree .node:hover{background:#F7F9FC}
-.role-perm-tree .node label{display:inline-flex;align-items:center;gap:6px;cursor:pointer;flex:1;margin:0;font-weight:400}
-.role-perm-tree .grp-title{font-size:12px;color:var(--muted);font-weight:600;padding:8px 8px 4px;margin-top:4px}
-.role-perm-tree .grp-title:first-child{margin-top:0}
+.role-perm-tree .node label{
+  display:inline-flex !important;
+  align-items:center;
+  gap:6px;
+  cursor:pointer;
+  flex:0 1 auto;
+  width:auto;
+  margin:0 !important;
+  margin-bottom:0 !important;
+  font-weight:400;
+  font-size:13px;
+  color:var(--ink);
+  white-space:nowrap;
+  line-height:1.4;
+}
+.role-perm-tree .node label input{flex:none;margin:0;accent-color:var(--blue-d)}
+.role-perm-tree .node label .nm{flex:none;white-space:nowrap}
+.role-perm-tree .node label .pill{flex:none;padding:1px 8px;margin:0;white-space:nowrap}
+.role-perm-tree .grp-title{
+  font-size:12px;color:var(--muted);font-weight:600;
+  padding:10px 8px 4px;margin-top:2px;white-space:nowrap;
+  border-top:1px dashed #E8EEF9;
+}
+.role-perm-tree .grp-title:first-child{margin-top:0;border-top:0;padding-top:4px}
+.role-perm-tree .kids{margin-left:22px}
 /* AI-GEN-END */
 .org-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
 /* 即时聊天 / 右下角提醒 */
@@ -386,6 +408,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   <div class="note" id="add-user-hint" style="margin-top:-6px;margin-bottom:10px"></div>
   <div class="field"><label>手机</label><input id="add-phone"></div>
   <div class="field"><label>邮箱</label><input id="add-email"></div>
+  <div class="field"><label>北森用户ID</label><input id="add-beisen-uid" placeholder="BeisenUserID，SSO 用"></div>
   <div class="field"><label>角色</label>
     <select id="add-role">
       <option value="employee_a">普通员工</option>
@@ -1047,25 +1070,21 @@ async function renderAdminRoles(el){
       const hasKids = kids.length > 0;
       const btnNodes = kids.map(b => `
         <div class="node leaf">
-          <span style="width:14px;display:inline-block"></span>
           <label>
             <input type="checkbox" class="role-btn" value="${b.id}" data-menu="${m.id}"
               ${btnSet.has(b.id)?'checked':''} ${dis}
               onchange="onRoleBtnToggle('${m.id}', this.checked)">
-            <span>${b.label}</span>
+            <span class="nm">${b.label}</span>
             <span class="pill p-orange">按钮</span>
           </label>
         </div>`).join('');
       return `
         <div class="node ${hasKids?'':'leaf'}">
-          ${hasKids
-            ? `<span style="width:14px;color:var(--muted)">▾</span>`
-            : `<span style="width:14px;display:inline-block"></span>`}
           <label>
             <input type="checkbox" class="role-menu" value="${m.id}"
               ${menuSet.has(m.id)?'checked':''} ${dis}
               onchange="onRoleMenuToggle('${m.id}', this.checked)">
-            <b>${m.label}</b>
+            <span class="nm">${m.label}</span>
             <span class="pill p-blue">菜单</span>
           </label>
         </div>
@@ -1089,11 +1108,10 @@ async function renderAdminRoles(el){
       </div>
       <div>
         <div class="card">
-          <h4>${cur?.label || ''} <code>${cur?.role || ''}</code></h4>
-          <div class="field"><label>权限树 <span class="note">蓝=菜单 · 橙=按钮</span></label>
-            <div class="org-tree role-perm-tree" style="max-height:56vh;border:1px solid #DDE7F7;padding:8px">
-              ${treeHtml || '<div class="note">暂无菜单目录</div>'}
-            </div>
+          <h4>${cur?.label || ''} <code>${cur?.role || ''}</code>
+            <span class="note" style="font-weight:400;margin-left:8px">蓝=菜单 · 橙=按钮</span></h4>
+          <div class="org-tree role-perm-tree" style="max-height:56vh;border:1px solid #DDE7F7;padding:8px 10px;margin-bottom:12px">
+            ${treeHtml || '<div class="note">暂无菜单目录</div>'}
           </div>
           ${canConfig?`<div class="foot" style="justify-content:flex-start">
             <button class="btn btn-pri" style="width:auto" onclick="saveRoleConfig('${cur?.role||''}')">保存配置</button>
@@ -1318,7 +1336,7 @@ async function renderOrg(el) {
           <table>
             <thead><tr>
               ${data.can_manage?'<th><input type="checkbox" onchange="toggleAll(this.checked)"></th>':''}
-              <th>姓名</th><th>账号</th><th>组织</th>
+              <th>姓名</th><th>账号</th><th>组织</th><th>北森用户ID</th>
               <th style="min-width:220px">关联系统账号</th><th>敏感</th>
               ${canSetAccountExpire()?'<th>账号有效期</th>':''}
               <th></th>
@@ -1342,13 +1360,19 @@ async function renderOrg(el) {
               const expireLabel = m.account_expire
                 ? m.account_expire
                 : '<span class="pill p-blue">永不过期</span>';
-              // AI-GEN-END
               const manageable = data.manage_dept_ids.includes(m.dept_id);
+              const beisenCell = (data.can_manage && manageable)
+                ? `<input class="beisen-uid" data-uid="${m.id}" value="${m.beisen_user_id||''}"
+                    placeholder="未设置" style="width:110px;padding:5px 8px;border:1px solid var(--line);border-radius:7px"
+                    onchange="saveBeisenUid(${m.id}, this.value)">`
+                : (m.beisen_user_id ? `<code>${m.beisen_user_id}</code>` : '<span class="note">—</span>');
+              // AI-GEN-END
               return `<tr>
                 ${data.can_manage?`<td>${manageable?`<input type="checkbox" ${state.selectedIds.has(m.id)?'checked':''} onchange="togSel(${m.id},this.checked)">`:''}</td>`:''}
                 <td>${m.display_name}${m.person_type==='external'?' <span class="pill p-orange">外部</span>':''}</td>
                 <td><code>${m.username}</code></td>
                 <td>${dname}</td>
+                <td>${beisenCell}</td>
                 <td>${acctLines}</td>
                 <td>${m.has_sensitive?'<span class="pill p-red">有</span>':'<span class="pill p-gray">无</span>'}</td>
                 ${canSetAccountExpire()?`<td>${expireLabel}</td>`:''}
@@ -1359,7 +1383,7 @@ async function renderOrg(el) {
                 </td>
               </tr>`;
             }).join('') || (() => {
-              const colSpan = (data.can_manage?6:5) + (canSetAccountExpire()?1:0) + 1;
+              const colSpan = (data.can_manage?7:6) + (canSetAccountExpire()?1:0) + 1;
               return `<tr><td colspan="${colSpan}" class="note">无人员</td></tr>`;
             })()}
             </tbody>
@@ -2881,6 +2905,8 @@ async function openAdd(){
   document.getElementById('add-user-hint').textContent='';
   document.getElementById('add-phone').value='';
   document.getElementById('add-email').value='';
+  const bidEl = document.getElementById('add-beisen-uid');
+  if (bidEl) bidEl.value='';
   if (!state.deptData?.departments?.length) {
     const { data } = await api('/api/org/overview');
     if (data.ok) state.deptData = data;
@@ -2914,6 +2940,7 @@ async function submitAdd(){
     username: document.getElementById('add-username').value.trim(),
     phone: document.getElementById('add-phone').value.trim(),
     email: document.getElementById('add-email').value.trim(),
+    beisen_user_id: (document.getElementById('add-beisen-uid')?.value || '').trim(),
     role: document.getElementById('add-role').value,
     dept_id: document.getElementById('add-dept')?.value,
     person_type: state.addPersonType || 'internal',
@@ -2922,6 +2949,20 @@ async function submitAdd(){
   if (!data.ok) return toast(data.error);
   toast(data.message); closeModal('m-add'); renderMain();
 }
+// AI-GEN-BEGIN
+async function saveBeisenUid(uid, value) {
+  const { data } = await api('/api/org/members/' + uid + '/beisen-user-id', {
+    method: 'PATCH',
+    body: JSON.stringify({ beisen_user_id: (value || '').trim() }),
+  });
+  if (!data.ok) return toast(data.error || '保存失败');
+  toast(value ? '北森用户ID已保存' : '已清空北森用户ID');
+  if (state.deptData?.members) {
+    const m = state.deptData.members.find(x => x.id === uid);
+    if (m) m.beisen_user_id = (value || '').trim() || null;
+  }
+}
+// AI-GEN-END
 function openImport(){
   document.getElementById('import-csv').value = '周九,13900000009,zhoujiu@lecoo.com\n吴十,13900000010,wushi@lecoo.com';
   openModal('m-import');
