@@ -22,8 +22,9 @@ RUN pip install --no-cache-dir -U pip \
 
 COPY . .
 
-# SQLite / 上传数据目录
+# SQLite / 上传数据目录；去掉 Windows CRLF，避免 exec 报 no such file
 RUN mkdir -p /app/data \
+    && sed -i 's/\r$//' /app/docker-entrypoint.sh \
     && chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 5055
