@@ -2969,15 +2969,17 @@ def api_login():
 
     # 兼容旧演示：source=erp → 来酷ERP
     if source == "erp":
+        # AI-GEN-BEGIN
         session["oidc"] = {
             "client_id": "client_laiku_erp",
-            "redirect_uri": "http://127.0.0.1:5055/demo/home/callback?app=laiku_erp",
+            "redirect_uri": f"{_issuer()}/demo/home/callback?app=laiku_erp",
             "state": secrets.token_urlsafe(8),
             "scope": "openid profile",
             "nonce": secrets.token_urlsafe(8),
             "code_challenge": None,
             "code_challenge_method": None,
         }
+        # AI-GEN-END
         return _finish_oidc_after_login(user, data.get("account_id"))
 
     return jsonify({"ok": False, "error": "未知登录来源"}), 400
@@ -3005,18 +3007,35 @@ def _parse_redirect_uris(raw: str):
     return [u.strip() for u in (raw or "").replace("\n", ",").split(",") if u.strip()]
 
 
+# AI-GEN-BEGIN
+def _is_loopback_netloc(netloc: str) -> bool:
+    host = (netloc or "").split("@")[-1].lower()
+    if host.startswith("["):
+        return False
+    name = host.rsplit(":", 1)[0]
+    return name in ("127.0.0.1", "localhost", "0.0.0.0")
+
+
 def _redirect_uri_allowed(client_row, redirect_uri: str) -> bool:
     allowed = _parse_redirect_uris(client_row["redirect_uris"])
     if redirect_uri in allowed:
         return True
     # 允许同 path 不同 query（演示 callback?app=xx）
     p = urlparse(redirect_uri)
-    base = urlunparse((p.scheme, p.netloc, p.path, "", "", ""))
     for a in allowed:
         ap = urlparse(a)
         if (ap.scheme, ap.netloc, ap.path) == (p.scheme, p.netloc, p.path):
             return True
+        # 手机/局域网：登记为 127.0.0.1/localhost 时，允许用当前访问 Host 替换
+        if (
+            ap.scheme == p.scheme
+            and ap.path == p.path
+            and _is_loopback_netloc(ap.netloc)
+            and p.netloc == request.host
+        ):
+            return True
     return False
+# AI-GEN-END
 
 
 def _finish_oidc_after_login(user, account_id=None):
@@ -10152,13 +10171,15 @@ def systems_public():
     rows = get_db().execute(
         "SELECT id, code, name, client_id, redirect_uris, status, require_pkce, access_mode FROM systems ORDER BY id"
     ).fetchall()
+    # AI-GEN-BEGIN
     return jsonify(
         {
             "ok": True,
-            "issuer": "http://127.0.0.1:5055",
+            "issuer": _issuer(),
             "systems": [dict(r) for r in rows],
         }
     )
+    # AI-GEN-END
 
 
 # AI-GEN-BEGIN
@@ -10896,7 +10917,7 @@ def demo_portal_systems():
     for r in rows:
         d = dict(r)
         d["mode_label"] = "全员登录" if d.get("access_mode") == "open" else "需账号绑定"
-        d["portal_redirect"] = f"http://127.0.0.1:5055/demo/home/callback?app={d['code']}"
+        d["portal_redirect"] = f"{_issuer()}/demo/home/callback?app={d['code']}"
         if d.get("code") == "beisen":
             d["beisen_sso_enabled"] = bool(beisen_st.get("enabled"))
             d["beisen_sso_error"] = beisen_st.get("error")
@@ -11914,9 +11935,10 @@ def main():
     #   python -c "from db import init_db; init_db(force=True)"
     init_db(force=False)
     start_task_scheduler(app, _run_scheduled_leorg_sync)
+    # 0.0.0.0：本机 + 同网手机可访问；回调按请求 Host 动态生成
     host = _os.environ.get("LEUC_HOST", "0.0.0.0")
     port = int(_os.environ.get("LEUC_PORT", "5055"))
-    print(f"LEUC 原型: http://127.0.0.1:{port}  （监听 {host}:{port}）")
+    print(f"LEUC 原型: http://127.0.0.1:{port}  （监听 {host}:{port}，手机用电脑局域网 IP）")
     print("管理账号: admin / sunli / zhangcai / zhaomin / liufang / huangwei  密码 123456")
     # debug 热重载易把后台进程弄挂（Connection refused）；本地联调默认关 reloader
     app.run(host=host, port=port, debug=True, use_reloader=False, threaded=True)

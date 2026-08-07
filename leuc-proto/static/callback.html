@@ -40,13 +40,16 @@ const app = params.get('app') || '';
 document.getElementById('summary').textContent =
   `app=${app || '-'} · code=${code ? code.slice(0,12)+'…' : '(无)'} · state=${state || '-'}`;
 
+// AI-GEN-BEGIN
+const ORIGIN = location.origin;
 const CLIENTS = {
-  oa: { client_id: 'client_oa', client_secret: 'sk_oa_demo_secret', redirect_uri: 'http://127.0.0.1:5055/oidc/callback?app=oa' },
-  bip: { client_id: 'client_bip', client_secret: 'sk_bip_demo_secret', redirect_uri: 'http://127.0.0.1:5055/oidc/callback?app=bip' },
-  laiku_erp: { client_id: 'client_laiku_erp', client_secret: 'sk_laiku_erp_secret', redirect_uri: 'http://127.0.0.1:5055/oidc/callback?app=laiku_erp' },
-  keji_erp: { client_id: 'client_keji_erp', client_secret: 'sk_keji_erp_secret', redirect_uri: 'http://127.0.0.1:5055/oidc/callback?app=keji_erp' },
-  beisen: { client_id: 'client_beisen', client_secret: 'sk_beisen_demo_secret', redirect_uri: 'http://127.0.0.1:5055/oidc/callback?app=beisen' },
+  oa: { client_id: 'client_oa', client_secret: 'sk_oa_demo_secret', redirect_uri: `${ORIGIN}/oidc/callback?app=oa` },
+  bip: { client_id: 'client_bip', client_secret: 'sk_bip_demo_secret', redirect_uri: `${ORIGIN}/oidc/callback?app=bip` },
+  laiku_erp: { client_id: 'client_laiku_erp', client_secret: 'sk_laiku_erp_secret', redirect_uri: `${ORIGIN}/oidc/callback?app=laiku_erp` },
+  keji_erp: { client_id: 'client_keji_erp', client_secret: 'sk_keji_erp_secret', redirect_uri: `${ORIGIN}/oidc/callback?app=keji_erp` },
+  beisen: { client_id: 'client_beisen', client_secret: 'sk_beisen_demo_secret', redirect_uri: `${ORIGIN}/oidc/callback?app=beisen` },
 };
+// AI-GEN-END
 
 async function exchange() {
   const c = CLIENTS[app] || CLIENTS.laiku_erp;
