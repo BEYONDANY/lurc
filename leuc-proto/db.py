@@ -145,7 +145,8 @@ CREATE TABLE IF NOT EXISTS todos (
   created_at TEXT NOT NULL,
   application_id INTEGER,
   step_order INTEGER,
-  meta TEXT
+  meta TEXT,
+  remark TEXT
 );
 
 CREATE TABLE IF NOT EXISTS approval_chain_steps (
@@ -206,7 +207,8 @@ CREATE TABLE IF NOT EXISTS application_steps (
   assignee_id INTEGER,
   status TEXT NOT NULL,
   todo_id INTEGER,
-  decided_at TEXT
+  decided_at TEXT,
+  remark TEXT
 );
 
 CREATE TABLE IF NOT EXISTS login_risk (
@@ -624,6 +626,14 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE messages ADD COLUMN ref_type TEXT")
     if msg_cols and "ref_id" not in msg_cols:
         conn.execute("ALTER TABLE messages ADD COLUMN ref_id INTEGER")
+    # AI-GEN-BEGIN
+    todo_cols = _table_cols(conn, "todos")
+    if todo_cols and "remark" not in todo_cols:
+        conn.execute("ALTER TABLE todos ADD COLUMN remark TEXT")
+    step_cols = _table_cols(conn, "application_steps")
+    if step_cols and "remark" not in step_cols:
+        conn.execute("ALTER TABLE application_steps ADD COLUMN remark TEXT")
+    # AI-GEN-END
     ensure_todo_notify_trigger(conn)
     # AI-GEN-BEGIN
     conn.execute(
@@ -890,13 +900,9 @@ def init_db(force: bool = False) -> None:
 
 def seed(conn: sqlite3.Connection) -> None:
     # AI-GEN-BEGIN
-    # 默认空部门根：人员/部门由 LeOrg 同步回填；仅保留系统超管 admin（不挂部门）
-    conn.execute(
-        "INSERT INTO departments (id, name, parent_id, owner_user_id, leorg_id) VALUES (1,?,?,NULL,NULL)",
-        ("来酷科技", None),
-    )
-    root_id = 1
-    btit_id = 1
+    # 空部门树：人员/部门由 LeOrg 同步或手动添加；仅保留系统超管 admin（不挂部门）
+    root_id = None
+    btit_id = None
     # 系统超管：全权限，不在「部门和人员」展示
     conn.execute(
         """INSERT INTO users
@@ -913,13 +919,13 @@ def seed(conn: sqlite3.Connection) -> None:
     for role, menus in DEFAULT_ROLE_MENUS.items():
         for mid in menus:
             menu_rows.append((role, mid))
-    conn.executemany("INSERT INTO role_menus (role, menu_id) VALUES (?,?)", menu_rows)
+    conn.executemany("INSERT OR IGNORE INTO role_menus (role, menu_id) VALUES (?,?)", menu_rows)
     cap_rows = []
     for role, caps in DEFAULT_ROLE_CAPS.items():
         for cap in caps:
             cap_rows.append((role, cap))
     if cap_rows:
-        conn.executemany("INSERT INTO role_caps (role, cap_id) VALUES (?,?)", cap_rows)
+        conn.executemany("INSERT OR IGNORE INTO role_caps (role, cap_id) VALUES (?,?)", cap_rows)
     ensure_roles_seeded(conn)
     # 负责人：根部门暂无负责人；部门由 LeOrg 同步后配置
     # AI-GEN-BEGIN
@@ -942,6 +948,14 @@ def seed(conn: sqlite3.Connection) -> None:
     now = "2026-08-04T12:00:00"
     portal_cb = "http://127.0.0.1:5055/demo/home/callback"
     # AI-GEN-BEGIN
+    # migrate 可能已插入 leuc；种子前清空再写入固定演示客户端
+    conn.execute("DELETE FROM user_system_accounts")
+    try:
+        conn.execute("DELETE FROM system_accounts")
+    except Exception:
+        pass
+    conn.execute("DELETE FROM system_owners")
+    conn.execute("DELETE FROM systems")
     # 末项 sso_login_field：北森用 account_uid，其它用 account_name
     systems = [
         # access_mode; forbid_external; has_sensitive; sso_login_field; is_builtin
@@ -990,10 +1004,10 @@ def seed(conn: sqlite3.Connection) -> None:
         [
             (1, "sensitive", 1, "direct_leader", "直属领导", None, 1),
             (2, "sensitive", 2, "level1_leader", "一级领导", None, 1),
-            (3, "sensitive", 3, "finance", "财务", (chang["id"] if chang else 3), 1),
+            (3, "sensitive", 3, "finance", "财务", (chang["id"] if chang else 1), 1),
             (4, "external", 1, "direct_leader", "直属领导", None, 1),
             (5, "external", 2, "level1_leader", "一级领导", None, 1),
-            (6, "external", 3, "finance", "财务", (chang["id"] if chang else 3), 1),
+            (6, "external", 3, "finance", "财务", (chang["id"] if chang else 1), 1),
         ],
     )
     # 权限目录（系统管理员维护/同步；与「是否有敏感权限」复选框无关）
@@ -1015,46 +1029,47 @@ def seed(conn: sqlite3.Connection) -> None:
         ],
     )
 
-    # 部门架构待同步花名册（人事专员初始化用户）
-    conn.executemany(
-        """INSERT INTO hr_sync_roster
-        (id, display_name, dept_id, phone, email, emp_no, source, status)
-        VALUES (?,?,?,?,?,?, 'org_sync', 'pending')""",
-        [
-            (1, "刘一", _SEED_BTIT_ID, "13910000001", "liuyi@lecoo.com", "E1001"),
-            (2, "陈二", _SEED_BTIT_ID, "13910000002", "chener@lecoo.com", "E1002"),
-            (3, "张三", _SEED_BTIT_ID, "13910000003", "zhangsan.new@lecoo.com", "E1003"),
-            (4, "赵六", _SEED_BTIT_ID, "13910000004", "zhaoliu@lecoo.com", "E1004"),
-            (5, "孙丽", _SEED_ROOT_ID, "13910000005", "sunli2@lecoo.com", "E1005"),
-        ],
-    )
+    # AI-GEN-BEGIN
+    # 空部门树：不预置花名册（dept_id 必填）；人员由 LeOrg 同步或手动添加
+    if _SEED_ROOT_ID is not None and _SEED_BTIT_ID is not None:
+        conn.executemany(
+            """INSERT INTO hr_sync_roster
+            (id, display_name, dept_id, phone, email, emp_no, source, status)
+            VALUES (?,?,?,?,?,?, 'org_sync', 'pending')""",
+            [
+                (1, "刘一", _SEED_BTIT_ID, "13910000001", "liuyi@lecoo.com", "E1001"),
+                (2, "陈二", _SEED_BTIT_ID, "13910000002", "chener@lecoo.com", "E1002"),
+                (3, "张三", _SEED_BTIT_ID, "13910000003", "zhangsan.new@lecoo.com", "E1003"),
+                (4, "赵六", _SEED_BTIT_ID, "13910000004", "zhaoliu@lecoo.com", "E1004"),
+                (5, "孙丽", _SEED_ROOT_ID, "13910000005", "sunli2@lecoo.com", "E1005"),
+            ],
+        )
+    # AI-GEN-END
 
-    # 子系统账号池（可同步/导入；部分未绑定供匹配演示）
+    # 子系统账号池（可同步/导入；空组织时仅预置未绑定池）
     now_d = "2026-08-04"
+    # AI-GEN-BEGIN
     conn.executemany(
         """INSERT INTO system_accounts
         (id, system_id, account_uid, account_name, display_name, phone, email, itcode, status, leuc_user_id, source, created_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
         [
-            # 已绑定
-            (1, 3, "ERP-ZS-001", "zhangsan_laiku", "张三", "13800000001", "zhangsan@lecoo.com", "zhangsan", "bound", 1, "sync", now_d),
-            (2, 3, "ERP-LS-001", "lisi_laiku_main", "李四", "13800000002", "lisi@lecoo.com", "lisi", "bound", 2, "sync", now_d),
-            (3, 3, "ERP-LS-002", "lisi_laiku_audit", "李四审计", "13800000002", "lisi@lecoo.com", "lisi", "bound", 2, "sync", now_d),
-            # 未绑定：可用手机/邮箱/姓名匹配到新同步用户或现有用户
-            (4, 3, "ERP-LY-001", "liuyi_erp", "刘一", "13910000001", "liuyi@lecoo.com", "liuyi", "unbound", None, "sync", now_d),
-            (5, 3, "ERP-CE-001", "chener01", "陈二", "13910000002", "chener@lecoo.com", None, "unbound", None, "import", now_d),
-            (6, 4, "KJ-ZL-001", "zhaoliu_kj", "赵六", None, "zhaoliu@lecoo.com", "zhaoliu", "unbound", None, "sync", now_d),
-            (7, 3, "ERP-OR-001", "orphan_erp", "待建用户", "13919999999", "orphan@lecoo.com", "orphan", "unbound", None, "import", now_d),
+            (1, 3, "ERP-LY-001", "liuyi_erp", "刘一", "13910000001", "liuyi@lecoo.com", "liuyi", "unbound", None, "sync", now_d),
+            (2, 3, "ERP-CE-001", "chener01", "陈二", "13910000002", "chener@lecoo.com", None, "unbound", None, "import", now_d),
+            (3, 4, "KJ-ZL-001", "zhaoliu_kj", "赵六", None, "zhaoliu@lecoo.com", "zhaoliu", "unbound", None, "sync", now_d),
+            (4, 3, "ERP-OR-001", "orphan_erp", "待建用户", "13919999999", "orphan@lecoo.com", "orphan", "unbound", None, "import", now_d),
             # 北森：account_uid = BeisenUserID（数字）
-            (8, 5, "630701809", "beisen_wujiu", "吴九", "13800000009", "wujiu@lecoo.com", "wujiu", "unbound", None, "sync", now_d),
+            (5, 5, "630701809", "beisen_wujiu", "吴九", "13800000009", "wujiu@lecoo.com", "wujiu", "unbound", None, "sync", now_d),
         ],
     )
+    # AI-GEN-END
 
+    # AI-GEN-BEGIN
+    # 空组织仅超管：不预置依赖其他用户的待办
     todos = [
-        (2, 1, 2, "部门同步确认", "系统治理", "pending", "open", "2026-08-02", None, None, None),
-        (3, 4, 1, "来酷ERP secret 轮换确认", "系统治理", "pending", "open", "2026-08-03", None, None, None),
-        (4, 2, 2, "部门同步确认", "系统治理", "initiated", "open", "2026-08-02", None, None, None),
+        (1, 1, 1, "从 LeOrg 同步部门与人员", "系统治理", "pending", "open", "2026-08-02", None, None, None),
     ]
+    # AI-GEN-END
     conn.executemany(
         """INSERT INTO todos
         (id, assignee_id, initiator_id, title, todo_type, bucket, status, created_at, application_id, step_order, meta)

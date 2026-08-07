@@ -324,12 +324,20 @@ def ensure_db():
             and has_feishu
             and has_beisen_forbid
         )
-        # 部门可由「清空 + LeOrg 同步」托管；有根部门或已映射 LeOrg 即视为有效
-        has_org_ok = bool(has_org_seed) or conn.execute(
-            "SELECT 1 FROM departments WHERE leorg_id IS NOT NULL LIMIT 1"
-        ).fetchone() or conn.execute(
-            "SELECT 1 FROM departments LIMIT 1"
+        # 部门可由「清空 + LeOrg 同步」托管；允许空树，勿因无部门整库重种
+        has_kept_admin = conn.execute(
+            """SELECT 1 FROM users
+            WHERE username = 'admin' OR role IN ('super_admin','hr_specialist')
+            LIMIT 1"""
         ).fetchone()
+        has_org_ok = (
+            bool(has_org_seed)
+            or conn.execute(
+                "SELECT 1 FROM departments WHERE leorg_id IS NOT NULL LIMIT 1"
+            ).fetchone()
+            or conn.execute("SELECT 1 FROM departments LIMIT 1").fetchone()
+            or bool(has_kept_admin)
+        )
         if need_force or not has_org_ok:
             conn.close()
             init_db(force=True)
@@ -604,6 +612,11 @@ def row_user(row):
         "beisen_user_id": (
             (row["beisen_user_id"] or None) if "beisen_user_id" in keys else None
         ),
+        # AI-GEN-BEGIN
+        "leorg_emp_id": (
+            (row["leorg_emp_id"] if "leorg_emp_id" in keys else None)
+        ),
+        # AI-GEN-END
         "password_expire": row["password_expire"],
         "account_expire": row["account_expire"] if "account_expire" in keys else None,
         "person_type": row["person_type"] if "person_type" in keys else "internal",
@@ -1229,6 +1242,26 @@ def _user_brief(db, uid):
     # AI-GEN-END
 
 
+# AI-GEN-BEGIN
+def _persist_decide_remark(db, tid, remark, *, app_id=None, step_order=None):
+    """审批操作备注：写入 todos.remark，有申请单时同步 application_steps。"""
+    note = (remark or "").strip() or None
+    try:
+        db.execute("UPDATE todos SET remark = ? WHERE id = ?", (note, int(tid)))
+    except Exception:
+        pass
+    if app_id is not None and step_order is not None:
+        try:
+            db.execute(
+                """UPDATE application_steps SET remark = ?
+                WHERE application_id = ? AND step_order = ?""",
+                (note, int(app_id), int(step_order)),
+            )
+        except Exception:
+            pass
+# AI-GEN-END
+
+
 def build_application_flow(db, app_id):
     """拼装申请单流程：时间线 / 当前审核人 / 预测步骤。"""
     # AI-GEN-BEGIN
@@ -1274,6 +1307,7 @@ def build_application_flow(db, app_id):
                 "assignee_id": s["assignee_id"],
                 "todo_id": s["todo_id"],
                 "decided_at": s["decided_at"],
+                "remark": (s["remark"] if "remark" in s.keys() else None) or None,
             }
         )
     forecast = [t for t in timeline if t["phase"] == "forecast"]
@@ -1346,6 +1380,11 @@ def build_todo_flow(db, todo_row):
             "assignee_id": todo_row["assignee_id"],
             "todo_id": todo_row["id"],
             "decided_at": todo_row["created_at"] if done else None,
+            "remark": (
+                (todo_row["remark"] if "remark" in todo_row.keys() else None)
+                or meta.get("decide_remark")
+                or None
+            ),
         }
     ]
     return {
@@ -3443,7 +3482,12 @@ def org_overview(user):
     db = get_db()
     depts = all_departments(db)
     manage_ids = managed_dept_ids(db, user)
-    can_manage = bool(manage_ids)
+    # AI-GEN-BEGIN
+    # 空部门树时 manage_ids 为空；超管/人事仍应可同步、添加根部门
+    can_manage = bool(manage_ids) or user_has_cap(user, "manage_all_org") or user_has_role(
+        user, "super_admin", "hr_specialist"
+    )
+    # AI-GEN-END
     q = (request.args.get("q") or "").strip()
     dept_id = request.args.get("dept_id")
     focus_id = int(dept_id) if dept_id else None
@@ -4131,6 +4175,91 @@ def chat_poll(user):
         if top and top["m"]:
             max_id = max(max_id, top["m"])
     return jsonify({"ok": True, "messages": items, "max_id": max_id})
+
+
+@app.get("/api/chat/stream")
+@login_required
+def chat_stream(user):
+    """SSE 实时推送：有新消息立即推给浏览器（右下角弹出+提示音）。"""
+    # AI-GEN-BEGIN
+    import time as _time
+
+    since = int(request.args.get("since_id") or 0)
+    uid = int(user["id"])
+
+    def _fetch(since_id: int):
+        # 流式循环里每次新开连接，避免持有跨 yield 的 request 级 db
+        conn = connect()
+        try:
+            rows = conn.execute(
+                """SELECT m.*,
+                  CASE WHEN m.from_user_id = 0 THEN '系统'
+                       ELSE COALESCE(u.display_name,'未知') END AS from_name,
+                  CASE WHEN m.from_user_id = 0 THEN 'system'
+                       ELSE COALESCE(u.username,'') END AS from_username
+                FROM messages m
+                LEFT JOIN users u ON u.id = m.from_user_id
+                WHERE m.to_user_id = ? AND m.id > ?
+                ORDER BY m.id ASC LIMIT 50""",
+                (uid, since_id),
+            ).fetchall()
+            items = [dict(r) for r in rows]
+            max_id = since_id
+            for d in items:
+                max_id = max(max_id, d["id"])
+            if not items:
+                top = conn.execute(
+                    "SELECT MAX(id) AS m FROM messages WHERE to_user_id = ?",
+                    (uid,),
+                ).fetchone()
+                if top and top["m"]:
+                    max_id = max(max_id, int(top["m"]))
+            return items, max_id
+        finally:
+            conn.close()
+
+    def generate():
+        nonlocal since
+        # 首包：对齐游标（不弹历史）
+        _items, since = _fetch(since)
+        yield f"event: ready\ndata: {json.dumps({'ok': True, 'max_id': since}, ensure_ascii=False)}\n\n"
+        idle = 0
+        while True:
+            try:
+                items, max_id = _fetch(since)
+                if items:
+                    since = max_id
+                    idle = 0
+                    payload = {
+                        "ok": True,
+                        "messages": items,
+                        "max_id": max_id,
+                    }
+                    yield f"event: message\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                else:
+                    since = max(since, max_id)
+                    idle += 1
+                    # 心跳，避免代理断开
+                    if idle % 15 == 0:
+                        yield f"event: ping\ndata: {json.dumps({'max_id': since})}\n\n"
+                _time.sleep(0.8)
+            except GeneratorExit:
+                break
+            except Exception:
+                yield f"event: error\ndata: {json.dumps({'ok': False})}\n\n"
+                break
+
+    resp = Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+    return resp
+    # AI-GEN-END
 
 
 @app.post("/api/chat/system-notify")
@@ -4972,6 +5101,9 @@ def todo_decide(user, tid):
     decision = data.get("decision")  # approved | rejected
     if decision not in ("approved", "rejected"):
         return jsonify({"ok": False, "error": "decision 须为 approved/rejected"}), 400
+    # AI-GEN-BEGIN
+    remark = (data.get("remark") or data.get("comment") or "").strip()
+    # AI-GEN-END
     db = get_db()
     row = db.execute("SELECT * FROM todos WHERE id = ?", (tid,)).fetchone()
     if not row:
@@ -4983,6 +5115,7 @@ def todo_decide(user, tid):
 
     now = datetime.now().strftime("%Y-%m-%d")
     app_id = row["application_id"] if "application_id" in row.keys() else None
+    step_order_for_remark = row["step_order"] if "step_order" in row.keys() else None
 
     # 账号申请（原账号绑定）/授权：待办通过 = 确认建议匹配
     # 多级审批（有 application_id）走下方统一链路，不走 grant 直通
@@ -5001,6 +5134,9 @@ def todo_decide(user, tid):
                 "UPDATE todos SET bucket = 'done', status = 'rejected' WHERE id = ?",
                 (tid,),
             )
+            # AI-GEN-BEGIN
+            _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+            # AI-GEN-END
             db.commit()
             return jsonify({"ok": True, "message": "已驳回账号申请"})
         account_id = grant["suggested_account_id"]
@@ -5033,6 +5169,9 @@ def todo_decide(user, tid):
                 ("已绑定", meta["oa_line_id"]),
             )
             _oa_refresh_form_status(db, meta.get("oa_form_id"))
+        # AI-GEN-BEGIN
+        _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+        # AI-GEN-END
         db.commit()
         return jsonify({"ok": True, "message": "已确认账号申请并完成绑定", "provisioned": True})
 
@@ -5052,6 +5191,9 @@ def todo_decide(user, tid):
                 WHERE initiator_id = ? AND todo_type = '账号关闭' AND bucket = 'initiated' AND status = 'open'""",
                 (row["initiator_id"],),
             )
+            # AI-GEN-BEGIN
+            _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+            # AI-GEN-END
             db.commit()
             return jsonify({"ok": True, "message": "已驳回账号关闭"})
         uid = meta.get("leuc_user_id") or row["initiator_id"]
@@ -5075,6 +5217,9 @@ def todo_decide(user, tid):
             "账号已关闭",
             f"{result['system']} / {result['account']} 已按申请关闭登录",
         )
+        # AI-GEN-BEGIN
+        _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+        # AI-GEN-END
         db.commit()
         return jsonify(
             {
@@ -5104,6 +5249,9 @@ def todo_decide(user, tid):
                 ),
             )
             _oa_refresh_form_status(db, meta.get("oa_form_id"))
+        # AI-GEN-BEGIN
+        _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+        # AI-GEN-END
         db.commit()
         return jsonify({"ok": True, "message": "人员核对已处理"})
 
@@ -5122,6 +5270,9 @@ def todo_decide(user, tid):
                     "UPDATE oa_form_lines SET handle_status = 'rejected', remark = ? WHERE id = ?",
                     ("已驳回关闭", meta["oa_line_id"]),
                 )
+            # AI-GEN-BEGIN
+            _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+            # AI-GEN-END
             db.commit()
             return jsonify({"ok": True, "message": "已驳回关闭账号"})
         uid = meta.get("leuc_user_id")
@@ -5153,6 +5304,9 @@ def todo_decide(user, tid):
             "账号已关闭",
             f"系统负责人已关闭您在「{sys_row['name'] if sys_row else '系统'}」的登录账号（OA 离职）。",
         )
+        # AI-GEN-BEGIN
+        _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+        # AI-GEN-END
         db.commit()
         return jsonify({"ok": True, "message": "已关闭该系统账号", "closed": True})
 
@@ -5175,6 +5329,9 @@ def todo_decide(user, tid):
                     "UPDATE oa_form_lines SET handle_status = 'rejected' WHERE form_id = ?",
                     (meta["oa_form_id"],),
                 )
+            # AI-GEN-BEGIN
+            _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+            # AI-GEN-END
             db.commit()
             return jsonify({"ok": True, "message": "已驳回新建人员"})
         name = (meta.get("applicant_name") or "新员工").strip()
@@ -5217,6 +5374,9 @@ def todo_decide(user, tid):
             )
             # 继续为明细发起绑定
             _oa_spawn_bind_for_form(db, meta["oa_form_id"], new_uid, user["id"])
+        # AI-GEN-BEGIN
+        _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+        # AI-GEN-END
         db.commit()
         return jsonify(
             {
@@ -5242,6 +5402,7 @@ def todo_decide(user, tid):
             return jsonify({"ok": False, "error": "申请单不存在"}), 404
         flow_todo_type = row["todo_type"]
         step_order = row["step_order"] or app_row["current_step"]
+        step_order_for_remark = step_order
         # AI-GEN-BEGIN
         # 开通前校验：新建账号须录入账号名（避免先落库再报错）
         if decision == "approved":
@@ -5300,6 +5461,9 @@ def todo_decide(user, tid):
                 WHERE application_id = ? AND bucket = 'initiated'""",
                 (app_id,),
             )
+            # AI-GEN-BEGIN
+            _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+            # AI-GEN-END
             db.commit()
             return jsonify({"ok": True, "message": "已驳回，申请结束"})
 
@@ -5342,6 +5506,9 @@ def todo_decide(user, tid):
                     app_id,
                 ),
             )
+            # AI-GEN-BEGIN
+            _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+            # AI-GEN-END
             db.commit()
             au = db.execute(
                 "SELECT display_name FROM users WHERE id = ?", (nxt["assignee_id"],)
@@ -5380,6 +5547,9 @@ def todo_decide(user, tid):
                 "账号延期已生效",
                 f"已延期 {result['days']} 天，新有效期 {result['new_expire']}",
             )
+            # AI-GEN-BEGIN
+            _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+            # AI-GEN-END
             db.commit()
             return jsonify(
                 {
@@ -5406,6 +5576,9 @@ def todo_decide(user, tid):
                 "账号已关闭",
                 f"{result['system']} / {result['account']} 已按申请关闭登录",
             )
+            # AI-GEN-BEGIN
+            _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+            # AI-GEN-END
             db.commit()
             return jsonify(
                 {
@@ -5423,6 +5596,9 @@ def todo_decide(user, tid):
                 db, app_row, account_id=meta.get("account_id")
             )
             if not result.get("ok"):
+                # AI-GEN-BEGIN
+                _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+                # AI-GEN-END
                 db.commit()
                 return jsonify({"ok": False, "error": result.get("error") or "关闭失败"}), 500
             push_system_message(
@@ -5431,6 +5607,9 @@ def todo_decide(user, tid):
                 "敏感权限已关闭",
                 f"审批已通过：{result['system']}",
             )
+            # AI-GEN-BEGIN
+            _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+            # AI-GEN-END
             db.commit()
             return jsonify(
                 {
@@ -5471,6 +5650,9 @@ def todo_decide(user, tid):
                 "北森离职账号已关闭",
                 f"{result['system']} / {result['account']} 已按北森离职审批关闭",
             )
+            # AI-GEN-BEGIN
+            _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+            # AI-GEN-END
             db.commit()
             return jsonify(
                 {
@@ -5545,6 +5727,9 @@ def todo_decide(user, tid):
                 "UPDATE todos SET meta = ? WHERE id = ?",
                 (json.dumps(meta, ensure_ascii=False), tid),
             )
+            # AI-GEN-BEGIN
+            _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+            # AI-GEN-END
             db.commit()
             return jsonify(
                 {
@@ -5565,6 +5750,9 @@ def todo_decide(user, tid):
             "外部人员申请已通过",
             app_row["title"],
         )
+        # AI-GEN-BEGIN
+        _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+        # AI-GEN-END
         db.commit()
         return jsonify({"ok": True, "message": "外部人员审批完成"})
 
@@ -5600,6 +5788,9 @@ def todo_decide(user, tid):
         except (TypeError, ValueError, json.JSONDecodeError):
             pass
         apply_account_expire_extend(db, target_id, days)
+    # AI-GEN-END
+    # AI-GEN-BEGIN
+    _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
     # AI-GEN-END
     db.commit()
     return jsonify({"ok": True, "message": "已通过" if decision == "approved" else "已驳回"})
@@ -5948,12 +6139,73 @@ def hr_sync_init(user):
         return jsonify({"ok": False, "error": "没有待同步人员"}), 400
     now = datetime.now().strftime("%Y-%m-%d")
     created = []
+    linked = []
     for r in rows:
         dept = db.execute(
             "SELECT id FROM departments WHERE id = ?", (r["dept_id"],)
         ).fetchone()
         if not dept:
             continue
+        # AI-GEN-BEGIN
+        # 部门已落库后，优先挂回已有账号（拼音用户名 / 未绑 leorg），避免 gaojia1 重复人
+        rkeys = r.keys()
+        leorg_emp_id = r["leorg_emp_id"] if "leorg_emp_id" in rkeys else None
+        beisen_user_id = None
+        if "beisen_user_id" in rkeys and r["beisen_user_id"]:
+            beisen_user_id = str(r["beisen_user_id"]).strip() or None
+        emp_stub = {
+            "id": leorg_emp_id,
+            "name": r["display_name"],
+            "emp_no": r["emp_no"] if "emp_no" in rkeys else None,
+            "email": r["email"],
+        }
+        exist = _find_user_for_leorg_emp(
+            db, emp_stub, beisen_user_id, (emp_stub.get("emp_no") or "") or "", r["email"]
+        )
+        if exist:
+            uid = int(exist["id"])
+            if leorg_emp_id is not None:
+                db.execute(
+                    """UPDATE users SET leorg_emp_id = NULL
+                    WHERE leorg_emp_id = ? AND id != ?""",
+                    (int(leorg_emp_id), uid),
+                )
+            db.execute(
+                """UPDATE users SET display_name=?, dept_id=?,
+                    phone=COALESCE(?, phone), email=COALESCE(?, email),
+                    itcode=COALESCE(?, itcode),
+                    leorg_emp_id=COALESCE(?, leorg_emp_id),
+                    beisen_user_id=COALESCE(?, beisen_user_id)
+                WHERE id=?""",
+                (
+                    r["display_name"],
+                    r["dept_id"],
+                    r["phone"],
+                    r["email"],
+                    (r["emp_no"] if "emp_no" in rkeys and r["emp_no"] else None),
+                    int(leorg_emp_id) if leorg_emp_id is not None else None,
+                    beisen_user_id,
+                    uid,
+                ),
+            )
+            db.execute(
+                """UPDATE hr_sync_roster
+                SET status = 'synced', created_user_id = ?, synced_at = ?, dept_id = ?
+                WHERE id = ?""",
+                (uid, now, r["dept_id"], r["id"]),
+            )
+            linked.append(
+                {
+                    "roster_id": r["id"],
+                    "user_id": uid,
+                    "display_name": r["display_name"],
+                    "username": exist["username"],
+                    "dept_id": r["dept_id"],
+                    "linked": True,
+                }
+            )
+            continue
+        # AI-GEN-END
         pinyin_base = name_to_pinyin(r["display_name"])
         want = (username_map.get(str(r["id"])) or "").strip() or alloc_username(
             db, r["display_name"]
@@ -5964,11 +6216,6 @@ def hr_sync_init(user):
                 {"ok": False, "error": f"{r['display_name']}：{uname_or_err}"}
             ), 400
         username = uname_or_err
-        rkeys = r.keys()
-        leorg_emp_id = r["leorg_emp_id"] if "leorg_emp_id" in rkeys else None
-        beisen_user_id = None
-        if "beisen_user_id" in rkeys and r["beisen_user_id"]:
-            beisen_user_id = str(r["beisen_user_id"]).strip() or None
         itcode = (r["emp_no"] if "emp_no" in rkeys and r["emp_no"] else None) or username
         acct_expire = default_account_expire(90)
         cur = db.execute(
@@ -6024,10 +6271,14 @@ def hr_sync_init(user):
     return jsonify(
         {
             "ok": True,
-            "count": len(created),
+            "count": len(created) + len(linked),
             "created": created,
+            "linked": linked,
             "owners": owner_stats,
-            "message": f"已确认创建 {len(created)} 人（内部·直接创建，初始密码 123456）",
+            "message": (
+                f"已处理 {len(created) + len(linked)} 人"
+                f"（新建 {len(created)} / 挂回已有账号 {len(linked)}，初始密码 123456）"
+            ),
         }
     )
     # AI-GEN-END
@@ -6174,6 +6425,10 @@ def hr_sync_pull(user):
         # 直接落库（兼容旧调用）
         org_stats = _sync_leorg_organizations(db, orgs)
         emp_stats = _sync_leorg_employees(db, emps)
+        # AI-GEN-BEGIN
+        realign = _realign_users_dept_from_leorg(db, emps)
+        emp_stats["realign"] = realign
+        # AI-GEN-END
         if mode == "incr":
             emp_stats["change_rows"] = change_rows
         owner_stats = _resolve_dept_owners_from_leorg(db)
@@ -6250,6 +6505,18 @@ def hr_sync_apply(user):
         return jsonify({"ok": False, "error": "未选择任何变更"}), 400
 
     applied = _apply_leorg_sync_changes(db, selected)
+    # AI-GEN-BEGIN
+    # 部门先于人员已在 _apply 内保证；再用 payload 重挂部门（修复误挂根部门）
+    stubs = []
+    for c in selected:
+        p = c.get("payload") or {}
+        eid = p.get("leorg_emp_id")
+        oid = p.get("org_leorg_id")
+        if eid is None or oid in (None, ""):
+            continue
+        stubs.append({"id": int(eid), "org_id": int(oid), "emp_status": 1})
+    realign = _realign_users_dept_from_leorg(db, stubs) if stubs else {}
+    # AI-GEN-END
     owner_stats = _resolve_dept_owners_from_leorg(db)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     org_mapped = db.execute(
@@ -6273,8 +6540,14 @@ def hr_sync_apply(user):
                 f"已接受 {sum(applied.values())} 条变更"
                 f"（部门 {applied.get('org', 0)} / 人员 {applied.get('user', 0)}"
                 f" / 花名册 {applied.get('roster', 0)} / 关闭 {applied.get('close', 0)}）"
+                + (
+                    f"；已纠正部门 {realign.get('users_fixed', 0)} 人"
+                    if realign
+                    else ""
+                )
             ),
             "applied": applied,
+            "realign": realign,
             "owners": owner_stats,
             "sync_state": _leorg_sync_state(db),
         }
@@ -6300,11 +6573,10 @@ def hr_org_clear(user):
         {
             "ok": True,
             "message": (
-                f"已清空：部门 {stats['depts_deleted']}，"
+                f"已清空：部门 {stats['depts_deleted']}（含根部门，未重建），"
                 f"员工 {stats['users_deleted']}（保留 {stats['users_kept']}），"
                 f"待办 {stats.get('todos_deleted', 0)}，"
-                f"申请 {stats.get('applications_deleted', 0)}，"
-                f"根部门 id={stats['root_id']}"
+                f"申请 {stats.get('applications_deleted', 0)}"
             ),
             **stats,
         }
@@ -6373,7 +6645,7 @@ def _save_leorg_sync_state(db, *, mode, last_change_id, org_mapped, emp_touched,
 
 
 def _clear_my_organization(db):
-    """清空部门与员工，保留非 employee 管理账号，重建空根部门；清空全部审批数据。"""
+    """清空部门与员工，保留非 employee 管理账号；不重建根部门；清空全部审批数据。"""
     # AI-GEN-BEGIN
     keep_usernames = {SYSTEM_ADMIN_USERNAME}  # 系统超管始终保留且不挂组织
     keep_roles = {"super_admin", "hr_specialist", "finance", "system_owner"}
@@ -6451,41 +6723,13 @@ def _clear_my_organization(db):
             pass
         db.execute("DELETE FROM users WHERE id = ?", (uid,))
 
-    cur = db.execute(
-        """INSERT INTO departments
-        (name, parent_id, owner_user_id, leorg_id, sort_order)
-        VALUES (?,?,NULL,NULL,0)""",
-        ("来酷科技", None),
-    )
-    root_id = int(cur.lastrowid)
-    if keep_ids:
-        db.execute(
-            f"UPDATE users SET dept_id = ? WHERE id IN ({','.join('?' * len(keep_ids))})",
-            (root_id, *keep_ids),
-        )
-    # 系统超管不挂部门树
-    db.execute(
-        "UPDATE users SET dept_id = NULL WHERE username = ?",
-        (SYSTEM_ADMIN_USERNAME,),
-    )
-    # 根部门负责人：优先非系统超管的 super_admin / hr
-    owner = db.execute(
-        """SELECT id FROM users
-        WHERE role IN ('super_admin','hr_specialist') AND username != ?
-        ORDER BY CASE role WHEN 'hr_specialist' THEN 0 ELSE 1 END, id LIMIT 1""",
-        (SYSTEM_ADMIN_USERNAME,),
-    ).fetchone()
-    if owner:
-        db.execute(
-            "UPDATE departments SET owner_user_id = ? WHERE id = ?",
-            (int(owner["id"]), root_id),
-        )
+    # 不再重建「来酷科技」根部门；保留账号均不挂部门，后续同步或手动添加再建
 
     return {
         "depts_deleted": depts_deleted,
         "users_deleted": len(drop_ids),
         "users_kept": len(keep_ids),
-        "root_id": root_id,
+        "root_id": None,
         "kept_usernames": [r["username"] for r in keep_rows],
         "todos_deleted": todos_n,
         "applications_deleted": apps_n,
@@ -6561,6 +6805,42 @@ def _leorg_dept_maps(db):
         for r in db.execute("SELECT * FROM departments").fetchall()
     }
     return leorg_to_local, local_rows
+
+
+# AI-GEN-BEGIN
+def _fallback_root_dept_id(db):
+    row = db.execute(
+        "SELECT id FROM departments WHERE parent_id IS NULL ORDER BY id LIMIT 1"
+    ).fetchone()
+    return int(row["id"]) if row else None
+
+
+def _resolve_emp_dept_id(leorg_to_local, org_leorg, fallback_dept_id):
+    """LeOrg org_id → 本地 dept_id；未映射时才用 fallback（可为 None）。"""
+    if org_leorg is None or org_leorg == "":
+        return fallback_dept_id
+    try:
+        lid = int(org_leorg)
+    except (TypeError, ValueError):
+        return fallback_dept_id
+    return leorg_to_local.get(lid) or fallback_dept_id
+
+
+def _remap_payload_dept(payload, leorg_to_local, fallback_dept_id):
+    """apply 时按最新部门映射重算 payload/fields 中的 dept_id。"""
+    if not payload:
+        return
+    org_leorg = payload.get("org_leorg_id")
+    if org_leorg is None or org_leorg == "":
+        return
+    new_dept = _resolve_emp_dept_id(leorg_to_local, org_leorg, fallback_dept_id)
+    if new_dept is None:
+        return
+    payload["dept_id"] = int(new_dept)
+    for f in payload.get("fields") or []:
+        if f.get("field") == "dept_id":
+            f["new"] = int(new_dept)
+# AI-GEN-END
 
 
 def _diff_leorg_organizations(db, orgs):
@@ -6695,12 +6975,55 @@ def _diff_leorg_organizations(db, orgs):
 
 
 def _find_user_for_leorg_emp(db, e, beisen_user_id, emp_no, email):
+    """匹配本地用户：优先已绑定 leorg；其次北森/工号/邮箱；再按拼音用户名挂回保留账号。"""
+    # AI-GEN-BEGIN
     leorg_emp_id = e.get("id")
+    name = (e.get("name") or "").strip()
     user = None
+
+    def _prefer_bare(candidates):
+        """同组时优先未绑 leorg 的保留账号（gaojia 优于 gaojia1）。"""
+        rows = [dict(r) if not isinstance(r, dict) else r for r in candidates if r]
+        if not rows:
+            return None
+        bare = [r for r in rows if r.get("leorg_emp_id") in (None, "")]
+        pool = bare or rows
+        # 用户名恰好等于姓名拼音的优先
+        py = name_to_pinyin(name) if name else ""
+        if py:
+            exact = [r for r in pool if (r.get("username") or "") == py]
+            if exact:
+                return exact[0]
+        # 管理角色优先于同步建出的 employee
+        for role in (
+            "super_admin",
+            "system_owner",
+            "hr_specialist",
+            "finance",
+            "dept_owner",
+        ):
+            hit = [r for r in pool if (r.get("role") or "") == role]
+            if hit:
+                return hit[0]
+        return pool[0]
+
     if leorg_emp_id is not None:
-        user = db.execute(
+        rows = db.execute(
             "SELECT * FROM users WHERE leorg_emp_id = ?", (int(leorg_emp_id),)
-        ).fetchone()
+        ).fetchall()
+        # 若已有 gaojia1 绑了 leorg，同时存在未绑的 gaojia，仍优先 gaojia
+        if name:
+            py = name_to_pinyin(name)
+            if py:
+                bare = db.execute(
+                    """SELECT * FROM users
+                    WHERE (username = ? OR itcode = ?) AND leorg_emp_id IS NULL""",
+                    (py, py),
+                ).fetchall()
+                if bare:
+                    user = _prefer_bare(list(bare) + list(rows))
+        if not user and rows:
+            user = rows[0]
     if not user and beisen_user_id:
         user = db.execute(
             "SELECT * FROM users WHERE beisen_user_id = ?", (beisen_user_id,)
@@ -6723,16 +7046,36 @@ def _find_user_for_leorg_emp(db, e, beisen_user_id, emp_no, email):
         user = db.execute(
             "SELECT * FROM users WHERE lower(email) = lower(?)", (email,)
         ).fetchone()
+    # 拼音用户名：清空部门后保留的演示账号（gaojia / wuhongliang / …）
+    if not user and name:
+        py = name_to_pinyin(name)
+        if py:
+            rows = db.execute(
+                "SELECT * FROM users WHERE username = ? OR itcode = ?",
+                (py, py),
+            ).fetchall()
+            user = _prefer_bare(rows)
+    # 唯一同名且未绑 leorg
+    if not user and name:
+        rows = db.execute(
+            "SELECT * FROM users WHERE display_name = ? AND leorg_emp_id IS NULL",
+            (name,),
+        ).fetchall()
+        if len(rows) == 1:
+            user = rows[0]
     return user
+    # AI-GEN-END
 
 
-def _diff_leorg_employees(db, emps):
-    """对比 LeOrg 人员与本地用户/花名册。"""
-    leorg_to_local, _ = _leorg_dept_maps(db)
-    fallback = db.execute(
-        "SELECT id FROM departments WHERE parent_id IS NULL ORDER BY id LIMIT 1"
-    ).fetchone()
-    fallback_dept_id = int(fallback["id"]) if fallback else 1
+def _diff_leorg_employees(db, emps, leorg_to_local=None):
+    """对比 LeOrg 人员与本地用户/花名册。
+
+    leorg_to_local：可选投影映射（含即将新增的部门占位时仍可能不全）；
+    真正可靠映射在 sync-apply 落库后按 org_leorg_id 重算。
+    """
+    if leorg_to_local is None:
+        leorg_to_local, _ = _leorg_dept_maps(db)
+    fallback_dept_id = _fallback_root_dept_id(db) or 1
     changes = []
 
     def _beisen_id_of(row):
@@ -6754,9 +7097,13 @@ def _diff_leorg_employees(db, emps):
         leorg_emp_id = e.get("id")
         beisen_user_id = _beisen_id_of(e)
         org_leorg = e.get("org_id")
-        dept_id = (
-            leorg_to_local.get(int(org_leorg)) if org_leorg is not None else None
-        ) or fallback_dept_id
+        try:
+            org_leorg_id = int(org_leorg) if org_leorg not in (None, "") else None
+        except (TypeError, ValueError):
+            org_leorg_id = None
+        # AI-GEN-BEGIN
+        dept_id = _resolve_emp_dept_id(leorg_to_local, org_leorg_id, fallback_dept_id)
+        # AI-GEN-END
         if not name:
             continue
 
@@ -6779,8 +7126,10 @@ def _diff_leorg_employees(db, emps):
                 )
             continue
 
+        # AI-GEN-BEGIN
         payload_base = {
             "leorg_emp_id": int(leorg_emp_id) if leorg_emp_id is not None else None,
+            "org_leorg_id": org_leorg_id,
             "display_name": name,
             "dept_id": dept_id,
             "phone": phone,
@@ -6788,6 +7137,7 @@ def _diff_leorg_employees(db, emps):
             "emp_no": emp_no or None,
             "beisen_user_id": beisen_user_id,
         }
+        # AI-GEN-END
 
         if user:
             fields = []
@@ -6974,8 +7324,13 @@ def _apply_leorg_sync_changes(db, selected):
             (parent_local, int(local_id)),
         )
 
-    # 刷新部门映射后再处理人员
+    # AI-GEN-BEGIN
+    # 部门落库后再映射人员：预览时草稿里的 dept_id 常因空树落成根部门
     leorg_to_local, _ = _leorg_dept_maps(db)
+    fallback_dept_id = _fallback_root_dept_id(db) or 1
+    for c in other:
+        _remap_payload_dept(c.get("payload") or {}, leorg_to_local, fallback_dept_id)
+    # AI-GEN-END
 
     for c in other:
         p = c.get("payload") or {}
@@ -7184,6 +7539,47 @@ def _resolve_dept_owners_from_leorg(db):
     # AI-GEN-END
 
 
+# AI-GEN-BEGIN
+def _realign_users_dept_from_leorg(db, emps):
+    """按 LeOrg org_id 重挂本地用户/花名册部门（修复预览空树误挂根部门）。"""
+    leorg_to_local, _ = _leorg_dept_maps(db)
+    fixed_users = 0
+    fixed_roster = 0
+    unmapped = 0
+    for e in emps:
+        if e.get("emp_status") == 0:
+            continue
+        leorg_emp_id = e.get("id")
+        if leorg_emp_id is None:
+            continue
+        dept_id = _resolve_emp_dept_id(leorg_to_local, e.get("org_id"), None)
+        if not dept_id:
+            unmapped += 1
+            continue
+        dept_id = int(dept_id)
+        eid = int(leorg_emp_id)
+        u = db.execute(
+            "SELECT id, dept_id FROM users WHERE leorg_emp_id = ?", (eid,)
+        ).fetchone()
+        if u and int(u["dept_id"] or 0) != dept_id:
+            db.execute("UPDATE users SET dept_id = ? WHERE id = ?", (dept_id, u["id"]))
+            fixed_users += 1
+        r = db.execute(
+            "SELECT id, dept_id FROM hr_sync_roster WHERE leorg_emp_id = ?", (eid,)
+        ).fetchone()
+        if r and int(r["dept_id"] or 0) != dept_id:
+            db.execute(
+                "UPDATE hr_sync_roster SET dept_id = ? WHERE id = ?", (dept_id, r["id"])
+            )
+            fixed_roster += 1
+    return {
+        "users_fixed": fixed_users,
+        "roster_fixed": fixed_roster,
+        "unmapped": unmapped,
+    }
+# AI-GEN-END
+
+
 def _sync_leorg_employees(db, emps):
     """幂等写入：已有用户按 leorg_emp_id/工号/邮箱/北森ID更新；否则 upsert 花名册。"""
     # AI-GEN-BEGIN
@@ -7224,11 +7620,9 @@ def _sync_leorg_employees(db, emps):
         leorg_emp_id = e.get("id")
         beisen_user_id = _beisen_id_of(e)
         org_leorg = e.get("org_id")
-        dept_id = (
-            leorg_to_local.get(int(org_leorg))
-            if org_leorg is not None
-            else None
-        ) or fallback_dept_id
+        # AI-GEN-BEGIN
+        dept_id = _resolve_emp_dept_id(leorg_to_local, org_leorg, fallback_dept_id)
+        # AI-GEN-END
         if not name:
             skipped += 1
             continue
@@ -7244,35 +7638,28 @@ def _sync_leorg_employees(db, emps):
             skipped += 1
             continue
 
-        user = None
-        if leorg_emp_id is not None:
-            user = db.execute(
-                "SELECT id FROM users WHERE leorg_emp_id = ?",
-                (int(leorg_emp_id),),
-            ).fetchone()
-        if not user and beisen_user_id:
-            user = db.execute(
-                "SELECT id FROM users WHERE beisen_user_id = ?",
-                (beisen_user_id,),
-            ).fetchone()
-        if not user and emp_no:
-            for c in dict.fromkeys(
-                [emp_no, emp_no.lstrip("0") or emp_no, f"e{emp_no}", f"e{emp_no.lstrip('0') or emp_no}"]
-            ):
-                user = db.execute(
-                    "SELECT id FROM users WHERE itcode = ? OR username = ?",
-                    (c, c),
-                ).fetchone()
-                if user:
-                    break
-        if not user and email:
-            user = db.execute(
-                "SELECT id FROM users WHERE lower(email) = lower(?)", (email,)
-            ).fetchone()
+        # AI-GEN-BEGIN
+        user = _find_user_for_leorg_emp(db, e, beisen_user_id, emp_no, email)
 
         if user:
-            sets = ["display_name = ?", "dept_id = ?"]
-            params: list = [name, dept_id]
+            uid = int(user["id"])
+            if leorg_emp_id is not None:
+                db.execute(
+                    """UPDATE users SET leorg_emp_id = NULL
+                    WHERE leorg_emp_id = ? AND id != ?""",
+                    (int(leorg_emp_id), uid),
+                )
+            sets = ["dept_id = ?"]
+            params: list = [dept_id]
+            # 管理/演示账号保留本地显示名；普通员工跟 LeOrg
+            role = (user["role"] if not isinstance(user, dict) else user.get("role")) or ""
+            if role in (
+                "employee",
+                "employee_a",
+                "employee_b",
+            ) or not role:
+                sets.insert(0, "display_name = ?")
+                params.insert(0, name)
             if email:
                 sets.append("email = ?")
                 params.append(email)
@@ -7289,12 +7676,29 @@ def _sync_leorg_employees(db, emps):
                 sets.append("beisen_user_id = ?")
                 params.append(beisen_user_id)
                 beisen_filled += 1
-            params.append(int(user["id"]))
+            params.append(uid)
             db.execute(
                 f"UPDATE users SET {', '.join(sets)} WHERE id = ?",
                 params,
             )
             users_updated += 1
+            if leorg_emp_id is not None:
+                db.execute(
+                    """UPDATE hr_sync_roster
+                    SET status='synced', created_user_id=?, dept_id=?,
+                        display_name=?, email=?, emp_no=?, beisen_user_id=?, synced_at=?
+                    WHERE leorg_emp_id=?""",
+                    (
+                        uid,
+                        dept_id,
+                        name,
+                        email,
+                        emp_no or None,
+                        beisen_user_id,
+                        now,
+                        int(leorg_emp_id),
+                    ),
+                )
             continue
 
         exists = None
@@ -7331,7 +7735,7 @@ def _sync_leorg_employees(db, emps):
             roster_updated += 1
             continue
 
-        # 已确认创建过的花名册不再重复插入
+        # 已确认创建过的花名册：纠正部门，不再重复插入
         if leorg_emp_id is not None:
             done = db.execute(
                 """SELECT id FROM hr_sync_roster
@@ -7339,6 +7743,10 @@ def _sync_leorg_employees(db, emps):
                 (int(leorg_emp_id),),
             ).fetchone()
             if done:
+                db.execute(
+                    "UPDATE hr_sync_roster SET dept_id = ? WHERE id = ?",
+                    (dept_id, int(done["id"])),
+                )
                 skipped += 1
                 continue
 
@@ -7358,6 +7766,7 @@ def _sync_leorg_employees(db, emps):
             ),
         )
         roster_added += 1
+        # AI-GEN-END
 
     return {
         "roster_added": roster_added,
@@ -11058,7 +11467,7 @@ def main():
     print("管理账号: admin / sunli / zhangcai / zhaomin / liufang / huangwei  密码 123456")
     # AI-GEN-BEGIN
     # debug 热重载易把后台进程弄挂（Connection refused）；本地联调默认关 reloader
-    app.run(host="127.0.0.1", port=5055, debug=True, use_reloader=False)
+    app.run(host="127.0.0.1", port=5055, debug=True, use_reloader=False, threaded=True)
     # AI-GEN-END
 
 

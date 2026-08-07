@@ -840,6 +840,20 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   </div>
 </div></div>
 <!-- AI-GEN-END -->
+<!-- AI-GEN-BEGIN -->
+<div class="mask" id="m-decide"><div class="modal modal-sm">
+  <h3 id="decide-title">确认</h3>
+  <div class="note" id="decide-hint" style="margin-bottom:12px">可填写操作备注，将显示在流程详情中。</div>
+  <div class="field"><label>备注（可选）</label>
+    <textarea id="decide-remark" rows="3" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit"
+      placeholder="通过或驳回时可填写，详情中可见"></textarea>
+  </div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-decide');state._decidePending=null">取消</button>
+    <button class="btn btn-pri" style="width:auto" id="decide-ok" onclick="confirmDecideTodo()">确认</button>
+  </div>
+</div></div>
+<!-- AI-GEN-END -->
 <div class="mask" id="m-perm"><div class="modal">
   <h3 id="perm-title">分系统权限</h3>
   <div id="perm-body"></div>
@@ -1191,6 +1205,14 @@ async function renderMain() {
             <b>${h.dept_path || '<span class="pill p-gray">未分配部门</span>'}</b></div>
           <div class="kv"><span class="lab">本人</span>
             <b>${u.display_name||'-'}（${u.username||'-'}）</b></div>
+          <!-- AI-GEN-BEGIN -->
+          <div class="kv"><span class="lab">北森用户ID</span>
+            <b>${u.beisen_user_id?`<code title="北森 userID，对应 SSO 唯一标识">${u.beisen_user_id}</code>`:'<span class="pill p-gray">未同步</span>'}</b></div>
+          <div class="kv"><span class="lab">工号</span>
+            <b>${u.itcode||'<span class="pill p-gray">—</span>'}</b></div>
+          <div class="kv"><span class="lab">LeOrg 员工ID</span>
+            <b>${u.leorg_emp_id!=null&&u.leorg_emp_id!==''?`<code title="LeOrg employee.id，部门同步主匹配键">${u.leorg_emp_id}</code>`:'<span class="pill p-gray">未同步</span>'}</b></div>
+          <!-- AI-GEN-END -->
           ${h.org_tree && h.org_tree.length ? `
           <div class="org-tree home-org-tree" style="max-height:180px;border:0;padding:0;background:transparent;margin-top:8px">
             ${renderHomeOrgTree(h.org_tree)}
@@ -2153,7 +2175,10 @@ async function renderOrg(el) {
   state.orgTab = 'manage';
   ensureOrgCollapsedInit(data.tree || []);
   expandOrgAncestors(data.tree || [], deptId);
-  const canManage = !!data.can_manage;
+  // AI-GEN-BEGIN
+  // 空组织时后端 can_manage 可能为 false；超管/人事仍显示同步与添加
+  const canManage = !!data.can_manage || canAllOrg;
+  // AI-GEN-END
   const mode = canManage
     ? (canAllOrg ? '<span class="pill p-blue">全部可管</span>' : '<span class="pill p-orange">可管理下级</span>')
     : '<span class="pill p-gray">只读查询 · 即时消息</span>';
@@ -2899,15 +2924,21 @@ async function decideTodo(id, decision, extra){
   extra = extra || {};
   // 列表直接点通过/驳回：先弹备注；已带 remark / skipRemarkPrompt 则直提
   if (!extra.skipRemarkPrompt && !('remark' in extra)) {
-    state._decidePending = { id, decision, extra };
+    const titleEl = document.getElementById('decide-title');
+    const hintEl = document.getElementById('decide-hint');
+    const remarkEl = document.getElementById('decide-remark');
     const okBtn = document.getElementById('decide-ok');
-    document.getElementById('decide-title').textContent =
-      decision === 'approved' ? '通过' : '驳回';
-    document.getElementById('decide-hint').textContent =
+    if (!titleEl || !hintEl || !remarkEl || !document.getElementById('m-decide')) {
+      // 弹窗缺失时降级直提，避免按钮「点了没反应」
+      return submitDecideTodo(id, decision, { ...extra, remark: '', skipRemarkPrompt: true });
+    }
+    state._decidePending = { id, decision, extra };
+    titleEl.textContent = decision === 'approved' ? '通过' : '驳回';
+    hintEl.textContent =
       decision === 'approved'
         ? '确认通过该待办。可填写备注，将显示在流程详情中。'
         : '确认驳回该待办。建议填写原因，将显示在流程详情中。';
-    document.getElementById('decide-remark').value = '';
+    remarkEl.value = '';
     if (okBtn) {
       okBtn.textContent = decision === 'approved' ? '确认通过' : '确认驳回';
       okBtn.className = decision === 'approved' ? 'btn btn-pri' : 'btn btn-line';
@@ -2916,7 +2947,7 @@ async function decideTodo(id, decision, extra){
         : 'width:auto;color:#b42318;border-color:#f3b4b0';
     }
     openModal('m-decide');
-    setTimeout(() => document.getElementById('decide-remark')?.focus(), 40);
+    setTimeout(() => remarkEl.focus(), 40);
     return;
   }
   return submitDecideTodo(id, decision, extra);
@@ -5865,7 +5896,14 @@ async function startOidc(clientId){
 }
 
 async function apiLogout(){
+  // AI-GEN-BEGIN
   if (state._chatPollTimer) clearInterval(state._chatPollTimer);
+  state._chatPollTimer = null;
+  if (state._chatEs) {
+    try { state._chatEs.close(); } catch (e) {}
+    state._chatEs = null;
+  }
+  // AI-GEN-END
   document.getElementById('chat-fab-wrap').style.display = 'none';
   document.getElementById('chat-panel')?.classList.remove('show');
   document.getElementById('notify-stack').innerHTML = '';
@@ -6005,6 +6043,11 @@ async function maybeOpenBeisenChoose(){
     }
   }
 })();
+// AI-GEN-BEGIN
+// 浏览器要求用户手势后才能播提示音：首次点击/按键解锁
+['pointerdown', 'keydown'].forEach((ev) => {
+  document.addEventListener(ev, () => unlockNotifyAudio(), { once: true, capture: true });
+});
 // AI-GEN-END
 </script>
 <!-- AI-GEN-END -->

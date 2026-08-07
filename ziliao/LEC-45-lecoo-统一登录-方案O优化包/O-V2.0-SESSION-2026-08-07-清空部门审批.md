@@ -7,10 +7,10 @@
 ## 改动
 
 - `_clear_my_organization`：除部门/员工外，全局清空 `todos` / `applications` / `application_steps` / `grant_applications` / `messages` / 同步草稿
-- 保留角色：`super_admin` / `hr_specialist` / `finance` / `system_owner` + `admin`；重建根部门「来酷科技」
+- 保留角色：`super_admin` / `hr_specialist` / `finance` / `system_owner` + `admin`
+- **后续变更**：不再重建根部门「来酷科技」，见 `O-V2.0-SESSION-2026-08-07-清空来酷科技根部门.md`
 
-## 执行结果
+## 执行结果（初版曾重建根）
 
-- 部门 275 → 1（来酷科技）
-- 员工删除 938，保留 5：admin、gaojia、wuhongliang、changmingming、liyang
-- 待办 42、申请 13 已清零
+- 部门曾清到仅「来酷科技」；现已改为完全空树
+- 保留管理账号：admin、gaojia、wuhongliang、changmingming、liyang
