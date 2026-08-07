@@ -64,12 +64,15 @@ from db import (
     BUILTIN_ROLE_CODES,
     DEFAULT_ROLE_CAPS,
     DEFAULT_ROLE_MENUS,
+    EMPLOYEE_ROLE_CODES,
     LEUC_SYSTEM_CODE,
     ROLE_LABELS,
     ROLE_MENUS,
+    SYSTEM_ROLE_EXCLUDE,
     alloc_username,
     connect,
     ensure_roles_seeded,
+    ensure_user_roles_migrated,
     ensure_username_available,
     init_db,
     migrate_schema,
@@ -77,6 +80,8 @@ from db import (
     normalize_username,
     preview_unique_usernames,
     role_label_of,
+    sync_primary_role,
+    user_roles_of,
 )
 
 # AI-GEN-BEGIN
@@ -385,22 +390,40 @@ def ensure_db():
         xu = conn.execute(
             "SELECT id FROM users WHERE username = 'xuhaohao' LIMIT 1"
         ).fetchone()
+        # AI-GEN-BEGIN
+        def _demo_set_role(uid, role_code):
+            """演示账号：写主角色 + user_roles（幂等补种）。"""
+            if not uid:
+                return
+            conn.execute("UPDATE users SET role = ? WHERE id = ?", (role_code, uid))
+            try:
+                if role_code in EMPLOYEE_ROLE_CODES:
+                    conn.execute("DELETE FROM user_roles WHERE user_id=?", (uid,))
+                    conn.execute(
+                        "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?,?)",
+                        (uid, role_code),
+                    )
+                else:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?,?)",
+                        (uid, role_code),
+                    )
+                    conn.execute(
+                        "DELETE FROM user_roles WHERE user_id=? AND role IN ('employee','employee_a','employee_b')",
+                        (uid,),
+                    )
+                    sync_primary_role(conn, uid)
+            except Exception:
+                pass
+
         if maning:
-            conn.execute(
-                "UPDATE users SET role = 'dept_owner' WHERE id = ?", (maning["id"],)
-            )
+            _demo_set_role(maning["id"], "dept_owner")
         if wujinzhi:
-            conn.execute(
-                "UPDATE users SET role = 'dept_owner' WHERE id = ?", (wujinzhi["id"],)
-            )
+            _demo_set_role(wujinzhi["id"], "dept_owner")
         if xu:
-            conn.execute(
-                "UPDATE users SET role = 'employee' WHERE id = ?", (xu["id"],)
-            )
+            _demo_set_role(xu["id"], "employee")
         if gaojia:
-            conn.execute(
-                "UPDATE users SET role = 'system_owner' WHERE id = ?", (gaojia["id"],)
-            )
+            _demo_set_role(gaojia["id"], "system_owner")
             erp = conn.execute(
                 "SELECT id FROM systems WHERE code = 'laiku_erp' LIMIT 1"
             ).fetchone()
@@ -417,14 +440,13 @@ def ensure_db():
                     (erp["id"], gaojia["id"]),
                 )
         if chang:
-            conn.execute(
-                "UPDATE users SET role = 'finance' WHERE id = ?", (chang["id"],)
-            )
+            _demo_set_role(chang["id"], "finance")
             conn.execute(
                 """UPDATE approval_chain_steps SET assignee_user_id = ?
                 WHERE step_key = 'finance' AND flow_code IN ('sensitive','external')""",
                 (chang["id"],),
             )
+        # AI-GEN-END
         # 按钮：设置部门负责人（已有库补种）
         for role in ("super_admin", "hr_specialist", "dept_owner"):
             conn.execute(
@@ -434,6 +456,21 @@ def ensure_db():
             )
         # 北森消息菜单（oa_forms）
         ensure_roles_seeded(conn)
+        # AI-GEN-BEGIN
+        # OA 改为需账号绑定，不再全员自动开通；清掉历史「全员登录自动开通」假绑定
+        conn.execute(
+            "UPDATE systems SET access_mode = 'apply' WHERE code = 'oa' AND access_mode = 'open'"
+        )
+        oa_row = conn.execute(
+            "SELECT id FROM systems WHERE code = 'oa' LIMIT 1"
+        ).fetchone()
+        if oa_row:
+            conn.execute(
+                """DELETE FROM user_system_accounts
+                WHERE system_id = ? AND account_label = '全员登录自动开通'""",
+                (oa_row["id"],),
+            )
+        # AI-GEN-END
         # AI-GEN-END
         ensure_system_admin(conn)
         conn.commit()
@@ -493,30 +530,42 @@ def row_user(row):
     # AI-GEN-BEGIN
     role = row["role"]
     menus, caps = [], []
+    role_codes = []
     if db is not None:
         try:
-            menus = [
-                r["menu_id"]
+            ensure_user_roles_migrated(db)
+            role_codes = user_roles_of(db, row["id"])
+        except Exception:
+            role_codes = [role] if role else ["employee"]
+        if not role_codes:
+            role_codes = [role] if role else ["employee"]
+        menu_set, cap_set = set(), set()
+        try:
+            for rc in role_codes:
                 for r in db.execute(
-                    "SELECT menu_id FROM role_menus WHERE role = ? ORDER BY menu_id",
-                    (role,),
-                ).fetchall()
-            ]
-            caps = [
-                r["cap_id"]
+                    "SELECT menu_id FROM role_menus WHERE role = ?", (rc,)
+                ).fetchall():
+                    menu_set.add(r["menu_id"])
                 for r in db.execute(
-                    "SELECT cap_id FROM role_caps WHERE role = ? ORDER BY cap_id",
-                    (role,),
-                ).fetchall()
-            ]
+                    "SELECT cap_id FROM role_caps WHERE role = ?", (rc,)
+                ).fetchall():
+                    cap_set.add(r["cap_id"])
+            menus = sorted(menu_set)
+            caps = sorted(cap_set)
         except Exception:
             menus, caps = [], []
+    else:
+        role_codes = [role] if role else ["employee"]
     if not menus:
-        menus = list(DEFAULT_ROLE_MENUS.get(role, ROLE_MENUS.get(role, [])))
+        for rc in role_codes:
+            menus.extend(DEFAULT_ROLE_MENUS.get(rc, ROLE_MENUS.get(rc, [])))
+        menus = list(dict.fromkeys(menus))
     if not caps:
-        caps = list(DEFAULT_ROLE_CAPS.get(role, []))
+        for rc in role_codes:
+            caps.extend(DEFAULT_ROLE_CAPS.get(rc, []))
+        caps = list(dict.fromkeys(caps))
     # 系统超管：始终全菜单 + 全按钮
-    if (row["username"] or "") == SYSTEM_ADMIN_USERNAME or role == "super_admin":
+    if (row["username"] or "") == SYSTEM_ADMIN_USERNAME or "super_admin" in role_codes:
         menus = [m["id"] for m in ALL_MENUS]
         caps = [b["id"] for b in ALL_BUTTONS]
     if ("can_proxy_apply" in keys and row["can_proxy_apply"]) and "proxy_apply" not in caps:
@@ -525,11 +574,18 @@ def row_user(row):
         "can_set_account_expire" in keys and row["can_set_account_expire"]
     ) and "set_account_expire" not in caps:
         caps.append("set_account_expire")
+    role_labels = []
+    if db is not None:
+        role_labels = [
+            {"code": c, "label": role_label_of(db, c)} for c in role_codes
+        ]
     return {
         "id": row["id"],
         "username": row["username"],
         "display_name": row["display_name"],
         "role": row["role"],
+        "roles": role_codes,
+        "role_labels": role_labels,
         "role_label": role_label_of(db, row["role"]) if db is not None else ROLE_LABELS.get(row["role"], row["role"]),
         "dept_id": row["dept_id"],
         "phone": row["phone"],
@@ -570,6 +626,20 @@ def user_has_cap(user, cap_id: str) -> bool:
     # AI-GEN-END
 
 
+# AI-GEN-BEGIN
+def user_has_role(user, *codes) -> bool:
+    """用户是否拥有任一角色（多角色并集；兼容仅有主角色）。"""
+    if not user or not codes:
+        return False
+    have = user.get("roles")
+    if not have:
+        r = user.get("role")
+        have = [r] if r else []
+    want = set(codes)
+    return any(c in want for c in have)
+# AI-GEN-END
+
+
 def current_user():
     uid = session.get("user_id")
     if not uid:
@@ -591,18 +661,20 @@ def login_required(fn):
 
 def require_dept_manage(user):
     """是否具备任一部门的管理权。"""
-    if user_has_cap(user, "manage_all_org") or user["role"] in ("super_admin", "hr_specialist"):
+    if user_has_cap(user, "manage_all_org") or user_has_role(user, "super_admin", "hr_specialist"):
         return True
     db = get_db()
     return bool(managed_dept_ids(db, user))
 
 
 def require_hr_manage(user):
-    return user_has_cap(user, "manage_all_org") or user["role"] in ("hr_specialist", "super_admin")
+    return user_has_cap(user, "manage_all_org") or user_has_role(user, "hr_specialist", "super_admin")
 
 
 def all_departments(db):
-    rows = db.execute("SELECT * FROM departments ORDER BY id").fetchall()
+    rows = db.execute(
+        "SELECT * FROM departments ORDER BY sort_order, id"
+    ).fetchall()
     out = []
     for d in rows:
         item = dict(d)
@@ -649,7 +721,16 @@ def build_org_tree(depts, manage_ids=None):
         pid = d.get("parent_id")
         if pid and pid in by_id:
             by_id[pid]["children"].append(d)
-    roots = [d for d in by_id.values() if not d.get("parent_id") or d["parent_id"] not in by_id]
+    for d in by_id.values():
+        d["children"].sort(
+            key=lambda x: (int(x.get("sort_order") or 0), int(x["id"]))
+        )
+    roots = [
+        d
+        for d in by_id.values()
+        if not d.get("parent_id") or d["parent_id"] not in by_id
+    ]
+    roots.sort(key=lambda x: (int(x.get("sort_order") or 0), int(x["id"])))
     return roots
 
 
@@ -680,7 +761,7 @@ def dept_path_label(chain, sep=" / "):
 
 def managed_dept_ids(db, user):
     """用户作为负责人/额外负责人所管部门及其全部下级。"""
-    if user_has_cap(user, "manage_all_org") or user["role"] in ("super_admin", "hr_specialist"):
+    if user_has_cap(user, "manage_all_org") or user_has_role(user, "super_admin", "hr_specialist"):
         return {d["id"] for d in db.execute("SELECT id FROM departments").fetchall()}
     depts = [dict(r) for r in db.execute("SELECT * FROM departments").fetchall()]
     owned = set()
@@ -698,13 +779,13 @@ def managed_dept_ids(db, user):
 
 
 def can_manage_dept(user, dept_id):
-    if user_has_cap(user, "manage_all_org") or user["role"] == "super_admin":
+    if user_has_cap(user, "manage_all_org") or user_has_role(user, "super_admin"):
         return True
     return int(dept_id) in managed_dept_ids(get_db(), user)
 
 
 def can_manage_member(user, target_row):
-    if user_has_cap(user, "manage_all_org") or user["role"] == "super_admin":
+    if user_has_cap(user, "manage_all_org") or user_has_role(user, "super_admin"):
         return True
     if not target_row or not target_row["dept_id"]:
         return False
@@ -718,11 +799,11 @@ def can_apply_for_user(user, target_row):
         return False
     if int(user["id"]) == int(target_row["id"]):
         return True
-    if user_has_cap(user, "proxy_apply") or user["role"] in ("hr_specialist", "super_admin"):
+    if user_has_cap(user, "proxy_apply") or user_has_role(user, "hr_specialist", "super_admin"):
         return True
     if user.get("can_proxy_apply"):
         return True
-    if user["role"] == "dept_owner":
+    if user_has_role(user, "dept_owner"):
         return can_manage_member(user, target_row)
     return False
     # AI-GEN-END
@@ -1728,6 +1809,28 @@ def close_leuc_user(db, user_id):
     }
 
 
+def reopen_leuc_user(db, user_id):
+    """重新打开本系统账号：users.status=active，恢复 leuc 可登录。"""
+    # AI-GEN-BEGIN
+    urow = db.execute("SELECT * FROM users WHERE id = ?", (int(user_id),)).fetchone()
+    if not urow:
+        return {"ok": False, "error": "用户不存在"}
+    ensure_user_leuc_account(db, urow)
+    db.execute(
+        "UPDATE users SET status = 'active' WHERE id = ?", (int(user_id),)
+    )
+    sys = db.execute(
+        "SELECT id FROM systems WHERE code = ?", (LEUC_SYSTEM_CODE,)
+    ).fetchone()
+    if sys:
+        db.execute(
+            "UPDATE user_system_accounts SET can_login = 1 WHERE user_id = ? AND system_id = ?",
+            (int(user_id), sys["id"]),
+        )
+    return {"ok": True, "reopened_leuc": True}
+    # AI-GEN-END
+
+
 def user_is_closed(row) -> bool:
     if not row:
         return True
@@ -1884,6 +1987,7 @@ def member_row_enriched(m):
     systems = my_systems(m["id"])
     keys = m.keys()
     db = get_db()
+    status = (m["status"] if "status" in keys else "active") or "active"
     return {
         "id": m["id"],
         "username": m["username"],
@@ -1896,6 +2000,8 @@ def member_row_enriched(m):
         "itcode": m["itcode"] if "itcode" in keys else None,
         "beisen_user_id": (m["beisen_user_id"] if "beisen_user_id" in keys else None) or None,
         "account_expire": m["account_expire"] if "account_expire" in keys else None,
+        "person_type": m["person_type"] if "person_type" in keys else "internal",
+        "status": status,
         "systems": systems,
         "can_login_any": any(s["can_login_any"] for s in systems),
         "has_sensitive": any(s["has_sensitive_any"] for s in systems),
@@ -2002,7 +2108,7 @@ def demo_org_pick():
 
 # AI-GEN-BEGIN
 def _can_config_roles(user) -> bool:
-    return user_has_cap(user, "config_roles") or user["role"] == "super_admin"
+    return user_has_cap(user, "config_roles") or user_has_role(user, "super_admin")
 
 
 def _can_view_roles(user) -> bool:
@@ -2010,7 +2116,7 @@ def _can_view_roles(user) -> bool:
     return (
         _can_config_roles(user)
         or user_has_cap(user, "role_assign")
-        or user["role"] == "super_admin"
+        or user_has_role(user, "super_admin")
     )
 
 
@@ -2018,7 +2124,7 @@ def _can_assign_roles(user) -> bool:
     return (
         user_has_cap(user, "role_assign")
         or user_has_cap(user, "config_roles")
-        or user["role"] == "super_admin"
+        or user_has_role(user, "super_admin")
     )
 
 
@@ -2042,6 +2148,7 @@ def admin_roles_get(user):
         return jsonify({"ok": False, "error": "无权查看角色"}), 403
     db = get_db()
     ensure_roles_seeded(db)
+    ensure_user_roles_migrated(db)
     db.commit()
     roles = []
     for row in db.execute(
@@ -2060,7 +2167,9 @@ def admin_roles_get(user):
             menus = list(DEFAULT_ROLE_MENUS.get(role, DEFAULT_ROLE_MENUS.get("employee", [])))
         if not caps and role in DEFAULT_ROLE_CAPS:
             caps = list(DEFAULT_ROLE_CAPS.get(role, []))
-        n = db.execute("SELECT COUNT(*) AS c FROM users WHERE role=?", (role,)).fetchone()["c"]
+        n = db.execute(
+            "SELECT COUNT(*) AS c FROM user_roles WHERE role=?", (role,)
+        ).fetchone()["c"]
         roles.append({
             "role": role,
             "label": row["label"],
@@ -2089,6 +2198,7 @@ def admin_role_members(user, role):
         return jsonify({"ok": False, "error": "无权查看"}), 403
     db = get_db()
     ensure_roles_seeded(db)
+    ensure_user_roles_migrated(db)
     if role in ("employee_a", "employee_b") or not db.execute(
         "SELECT 1 FROM roles WHERE code=?", (role,)
     ).fetchone():
@@ -2096,9 +2206,10 @@ def admin_role_members(user, role):
     q = (request.args.get("q") or "").strip()
     sql = """SELECT u.id, u.username, u.display_name, u.role, u.dept_id, u.phone, u.email,
                     d.name AS dept_name
-             FROM users u
+             FROM user_roles ur
+             JOIN users u ON u.id = ur.user_id
              LEFT JOIN departments d ON d.id = u.dept_id
-             WHERE u.role = ?"""
+             WHERE ur.role = ?"""
     params: list = [role]
     if q:
         like = f"%{q}%"
@@ -2108,12 +2219,15 @@ def admin_role_members(user, role):
     rows = db.execute(sql, params).fetchall()
     members = []
     for r in rows:
+        rlist = user_roles_of(db, r["id"])
         members.append(
             {
                 "id": r["id"],
                 "username": r["username"],
                 "display_name": r["display_name"],
                 "role": r["role"],
+                "roles": rlist,
+                "role_labels": [{"code": c, "label": role_label_of(db, c)} for c in rlist],
                 "role_label": role_label_of(db, r["role"]),
                 "dept_id": r["dept_id"],
                 "dept_name": r["dept_name"],
@@ -2131,6 +2245,230 @@ def admin_role_members(user, role):
             "members": members,
             "truncated": len(members) >= 200,
             "can_assign": _can_assign_roles(user),
+        }
+    )
+    # AI-GEN-END
+
+
+@app.get("/api/admin/role-users")
+@login_required
+def admin_role_users(user):
+    """有本系统角色的用户列表（不含仅普通员工）。"""
+    # AI-GEN-BEGIN
+    if not _can_view_roles(user):
+        return jsonify({"ok": False, "error": "无权查看"}), 403
+    db = get_db()
+    ensure_roles_seeded(db)
+    ensure_user_roles_migrated(db)
+    q = (request.args.get("q") or "").strip()
+    excl = tuple(SYSTEM_ROLE_EXCLUDE)
+    placeholders = ",".join("?" * len(excl))
+    sql = f"""SELECT DISTINCT u.id, u.username, u.display_name, u.role, u.dept_id, u.phone, u.email,
+                     d.name AS dept_name
+              FROM user_roles ur
+              JOIN users u ON u.id = ur.user_id
+              LEFT JOIN departments d ON d.id = u.dept_id
+              WHERE ur.role NOT IN ({placeholders})"""
+    params: list = list(excl)
+    if q:
+        like = f"%{q}%"
+        sql += " AND (u.display_name LIKE ? OR u.username LIKE ? OR u.phone LIKE ? OR u.email LIKE ?)"
+        params.extend([like, like, like, like])
+    sql += " ORDER BY u.display_name, u.id LIMIT 300"
+    rows = db.execute(sql, params).fetchall()
+    users = []
+    for r in rows:
+        rlist = [c for c in user_roles_of(db, r["id"]) if c not in SYSTEM_ROLE_EXCLUDE]
+        if not rlist:
+            continue
+        users.append(
+            {
+                "id": r["id"],
+                "username": r["username"],
+                "display_name": r["display_name"],
+                "role": r["role"],
+                "roles": user_roles_of(db, r["id"]),
+                "system_roles": rlist,
+                "role_labels": [
+                    {"code": c, "label": role_label_of(db, c)}
+                    for c in user_roles_of(db, r["id"])
+                ],
+                "dept_id": r["dept_id"],
+                "dept_name": r["dept_name"],
+                "phone": r["phone"],
+                "email": r["email"],
+                "is_system_admin": (r["username"] or "") == SYSTEM_ADMIN_USERNAME,
+            }
+        )
+    return jsonify(
+        {
+            "ok": True,
+            "total": len(users),
+            "users": users,
+            "truncated": len(users) >= 300,
+            "can_assign": _can_assign_roles(user),
+        }
+    )
+    # AI-GEN-END
+
+
+def _count_super_admins(db) -> int:
+    return db.execute(
+        "SELECT COUNT(DISTINCT user_id) AS c FROM user_roles WHERE role='super_admin'"
+    ).fetchone()["c"]
+
+
+def _set_user_roles(db, uid, roles, *, allow_empty_to_employee=True):
+    """全量设置用户角色；返回最终 role 列表。"""
+    row = db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+    if not row:
+        raise ValueError("用户不存在")
+    if (row["username"] or "") == SYSTEM_ADMIN_USERNAME:
+        roles = ["super_admin"]
+    cleaned = []
+    for r in roles or []:
+        r = (r or "").strip()
+        if not r or r in ("employee_a", "employee_b"):
+            continue
+        if not db.execute("SELECT 1 FROM roles WHERE code=?", (r,)).fetchone():
+            raise ValueError(f"无效角色: {r}")
+        if r not in cleaned:
+            cleaned.append(r)
+    # 去掉员工类，最后若空补 employee
+    cleaned = [c for c in cleaned if c not in EMPLOYEE_ROLE_CODES]
+    had_super = "super_admin" in user_roles_of(db, uid)
+    if had_super and "super_admin" not in cleaned:
+        if _count_super_admins(db) <= 1:
+            raise ValueError("至少保留一名超级管理员")
+    db.execute("DELETE FROM user_roles WHERE user_id=?", (uid,))
+    if cleaned:
+        db.executemany(
+            "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?,?)",
+            [(uid, c) for c in cleaned],
+        )
+    elif allow_empty_to_employee:
+        db.execute(
+            "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'employee')",
+            (uid,),
+        )
+    sync_primary_role(db, uid)
+    return user_roles_of(db, uid)
+
+
+@app.get("/api/admin/users/<int:uid>/roles")
+@login_required
+def admin_user_roles_get(user, uid):
+    # AI-GEN-BEGIN
+    if not _can_view_roles(user):
+        return jsonify({"ok": False, "error": "无权查看"}), 403
+    db = get_db()
+    ensure_user_roles_migrated(db)
+    row = db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "用户不存在"}), 404
+    roles = user_roles_of(db, uid)
+    return jsonify(
+        {
+            "ok": True,
+            "user_id": uid,
+            "display_name": row["display_name"],
+            "username": row["username"],
+            "role": row["role"],
+            "roles": roles,
+            "role_labels": [{"code": c, "label": role_label_of(db, c)} for c in roles],
+            "can_assign": _can_assign_roles(user),
+        }
+    )
+    # AI-GEN-END
+
+
+@app.put("/api/admin/users/<int:uid>/roles")
+@login_required
+def admin_user_roles_put(user, uid):
+    """全量覆盖用户角色绑定。"""
+    # AI-GEN-BEGIN
+    if not _can_assign_roles(user):
+        return jsonify({"ok": False, "error": "无权分配角色"}), 403
+    data = request.get_json(force=True) or {}
+    roles = data.get("roles")
+    if roles is None:
+        return jsonify({"ok": False, "error": "请传 roles 数组"}), 400
+    db = get_db()
+    ensure_roles_seeded(db)
+    ensure_user_roles_migrated(db)
+    try:
+        final = _set_user_roles(db, uid, list(roles))
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    db.commit()
+    row = db.execute(
+        "SELECT display_name, role FROM users WHERE id=?", (uid,)
+    ).fetchone()
+    return jsonify(
+        {
+            "ok": True,
+            "message": f"已更新 {row['display_name']} 的角色",
+            "user_id": uid,
+            "role": row["role"],
+            "roles": final,
+            "role_labels": [{"code": c, "label": role_label_of(db, c)} for c in final],
+        }
+    )
+    # AI-GEN-END
+
+
+@app.post("/api/admin/users/<int:uid>/roles")
+@login_required
+def admin_user_roles_add(user, uid):
+    """追加一个角色。"""
+    # AI-GEN-BEGIN
+    if not _can_assign_roles(user):
+        return jsonify({"ok": False, "error": "无权分配角色"}), 403
+    data = request.get_json(force=True) or {}
+    role = (data.get("role") or "").strip()
+    db = get_db()
+    ensure_roles_seeded(db)
+    ensure_user_roles_migrated(db)
+    cur = [c for c in user_roles_of(db, uid) if c not in EMPLOYEE_ROLE_CODES]
+    if role and role not in cur:
+        cur.append(role)
+    try:
+        final = _set_user_roles(db, uid, cur)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    db.commit()
+    row = db.execute("SELECT display_name FROM users WHERE id=?", (uid,)).fetchone()
+    return jsonify(
+        {
+            "ok": True,
+            "message": f"已为 {row['display_name']} 绑定 {role_label_of(db, role)}",
+            "roles": final,
+        }
+    )
+    # AI-GEN-END
+
+
+@app.delete("/api/admin/users/<int:uid>/roles/<role>")
+@login_required
+def admin_user_roles_remove(user, uid, role):
+    """去掉用户的某一角色。"""
+    # AI-GEN-BEGIN
+    if not _can_assign_roles(user):
+        return jsonify({"ok": False, "error": "无权解除角色绑定"}), 403
+    db = get_db()
+    ensure_user_roles_migrated(db)
+    cur = [c for c in user_roles_of(db, uid) if c != role and c not in EMPLOYEE_ROLE_CODES]
+    try:
+        final = _set_user_roles(db, uid, cur)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    db.commit()
+    row = db.execute("SELECT display_name FROM users WHERE id=?", (uid,)).fetchone()
+    return jsonify(
+        {
+            "ok": True,
+            "message": f"已解除 {row['display_name']} 的「{role_label_of(db, role)}」",
+            "roles": final,
         }
     )
     # AI-GEN-END
@@ -2162,7 +2500,6 @@ def admin_roles_create(user):
         VALUES (?, ?, 0, ?, ?)""",
         (code, label, sort, now),
     )
-    # 默认拷贝普通员工菜单
     base_menus = [
         r["menu_id"] for r in db.execute(
             "SELECT menu_id FROM role_menus WHERE role='employee'"
@@ -2201,7 +2538,7 @@ def admin_roles_rename(user, role):
 @app.delete("/api/admin/roles/<role>")
 @login_required
 def admin_roles_delete(user, role):
-    """删除自定义角色；占用人员改回普通员工。"""
+    """删除自定义角色；解除人员绑定并 sync 主角色。"""
     if not _can_config_roles(user):
         return jsonify({"ok": False, "error": "无权配置角色"}), 403
     db = get_db()
@@ -2212,17 +2549,23 @@ def admin_roles_delete(user, role):
         return jsonify({"ok": False, "error": "角色不存在"}), 404
     if row["is_builtin"] or role in BUILTIN_ROLE_CODES or role == "employee":
         return jsonify({"ok": False, "error": "内置角色不可删除"}), 400
-    moved = db.execute(
-        "UPDATE users SET role='employee' WHERE role=?", (role,)
-    ).rowcount
+    uids = [
+        r["user_id"]
+        for r in db.execute(
+            "SELECT user_id FROM user_roles WHERE role=?", (role,)
+        ).fetchall()
+    ]
+    db.execute("DELETE FROM user_roles WHERE role=?", (role,))
+    for uid in uids:
+        sync_primary_role(db, uid)
     db.execute("DELETE FROM role_menus WHERE role=?", (role,))
     db.execute("DELETE FROM role_caps WHERE role=?", (role,))
     db.execute("DELETE FROM roles WHERE code=?", (role,))
     db.commit()
     msg = f"已删除角色 {row['label']}"
-    if moved:
-        msg += f"，{moved} 人已改回普通员工"
-    return jsonify({"ok": True, "message": msg, "moved": moved})
+    if uids:
+        msg += f"，已解除 {len(uids)} 人绑定"
+    return jsonify({"ok": True, "message": msg, "moved": len(uids)})
 
 
 @app.post("/api/admin/roles/<role>/config")
@@ -2260,72 +2603,59 @@ def admin_roles_save(user, role):
 @app.post("/api/admin/users/<int:uid>/role")
 @login_required
 def admin_assign_role(user, uid):
-    """给人分配角色。"""
+    """兼容旧接口：追加/设为该角色（写入 user_roles）。"""
     if not _can_assign_roles(user):
         return jsonify({"ok": False, "error": "无权分配角色"}), 403
     data = request.get_json(force=True) or {}
     role = (data.get("role") or "").strip()
     db = get_db()
     ensure_roles_seeded(db)
-    if (
-        not role
-        or role in ("employee_a", "employee_b")
-        or not db.execute("SELECT 1 FROM roles WHERE code=?", (role,)).fetchone()
-    ):
-        return jsonify({"ok": False, "error": "无效角色"}), 400
-    row = db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
-    if not row:
-        return jsonify({"ok": False, "error": "用户不存在"}), 404
-    if (row["username"] or "") == SYSTEM_ADMIN_USERNAME and role != "super_admin":
-        return jsonify({"ok": False, "error": "系统超管账号不可改角色"}), 400
-    if row["role"] == "super_admin" and role != "super_admin":
-        n = db.execute(
-            "SELECT COUNT(*) AS c FROM users WHERE role='super_admin'"
-        ).fetchone()["c"]
-        if n <= 1:
-            return jsonify({"ok": False, "error": "至少保留一名超级管理员"}), 400
-    db.execute("UPDATE users SET role=? WHERE id=?", (role, uid))
+    ensure_user_roles_migrated(db)
+    replace = bool(data.get("replace"))
+    if replace:
+        cur = [role] if role else []
+    else:
+        cur = [c for c in user_roles_of(db, uid) if c not in EMPLOYEE_ROLE_CODES]
+        if role and role not in cur:
+            cur.append(role)
+    try:
+        final = _set_user_roles(db, uid, cur)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
     db.commit()
+    row = db.execute("SELECT display_name FROM users WHERE id=?", (uid,)).fetchone()
     return jsonify({
         "ok": True,
-        "message": f"已将 {row['display_name']} 设为 {role_label_of(db, role)}",
+        "message": f"已将 {row['display_name']} 绑定 {role_label_of(db, role)}",
+        "roles": final,
     })
 
 
 @app.delete("/api/admin/users/<int:uid>/role")
 @login_required
 def admin_unbind_role(user, uid):
-    """解除人员与角色绑定：改回普通员工。"""
+    """兼容旧接口：解除全部本系统角色，改回普通员工。"""
     # AI-GEN-BEGIN
     if not _can_assign_roles(user):
         return jsonify({"ok": False, "error": "无权解除角色绑定"}), 403
     db = get_db()
-    ensure_roles_seeded(db)
+    ensure_user_roles_migrated(db)
     row = db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
     if not row:
         return jsonify({"ok": False, "error": "用户不存在"}), 404
     if (row["username"] or "") == SYSTEM_ADMIN_USERNAME:
         return jsonify({"ok": False, "error": "系统超管账号不可解除角色"}), 400
-    old_role = row["role"] or "employee"
-    if old_role == "employee":
-        return jsonify({"ok": True, "message": f"{row['display_name']} 已是普通员工"})
-    if old_role == "super_admin":
-        n = db.execute(
-            "SELECT COUNT(*) AS c FROM users WHERE role='super_admin'"
-        ).fetchone()["c"]
-        if n <= 1:
-            return jsonify({"ok": False, "error": "至少保留一名超级管理员"}), 400
-    db.execute("UPDATE users SET role='employee' WHERE id=?", (uid,))
+    try:
+        final = _set_user_roles(db, uid, [])
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
     db.commit()
     return jsonify(
         {
             "ok": True,
-            "message": (
-                f"已解除 {row['display_name']} 的「{role_label_of(db, old_role)}」绑定，"
-                f"现为普通员工"
-            ),
+            "message": f"已解除 {row['display_name']} 的角色绑定，现为普通员工",
             "user_id": uid,
-            "from_role": old_role,
+            "roles": final,
             "to_role": "employee",
         }
     )
@@ -3028,7 +3358,7 @@ def todo_detail(user, tid):
     row = db.execute("SELECT * FROM todos WHERE id = ?", (tid,)).fetchone()
     if not row:
         return jsonify({"ok": False, "error": "待办不存在"}), 404
-    if row["assignee_id"] != user["id"] and user["role"] != "super_admin":
+    if row["assignee_id"] != user["id"] and not user_has_role(user, "super_admin"):
         return jsonify({"ok": False, "error": "无权查看"}), 403
     return jsonify({"ok": True, "todo": serialize_todo(db, row)})
     # AI-GEN-END
@@ -3046,7 +3376,7 @@ def todo_flow(user, tid):
     allowed = (
         row["assignee_id"] == user["id"]
         or row["initiator_id"] == user["id"]
-        or user["role"] == "super_admin"
+        or user_has_role(user, "super_admin")
     )
     if not allowed and row["application_id"]:
         app = db.execute(
@@ -3074,7 +3404,7 @@ def apply_preview_flow(user):
     subject_id = data.get("subject_user_id") or data.get("for_user_id") or user["id"]
     subject_id = int(subject_id)
     if subject_id != int(user["id"]):
-        if user["role"] not in ("hr_specialist", "super_admin", "dept_owner"):
+        if not user_has_role(user, "hr_specialist", "super_admin", "dept_owner"):
             return jsonify({"ok": False, "error": "无权代他人预览"}), 403
     system_id = data.get("system_id")
     with_sensitive = bool(data.get("with_sensitive"))
@@ -3193,7 +3523,7 @@ def user_can_set_dept_owner(user, dept_id=None) -> bool:
         return False
     if user_has_cap(user, "org_set_owner") or user_has_cap(user, "manage_all_org"):
         return True
-    if user["role"] in ("super_admin", "hr_specialist"):
+    if user_has_role(user, "super_admin", "hr_specialist"):
         return True
     if dept_id is None:
         return bool(managed_dept_ids(get_db(), user))
@@ -3251,13 +3581,7 @@ def org_set_dept_owner(user, dept_id):
             "INSERT OR IGNORE INTO dept_extra_owners (dept_id, user_id) VALUES (?,?)",
             [(dept_id, eid) for eid in extra_ids],
         )
-    # 主负责人若仍是普通员工，升为部门负责人（便于侧栏/能力）
-    if owner_uid is not None:
-        ou = db.execute("SELECT role FROM users WHERE id = ?", (owner_uid,)).fetchone()
-        if ou and ou["role"] in ("employee", "employee_a", "employee_b"):
-            db.execute(
-                "UPDATE users SET role = 'dept_owner' WHERE id = ?", (owner_uid,)
-            )
+    # 部门负责人仅为部门属性，不自动绑定 dept_owner 角色
     db.commit()
     owner = None
     if owner_uid:
@@ -3280,6 +3604,167 @@ def org_set_dept_owner(user, dept_id):
             "extra_owners": [dict(e) for e in extras],
         }
     )
+
+
+# AI-GEN-BEGIN
+@app.patch("/api/org/members/<int:uid>")
+@login_required
+def org_update_member(user, uid):
+    """编辑人员：姓名/手机/邮箱/部门/状态（关闭可再打开）。"""
+    db = get_db()
+    migrate_schema(db)
+    row = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "人员不存在"}), 404
+    if row["username"] == SYSTEM_ADMIN_USERNAME:
+        return jsonify({"ok": False, "error": "系统超管不可在此编辑"}), 400
+    if not can_manage_member(user, row):
+        return jsonify({"ok": False, "error": "无权编辑该人员"}), 403
+
+    data = request.get_json(force=True) or {}
+    display_name = (
+        str(data.get("display_name")).strip()
+        if "display_name" in data
+        else row["display_name"]
+    )
+    if not display_name:
+        return jsonify({"ok": False, "error": "姓名必填"}), 400
+
+    phone = data.get("phone") if "phone" in data else row["phone"]
+    phone = (str(phone).strip() if phone is not None else "") or None
+    email = data.get("email") if "email" in data else row["email"]
+    email = (str(email).strip() if email is not None else "") or None
+
+    new_dept = row["dept_id"]
+    if "dept_id" in data:
+        try:
+            new_dept = int(data.get("dept_id")) if data.get("dept_id") not in ("", None) else None
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "部门无效"}), 400
+        if new_dept is None:
+            return jsonify({"ok": False, "error": "部门必选"}), 400
+        if not can_manage_dept(user, new_dept):
+            return jsonify({"ok": False, "error": "无权调入该部门"}), 403
+        if not db.execute("SELECT id FROM departments WHERE id = ?", (new_dept,)).fetchone():
+            return jsonify({"ok": False, "error": "部门不存在"}), 404
+
+    new_status = (row["status"] if "status" in row.keys() else "active") or "active"
+    if "status" in data:
+        new_status = (data.get("status") or "").strip()
+        if new_status not in ("active", "closed"):
+            return jsonify({"ok": False, "error": "status 须为 active/closed"}), 400
+        if new_status == "closed" and int(uid) == int(user["id"]):
+            return jsonify({"ok": False, "error": "不能关闭自己的账号"}), 400
+
+    db.execute(
+        """UPDATE users SET display_name=?, phone=?, email=?, dept_id=?
+        WHERE id=?""",
+        (display_name, phone, email, new_dept, uid),
+    )
+    old_status = (row["status"] if "status" in row.keys() else "active") or "active"
+    if new_status != old_status:
+        if new_status == "closed":
+            close_leuc_user(db, uid)
+        else:
+            reopen_leuc_user(db, uid)
+    db.commit()
+    updated = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+    return jsonify(
+        {
+            "ok": True,
+            "message": "已保存人员信息",
+            "member": member_row_enriched(updated),
+        }
+    )
+
+
+@app.patch("/api/org/departments/<int:dept_id>")
+@login_required
+def org_update_department(user, dept_id):
+    """修改部门名称。"""
+    if not can_manage_dept(user, dept_id):
+        return jsonify({"ok": False, "error": "无权编辑该部门"}), 403
+    data = request.get_json(force=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "部门名称必填"}), 400
+    db = get_db()
+    migrate_schema(db)
+    row = db.execute("SELECT * FROM departments WHERE id = ?", (dept_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "部门不存在"}), 404
+    db.execute("UPDATE departments SET name = ? WHERE id = ?", (name, dept_id))
+    db.commit()
+    return jsonify({"ok": True, "message": f"已改名为「{name}」", "id": dept_id, "name": name})
+
+
+@app.post("/api/org/departments/<int:dept_id>/move")
+@login_required
+def org_move_department(user, dept_id):
+    """同级调整部门顺序：direction=up|down。"""
+    if not can_manage_dept(user, dept_id):
+        return jsonify({"ok": False, "error": "无权调整该部门"}), 403
+    data = request.get_json(force=True) or {}
+    direction = (data.get("direction") or "").strip().lower()
+    if direction not in ("up", "down"):
+        return jsonify({"ok": False, "error": "direction 须为 up/down"}), 400
+    db = get_db()
+    migrate_schema(db)
+    row = db.execute("SELECT * FROM departments WHERE id = ?", (dept_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "部门不存在"}), 404
+    parent_id = row["parent_id"]
+    siblings = db.execute(
+        """SELECT id, sort_order FROM departments
+        WHERE IFNULL(parent_id, -1) = IFNULL(?, -1)
+        ORDER BY sort_order, id""",
+        (parent_id,),
+    ).fetchall()
+    ids = [int(s["id"]) for s in siblings]
+    if dept_id not in ids:
+        return jsonify({"ok": False, "error": "同级列表异常"}), 400
+    idx = ids.index(dept_id)
+    swap_idx = idx - 1 if direction == "up" else idx + 1
+    if swap_idx < 0 or swap_idx >= len(ids):
+        return jsonify({"ok": False, "error": "已在同级边界，无法移动"}), 400
+    a, b = siblings[idx], siblings[swap_idx]
+    # 若 sort_order 相同，用 id 交换后再规范化
+    order_a = int(a["sort_order"] or a["id"])
+    order_b = int(b["sort_order"] or b["id"])
+    if order_a == order_b:
+        for i, s in enumerate(siblings):
+            db.execute(
+                "UPDATE departments SET sort_order = ? WHERE id = ?",
+                ((i + 1) * 10, s["id"]),
+            )
+        siblings = db.execute(
+            """SELECT id, sort_order FROM departments
+            WHERE IFNULL(parent_id, -1) = IFNULL(?, -1)
+            ORDER BY sort_order, id""",
+            (parent_id,),
+        ).fetchall()
+        a = next(s for s in siblings if int(s["id"]) == dept_id)
+        b = next(s for s in siblings if int(s["id"]) == ids[swap_idx])
+        order_a = int(a["sort_order"])
+        order_b = int(b["sort_order"])
+    db.execute(
+        "UPDATE departments SET sort_order = ? WHERE id = ?",
+        (order_b, a["id"]),
+    )
+    db.execute(
+        "UPDATE departments SET sort_order = ? WHERE id = ?",
+        (order_a, b["id"]),
+    )
+    db.commit()
+    return jsonify(
+        {
+            "ok": True,
+            "message": "已调整部门顺序",
+            "id": dept_id,
+            "swapped_with": int(b["id"]),
+        }
+    )
+# AI-GEN-END
 
 
 @app.post("/api/org/members/account-expire")
@@ -3545,14 +4030,12 @@ def chat_system_notify(user):
     if to_user_id is not None:
         targets = [int(to_user_id)]
         # 给别人发系统消息需管理角色
-        if int(to_user_id) != user["id"] and user["role"] not in (
-            "hr_specialist",
-            "super_admin",
-            "system_owner",
+        if int(to_user_id) != user["id"] and not user_has_role(
+            user, "hr_specialist", "super_admin", "system_owner"
         ):
             return jsonify({"ok": False, "error": "无权限向他人发送系统消息"}), 403
     else:
-        if user["role"] not in ("hr_specialist", "super_admin", "system_owner"):
+        if not user_has_role(user, "hr_specialist", "super_admin", "system_owner"):
             return jsonify({"ok": False, "error": "无权限群发系统消息"}), 403
         targets = [r["id"] for r in db.execute("SELECT id FROM users").fetchall()]
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -3611,7 +4094,7 @@ def sensitive_catalog(user):
 def sensitive_config_get(user):
     """敏感权限：超管或 sensitive_config 按钮可配置审批链。"""
     # AI-GEN-BEGIN
-    if not (user_has_cap(user, "sensitive_config") or user["role"] == "super_admin"):
+    if not (user_has_cap(user, "sensitive_config") or user_has_role(user, "super_admin")):
         return jsonify({"ok": False, "error": "无权配置敏感审批链"}), 403
     db = get_db()
     chain = db.execute(
@@ -3650,7 +4133,7 @@ def sensitive_config_get(user):
 @app.post("/api/sensitive/config/chain")
 @login_required
 def sensitive_config_chain(user):
-    if not (user_has_cap(user, "sensitive_config") or user["role"] == "super_admin"):
+    if not (user_has_cap(user, "sensitive_config") or user_has_role(user, "super_admin")):
         return jsonify({"ok": False, "error": "无权配置审批链"}), 403
     data = request.get_json(force=True) or {}
     steps = data.get("steps") or []
@@ -3685,7 +4168,7 @@ def sensitive_config_chain(user):
 @login_required
 def sensitive_config_overrides(user):
     """保存直属/一级的部门特例（整表替换 sensitive 流）。"""
-    if not (user_has_cap(user, "sensitive_config") or user["role"] == "super_admin"):
+    if not (user_has_cap(user, "sensitive_config") or user_has_role(user, "super_admin")):
         return jsonify({"ok": False, "error": "无权配置审批链"}), 403
     data = request.get_json(force=True) or {}
     items = data.get("overrides")
@@ -3721,7 +4204,7 @@ def sensitive_config_overrides(user):
 def sensitive_config_defs(user):
     """权限目录增删改：系统管理员负责自己的系统（或超管）。"""
     # AI-GEN-BEGIN
-    if user["role"] not in ("super_admin", "system_owner"):
+    if not user_has_role(user, "super_admin", "system_owner"):
         return jsonify({"ok": False, "error": "无权限"}), 403
     data = request.get_json(force=True) or {}
     action = data.get("action") or "upsert"
@@ -3873,9 +4356,9 @@ def apply_my_accounts(user):
     # AI-GEN-BEGIN
     db = get_db()
     uid = int(request.args.get("user_id") or user["id"])
-    if uid != user["id"] and user["role"] not in ("hr_specialist", "super_admin", "dept_owner"):
+    if uid != user["id"] and not user_has_role(user, "hr_specialist", "super_admin", "dept_owner"):
         return jsonify({"ok": False, "error": "无权查看他人账号"}), 403
-    if uid != user["id"] and user["role"] == "dept_owner":
+    if uid != user["id"] and user_has_role(user, "dept_owner"):
         target = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
         if not can_manage_member(user, target):
             return jsonify({"ok": False, "error": "仅可查看下级账号"}), 403
@@ -3936,12 +4419,12 @@ def apply_submit(user):
     subject = user
     for_user_id = data.get("for_user_id")
     if for_user_id and int(for_user_id) != int(user["id"]):
-        if user["role"] not in ("hr_specialist", "super_admin", "dept_owner"):
+        if not user_has_role(user, "hr_specialist", "super_admin", "dept_owner"):
             return jsonify({"ok": False, "error": "无权代他人申请"}), 403
         subject = db.execute("SELECT * FROM users WHERE id = ?", (int(for_user_id),)).fetchone()
         if not subject:
             return jsonify({"ok": False, "error": "目标用户不存在"}), 404
-        if user["role"] == "dept_owner" and not can_manage_member(user, subject):
+        if user_has_role(user, "dept_owner") and not can_manage_member(user, subject):
             return jsonify({"ok": False, "error": "仅可代本部门下级申请"}), 403
 
     # AI-GEN-BEGIN
@@ -4378,7 +4861,7 @@ def todo_decide(user, tid):
     row = db.execute("SELECT * FROM todos WHERE id = ?", (tid,)).fetchone()
     if not row:
         return jsonify({"ok": False, "error": "待办不存在"}), 404
-    if row["assignee_id"] != user["id"] and user["role"] != "super_admin":
+    if row["assignee_id"] != user["id"] and not user_has_role(user, "super_admin"):
         return jsonify({"ok": False, "error": "仅审批人可处理"}), 403
     if row["bucket"] != "pending":
         return jsonify({"ok": False, "error": "该待办已处理"}), 400
@@ -5088,7 +5571,7 @@ def patch_member_beisen_user_id(user, uid):
     if not target:
         return jsonify({"ok": False, "error": "用户不存在"}), 404
     if not (
-        user["role"] in ("super_admin", "hr_specialist")
+        user_has_role(user, "super_admin", "hr_specialist")
         or can_manage_dept(user, target["dept_id"])
     ):
         return jsonify({"ok": False, "error": "无权限修改该人员"}), 403
@@ -5438,12 +5921,15 @@ def hr_sync_init(user):
 @app.post("/api/hr/sync-pull")
 @login_required
 def hr_sync_pull(user):
-    """从 LeOrg 同步部门 + 人员（幂等 upsert；默认增量，可 full）。"""
+    """从 LeOrg 拉部门+人员。
+
+    preview=true（默认）：只对比变化，写入草稿供确认；
+    preview=false：保持旧行为直接落库。
+    """
     # AI-GEN-BEGIN
     if not require_hr_manage(user):
         return jsonify({"ok": False, "error": "无权限"}), 403
     data = request.get_json(force=True) or {}
-    # 兼容旧演示：显式传入 people 时仍走本地模拟
     if data.get("people"):
         return _hr_sync_pull_mock(data["people"])
     if data.get("mock"):
@@ -5460,22 +5946,28 @@ def hr_sync_pull(user):
     migrate_schema(db)
     mode = (data.get("mode") or "auto").strip().lower()
     days = int(data.get("days") or 7)
+    preview = data.get("preview")
+    if preview is None:
+        preview = True
+    preview = bool(preview)
     state = _leorg_sync_state(db)
     mapped_orgs = db.execute(
         "SELECT COUNT(*) AS c FROM departments WHERE leorg_id IS NOT NULL"
     ).fetchone()["c"]
     if mode == "auto":
-        mode = "full" if (not state or not state.get("last_full_at") or mapped_orgs == 0) else "incr"
+        mode = (
+            "full"
+            if (not state or not state.get("last_full_at") or mapped_orgs == 0)
+            else "incr"
+        )
     if mode not in ("full", "incr"):
         return jsonify({"ok": False, "error": "mode 仅支持 auto/full/incr"}), 400
 
     try:
         client = LeorgClient()
-        # 部门体量小：始终全量 upsert（幂等）
         orgs = client.list_organizations(status=1)
-        org_stats = _sync_leorg_organizations(db, orgs)
-
         max_change_id = int(state.get("last_change_id") or 0) if state else 0
+        change_rows = 0
         if mode == "full":
             emps = client.list_employees(emp_status=1)
             emps_prob = client.list_employees(emp_status=2)
@@ -5483,15 +5975,15 @@ def hr_sync_pull(user):
             for e in emps_prob:
                 if e.get("id") not in seen:
                     emps.append(e)
-            emp_stats = _sync_leorg_employees(db, emps)
-            # 全量后抬升水位，避免下次增量重放
             try:
-                max_change_id = max(max_change_id, client.latest_change_id(days=max(days, 1)))
+                max_change_id = max(
+                    max_change_id, client.latest_change_id(days=max(days, 1))
+                )
             except Exception:
                 pass
-            fetched_emps = len(emps)
         else:
             new_changes = client.list_employee_changes(days=days, after_id=max_change_id)
+            change_rows = len(new_changes)
             emp_ids = sorted(
                 {
                     int(c["entity_id"])
@@ -5507,17 +5999,70 @@ def hr_sync_pull(user):
                     detail = None
                 if detail:
                     emps.append(detail)
-            emp_stats = _sync_leorg_employees(db, emps)
             if new_changes:
                 max_change_id = max(int(c.get("id") or 0) for c in new_changes)
-            fetched_emps = len(emps)
-            emp_stats["change_rows"] = len(new_changes)
-            emp_stats["changed_ids"] = len(emp_ids)
 
-        # 部门负责人：manager_emp_id → 本地 users
+        if preview:
+            changes = _diff_leorg_organizations(db, orgs)
+            changes.extend(_diff_leorg_employees(db, emps))
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # 清理同用户旧草稿
+            db.execute(
+                "DELETE FROM leorg_sync_draft WHERE created_by = ?", (user["id"],)
+            )
+            cur = db.execute(
+                """INSERT INTO leorg_sync_draft
+                (created_by, mode, max_change_id, changes_json, created_at)
+                VALUES (?,?,?,?,?)""",
+                (
+                    user["id"],
+                    mode,
+                    max_change_id,
+                    json.dumps(changes, ensure_ascii=False),
+                    now,
+                ),
+            )
+            db.commit()
+            draft_id = int(cur.lastrowid)
+            summary = _sync_changes_summary(changes)
+            msg = (
+                f"【{'全量' if mode == 'full' else '增量'}预览】"
+                f"共 {len(changes)} 条变更待确认"
+                f"（部门 {summary['org']} / 人员 {summary['user']} / 花名册 {summary['roster']}）"
+            )
+            if mode == "incr":
+                msg += f"；变更条数 {change_rows}"
+            return jsonify(
+                {
+                    "ok": True,
+                    "preview": True,
+                    "draft_id": draft_id,
+                    "mode": mode,
+                    "message": msg,
+                    "changes": [
+                        {
+                            "key": c["key"],
+                            "kind": c["kind"],
+                            "action": c["action"],
+                            "title": c["title"],
+                            "detail": c.get("detail") or "",
+                            "fields": c.get("fields") or [],
+                        }
+                        for c in changes
+                    ],
+                    "summary": summary,
+                    "fetched": {"orgs": len(orgs), "employees": len(emps)},
+                    "sync_state": _leorg_sync_state(db),
+                }
+            )
+
+        # 直接落库（兼容旧调用）
+        org_stats = _sync_leorg_organizations(db, orgs)
+        emp_stats = _sync_leorg_employees(db, emps)
+        if mode == "incr":
+            emp_stats["change_rows"] = change_rows
         owner_stats = _resolve_dept_owners_from_leorg(db)
         org_stats["owners"] = owner_stats
-
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         _save_leorg_sync_state(
             db,
@@ -5538,7 +6083,7 @@ def hr_sync_pull(user):
         f"部门 +{org_stats['inserted']}/改{org_stats['updated']}；"
         f"负责人已关联 {owner_stats.get('resolved', 0)}"
         f"（待建人 {owner_stats.get('pending', 0)}）；"
-        f"人员拉取 {fetched_emps} 人"
+        f"人员拉取 {len(emps)} 人"
         f"（待初始化 +{emp_stats['roster_added']}，更新用户 {emp_stats['users_updated']}，跳过 {emp_stats['skipped']}）"
     )
     if mode == "incr":
@@ -5546,11 +6091,76 @@ def hr_sync_pull(user):
     return jsonify(
         {
             "ok": True,
+            "preview": False,
             "message": msg,
             "mode": mode,
             "organizations": org_stats,
             "employees": emp_stats,
-            "fetched": {"orgs": len(orgs), "employees": fetched_emps},
+            "fetched": {"orgs": len(orgs), "employees": len(emps)},
+            "sync_state": _leorg_sync_state(db),
+        }
+    )
+    # AI-GEN-END
+
+
+@app.post("/api/hr/sync-apply")
+@login_required
+def hr_sync_apply(user):
+    """确认接受同步草稿中的变更。"""
+    # AI-GEN-BEGIN
+    if not require_hr_manage(user):
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    data = request.get_json(force=True) or {}
+    draft_id = data.get("draft_id")
+    if not draft_id:
+        return jsonify({"ok": False, "error": "缺少 draft_id"}), 400
+    db = get_db()
+    migrate_schema(db)
+    draft = db.execute(
+        "SELECT * FROM leorg_sync_draft WHERE id = ?", (int(draft_id),)
+    ).fetchone()
+    if not draft:
+        return jsonify({"ok": False, "error": "草稿不存在或已应用"}), 404
+    if int(draft["created_by"]) != int(user["id"]) and not user_has_role(user, "super_admin"):
+        return jsonify({"ok": False, "error": "无权应用他人草稿"}), 403
+    changes = json.loads(draft["changes_json"] or "[]")
+    keys = data.get("keys")
+    apply_all = bool(data.get("all"))
+    if apply_all or keys is None:
+        selected = changes
+    else:
+        keyset = set(keys or [])
+        selected = [c for c in changes if c.get("key") in keyset]
+    if not selected:
+        return jsonify({"ok": False, "error": "未选择任何变更"}), 400
+
+    applied = _apply_leorg_sync_changes(db, selected)
+    owner_stats = _resolve_dept_owners_from_leorg(db)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    org_mapped = db.execute(
+        "SELECT COUNT(*) AS c FROM departments WHERE leorg_id IS NOT NULL"
+    ).fetchone()["c"]
+    _save_leorg_sync_state(
+        db,
+        mode=draft["mode"],
+        last_change_id=int(draft["max_change_id"] or 0),
+        org_mapped=org_mapped,
+        emp_touched=applied.get("user", 0) + applied.get("roster", 0),
+        now=now,
+        is_full=(draft["mode"] == "full"),
+    )
+    db.execute("DELETE FROM leorg_sync_draft WHERE id = ?", (int(draft_id),))
+    db.commit()
+    return jsonify(
+        {
+            "ok": True,
+            "message": (
+                f"已接受 {sum(applied.values())} 条变更"
+                f"（部门 {applied.get('org', 0)} / 人员 {applied.get('user', 0)}"
+                f" / 花名册 {applied.get('roster', 0)} / 关闭 {applied.get('close', 0)}）"
+            ),
+            "applied": applied,
+            "owners": owner_stats,
             "sync_state": _leorg_sync_state(db),
         }
     )
@@ -5575,8 +6185,10 @@ def hr_org_clear(user):
         {
             "ok": True,
             "message": (
-                f"已清空部门：删除部门 {stats['depts_deleted']}，"
-                f"删除员工 {stats['users_deleted']}，保留账号 {stats['users_kept']}，"
+                f"已清空：部门 {stats['depts_deleted']}，"
+                f"员工 {stats['users_deleted']}（保留 {stats['users_kept']}），"
+                f"待办 {stats.get('todos_deleted', 0)}，"
+                f"申请 {stats.get('applications_deleted', 0)}，"
                 f"根部门 id={stats['root_id']}"
             ),
             **stats,
@@ -5646,7 +6258,7 @@ def _save_leorg_sync_state(db, *, mode, last_change_id, org_mapped, emp_touched,
 
 
 def _clear_my_organization(db):
-    """清空部门与员工，保留非 employee 管理账号，重建空根部门。"""
+    """清空部门与员工，保留非 employee 管理账号，重建空根部门；清空全部审批数据。"""
     # AI-GEN-BEGIN
     keep_usernames = {SYSTEM_ADMIN_USERNAME}  # 系统超管始终保留且不挂组织
     keep_roles = {"super_admin", "hr_specialist", "finance", "system_owner"}
@@ -5680,6 +6292,20 @@ def _clear_my_organization(db):
         if int(r["id"]) not in keep_ids
     ]
 
+    # —— 全部审批/待办/申请（含保留账号相关）——
+    todos_n = db.execute("SELECT COUNT(*) AS c FROM todos").fetchone()["c"]
+    apps_n = db.execute("SELECT COUNT(*) AS c FROM applications").fetchone()["c"]
+    grants_n = db.execute("SELECT COUNT(*) AS c FROM grant_applications").fetchone()["c"]
+    db.execute("DELETE FROM application_steps")
+    db.execute("DELETE FROM applications")
+    db.execute("DELETE FROM todos")
+    db.execute("DELETE FROM grant_applications")
+    db.execute("DELETE FROM messages")
+    try:
+        db.execute("DELETE FROM leorg_sync_draft")
+    except Exception:
+        pass
+
     # 解除部门引用
     db.execute("UPDATE departments SET owner_user_id = NULL, parent_id = NULL")
     db.execute("DELETE FROM dept_extra_owners")
@@ -5692,31 +6318,10 @@ def _clear_my_organization(db):
 
     # 删除普通员工及相关行
     for uid in drop_ids:
-        db.execute("DELETE FROM messages WHERE from_user_id = ? OR to_user_id = ?", (uid, uid))
         db.execute("DELETE FROM user_system_accounts WHERE user_id = ?", (uid,))
         db.execute("DELETE FROM user_fingerprints WHERE user_id = ?", (uid,))
         db.execute("DELETE FROM oauth_codes WHERE user_id = ?", (uid,))
         db.execute("DELETE FROM oauth_tokens WHERE user_id = ?", (uid,))
-        db.execute(
-            "DELETE FROM todos WHERE assignee_id = ? OR initiator_id = ?", (uid, uid)
-        )
-        # 申请单
-        app_ids = [
-            int(r["id"])
-            for r in db.execute(
-                "SELECT id FROM applications WHERE applicant_id = ?", (uid,)
-            ).fetchall()
-        ]
-        for aid in app_ids:
-            db.execute("DELETE FROM application_steps WHERE application_id = ?", (aid,))
-            db.execute("DELETE FROM applications WHERE id = ?", (aid,))
-        db.execute(
-            "DELETE FROM application_steps WHERE assignee_id = ?", (uid,)
-        )
-        db.execute(
-            "DELETE FROM grant_applications WHERE requester_id = ? OR leuc_user_id = ?",
-            (uid, uid),
-        )
         db.execute(
             "UPDATE system_accounts SET leuc_user_id = NULL, status = 'unbound' WHERE leuc_user_id = ?",
             (uid,),
@@ -5725,10 +6330,16 @@ def _clear_my_organization(db):
             "UPDATE oa_forms SET leuc_user_id = NULL WHERE leuc_user_id = ?", (uid,)
         )
         db.execute("DELETE FROM system_owners WHERE user_id = ?", (uid,))
+        try:
+            db.execute("DELETE FROM user_roles WHERE user_id = ?", (uid,))
+        except Exception:
+            pass
         db.execute("DELETE FROM users WHERE id = ?", (uid,))
 
     cur = db.execute(
-        "INSERT INTO departments (name, parent_id, owner_user_id, leorg_id) VALUES (?,?,NULL,NULL)",
+        """INSERT INTO departments
+        (name, parent_id, owner_user_id, leorg_id, sort_order)
+        VALUES (?,?,NULL,NULL,0)""",
         ("来酷科技", None),
     )
     root_id = int(cur.lastrowid)
@@ -5761,6 +6372,9 @@ def _clear_my_organization(db):
         "users_kept": len(keep_ids),
         "root_id": root_id,
         "kept_usernames": [r["username"] for r in keep_rows],
+        "todos_deleted": todos_n,
+        "applications_deleted": apps_n,
+        "grant_applications_deleted": grants_n,
     }
     # AI-GEN-END
 
@@ -5802,6 +6416,519 @@ def _hr_sync_pull_mock(samples):
     db.commit()
     return jsonify({"ok": True, "added": added, "message": f"已从部门架构拉取 {len(added)} 人待初始化"})
     # AI-GEN-END
+
+
+# AI-GEN-BEGIN
+def _sync_changes_summary(changes):
+    out = {"org": 0, "user": 0, "roster": 0, "close": 0, "total": len(changes)}
+    for c in changes or []:
+        k = c.get("kind")
+        if k == "org":
+            out["org"] += 1
+        elif k == "user":
+            out["user"] += 1
+        elif k == "roster":
+            out["roster"] += 1
+        elif k == "close":
+            out["close"] += 1
+    return out
+
+
+def _leorg_dept_maps(db):
+    leorg_to_local = {
+        int(r["leorg_id"]): int(r["id"])
+        for r in db.execute(
+            "SELECT id, leorg_id FROM departments WHERE leorg_id IS NOT NULL"
+        ).fetchall()
+    }
+    local_rows = {
+        int(r["id"]): dict(r)
+        for r in db.execute("SELECT * FROM departments").fetchall()
+    }
+    return leorg_to_local, local_rows
+
+
+def _diff_leorg_organizations(db, orgs):
+    """对比 LeOrg 部门与本地，返回待确认变更（不写库）。"""
+    leorg_to_local, local_rows = _leorg_dept_maps(db)
+    changes = []
+    sorted_orgs = sorted(
+        orgs,
+        key=lambda o: (
+            0 if o.get("parent_id") in (None, 0) else 1,
+            int(o.get("org_level") or 99),
+            int(o.get("id") or 0),
+        ),
+    )
+    # 预计算远端 parent 映射（leorg_id → parent_leorg_id）
+    remote_parent = {}
+    for o in sorted_orgs:
+        lid = o.get("id")
+        if lid is None:
+            continue
+        remote_parent[int(lid)] = (
+            int(o["parent_id"]) if o.get("parent_id") not in (None, 0, "") else None
+        )
+
+    for o in sorted_orgs:
+        lid = o.get("id")
+        if lid is None:
+            continue
+        lid = int(lid)
+        name = (o.get("name") or "").strip() or f"org-{lid}"
+        mgr = o.get("manager_emp_id")
+        try:
+            mgr = int(mgr) if mgr not in (None, "") else None
+        except (TypeError, ValueError):
+            mgr = None
+        parent_leorg = remote_parent.get(lid)
+        payload = {
+            "leorg_id": lid,
+            "name": name,
+            "parent_leorg_id": parent_leorg,
+            "manager_leorg_emp_id": mgr,
+        }
+        local_id = leorg_to_local.get(lid)
+        if not local_id:
+            # 名称兜底命中视为「绑定映射」更新
+            hit = db.execute(
+                "SELECT * FROM departments WHERE name = ? AND leorg_id IS NULL LIMIT 1",
+                (name,),
+            ).fetchone()
+            if hit:
+                fields = [{"field": "leorg_id", "old": None, "new": lid}]
+                if mgr is not None:
+                    fields.append(
+                        {
+                            "field": "manager_leorg_emp_id",
+                            "old": hit["manager_leorg_emp_id"]
+                            if "manager_leorg_emp_id" in hit.keys()
+                            else None,
+                            "new": mgr,
+                        }
+                    )
+                changes.append(
+                    {
+                        "key": f"org:bind:{lid}",
+                        "kind": "org",
+                        "action": "bind",
+                        "title": f"部门映射：{name}",
+                        "detail": f"本地「{name}」绑定 LeOrg#{lid}",
+                        "fields": fields,
+                        "payload": {**payload, "local_id": int(hit["id"]), "mode": "bind"},
+                    }
+                )
+            else:
+                changes.append(
+                    {
+                        "key": f"org:new:{lid}",
+                        "kind": "org",
+                        "action": "insert",
+                        "title": f"新增部门：{name}",
+                        "detail": f"LeOrg#{lid}",
+                        "fields": [
+                            {"field": "name", "old": None, "new": name},
+                            {"field": "parent_leorg_id", "old": None, "new": parent_leorg},
+                        ],
+                        "payload": {**payload, "mode": "insert"},
+                    }
+                )
+            continue
+
+        row = local_rows.get(local_id) or {}
+        fields = []
+        if (row.get("name") or "") != name:
+            fields.append({"field": "name", "old": row.get("name"), "new": name})
+        old_parent_leorg = None
+        if row.get("parent_id"):
+            for lg, loc in leorg_to_local.items():
+                if loc == row["parent_id"]:
+                    old_parent_leorg = lg
+                    break
+        if old_parent_leorg != parent_leorg:
+            fields.append(
+                {
+                    "field": "parent_leorg_id",
+                    "old": old_parent_leorg,
+                    "new": parent_leorg,
+                }
+            )
+        old_mgr = row.get("manager_leorg_emp_id")
+        try:
+            old_mgr = int(old_mgr) if old_mgr not in (None, "") else None
+        except (TypeError, ValueError):
+            old_mgr = None
+        if old_mgr != mgr:
+            fields.append(
+                {"field": "manager_leorg_emp_id", "old": old_mgr, "new": mgr}
+            )
+        if fields:
+            changes.append(
+                {
+                    "key": f"org:upd:{lid}",
+                    "kind": "org",
+                    "action": "update",
+                    "title": f"更新部门：{row.get('name') or name}",
+                    "detail": "；".join(
+                        f"{f['field']}: {f['old']} → {f['new']}" for f in fields
+                    ),
+                    "fields": fields,
+                    "payload": {**payload, "local_id": local_id, "mode": "update"},
+                }
+            )
+    return changes
+
+
+def _find_user_for_leorg_emp(db, e, beisen_user_id, emp_no, email):
+    leorg_emp_id = e.get("id")
+    user = None
+    if leorg_emp_id is not None:
+        user = db.execute(
+            "SELECT * FROM users WHERE leorg_emp_id = ?", (int(leorg_emp_id),)
+        ).fetchone()
+    if not user and beisen_user_id:
+        user = db.execute(
+            "SELECT * FROM users WHERE beisen_user_id = ?", (beisen_user_id,)
+        ).fetchone()
+    if not user and emp_no:
+        for c in dict.fromkeys(
+            [
+                emp_no,
+                emp_no.lstrip("0") or emp_no,
+                f"e{emp_no}",
+                f"e{emp_no.lstrip('0') or emp_no}",
+            ]
+        ):
+            user = db.execute(
+                "SELECT * FROM users WHERE itcode = ? OR username = ?", (c, c)
+            ).fetchone()
+            if user:
+                break
+    if not user and email:
+        user = db.execute(
+            "SELECT * FROM users WHERE lower(email) = lower(?)", (email,)
+        ).fetchone()
+    return user
+
+
+def _diff_leorg_employees(db, emps):
+    """对比 LeOrg 人员与本地用户/花名册。"""
+    leorg_to_local, _ = _leorg_dept_maps(db)
+    fallback = db.execute(
+        "SELECT id FROM departments WHERE parent_id IS NULL ORDER BY id LIMIT 1"
+    ).fetchone()
+    fallback_dept_id = int(fallback["id"]) if fallback else 1
+    changes = []
+
+    def _beisen_id_of(row):
+        v = row.get("beisen_id")
+        if v is None or v == "":
+            v = row.get("beisenId") or row.get("beisen_user_id")
+        if v is None or v == "":
+            return None
+        return str(v).strip()
+
+    for e in emps:
+        emp_status = e.get("emp_status")
+        emp_no = (e.get("emp_no") or "").strip()
+        name = (e.get("name") or "").strip()
+        email = (e.get("email") or "").strip() or None
+        phone = (e.get("mobile") or "").strip() or None
+        if phone and "*" in phone:
+            phone = None
+        leorg_emp_id = e.get("id")
+        beisen_user_id = _beisen_id_of(e)
+        org_leorg = e.get("org_id")
+        dept_id = (
+            leorg_to_local.get(int(org_leorg)) if org_leorg is not None else None
+        ) or fallback_dept_id
+        if not name:
+            continue
+
+        user = _find_user_for_leorg_emp(db, e, beisen_user_id, emp_no, email)
+
+        if emp_status == 0:
+            if user and not user_is_closed(user):
+                changes.append(
+                    {
+                        "key": f"close:{user['id']}",
+                        "kind": "close",
+                        "action": "close",
+                        "title": f"建议关闭：{user['display_name']}",
+                        "detail": f"LeOrg 已离职 · {user['username']}",
+                        "fields": [
+                            {"field": "status", "old": "active", "new": "closed"}
+                        ],
+                        "payload": {"user_id": int(user["id"]), "mode": "close"},
+                    }
+                )
+            continue
+
+        payload_base = {
+            "leorg_emp_id": int(leorg_emp_id) if leorg_emp_id is not None else None,
+            "display_name": name,
+            "dept_id": dept_id,
+            "phone": phone,
+            "email": email,
+            "emp_no": emp_no or None,
+            "beisen_user_id": beisen_user_id,
+        }
+
+        if user:
+            fields = []
+            if (user["display_name"] or "") != name:
+                fields.append(
+                    {"field": "display_name", "old": user["display_name"], "new": name}
+                )
+            if int(user["dept_id"] or 0) != int(dept_id):
+                fields.append(
+                    {"field": "dept_id", "old": user["dept_id"], "new": dept_id}
+                )
+            if email and (user["email"] or "") != email:
+                fields.append({"field": "email", "old": user["email"], "new": email})
+            if phone and (user["phone"] or "") != phone:
+                fields.append({"field": "phone", "old": user["phone"], "new": phone})
+            if emp_no and (user["itcode"] or "") != emp_no:
+                fields.append({"field": "itcode", "old": user["itcode"], "new": emp_no})
+            if beisen_user_id and (user["beisen_user_id"] or "") != beisen_user_id:
+                fields.append(
+                    {
+                        "field": "beisen_user_id",
+                        "old": user["beisen_user_id"],
+                        "new": beisen_user_id,
+                    }
+                )
+            ukeys = user.keys()
+            if leorg_emp_id is not None:
+                old_le = user["leorg_emp_id"] if "leorg_emp_id" in ukeys else None
+                if old_le != int(leorg_emp_id):
+                    fields.append(
+                        {
+                            "field": "leorg_emp_id",
+                            "old": old_le,
+                            "new": int(leorg_emp_id),
+                        }
+                    )
+            if fields:
+                changes.append(
+                    {
+                        "key": f"user:{user['id']}",
+                        "kind": "user",
+                        "action": "update",
+                        "title": f"更新人员：{user['display_name']}",
+                        "detail": "；".join(
+                            f"{f['field']}: {f['old']} → {f['new']}" for f in fields
+                        ),
+                        "fields": fields,
+                        "payload": {
+                            **payload_base,
+                            "user_id": int(user["id"]),
+                            "mode": "user_update",
+                            "fields": fields,
+                        },
+                    }
+                )
+            continue
+
+        # 花名册
+        exists = None
+        if leorg_emp_id is not None:
+            exists = db.execute(
+                """SELECT * FROM hr_sync_roster
+                WHERE leorg_emp_id = ? AND status = 'pending'""",
+                (int(leorg_emp_id),),
+            ).fetchone()
+        if not exists and emp_no:
+            exists = db.execute(
+                """SELECT * FROM hr_sync_roster
+                WHERE emp_no = ? AND status = 'pending'""",
+                (emp_no,),
+            ).fetchone()
+        if exists:
+            fields = []
+            for fld, newv in (
+                ("display_name", name),
+                ("dept_id", dept_id),
+                ("phone", phone),
+                ("email", email),
+            ):
+                oldv = exists[fld] if fld in exists.keys() else None
+                if str(oldv or "") != str(newv or ""):
+                    fields.append({"field": fld, "old": oldv, "new": newv})
+            if fields:
+                changes.append(
+                    {
+                        "key": f"roster:upd:{exists['id']}",
+                        "kind": "roster",
+                        "action": "update",
+                        "title": f"更新待初始化：{name}",
+                        "detail": "；".join(
+                            f"{f['field']}: {f['old']} → {f['new']}" for f in fields
+                        ),
+                        "fields": fields,
+                        "payload": {
+                            **payload_base,
+                            "roster_id": int(exists["id"]),
+                            "mode": "roster_update",
+                        },
+                    }
+                )
+            continue
+
+        if leorg_emp_id is not None:
+            done = db.execute(
+                """SELECT id FROM hr_sync_roster
+                WHERE leorg_emp_id = ? AND status = 'synced'""",
+                (int(leorg_emp_id),),
+            ).fetchone()
+            if done:
+                continue
+
+        changes.append(
+            {
+                "key": f"roster:new:{leorg_emp_id or emp_no or name}",
+                "kind": "roster",
+                "action": "insert",
+                "title": f"新增待初始化：{name}",
+                "detail": f"部门#{dept_id}",
+                "fields": [
+                    {"field": "display_name", "old": None, "new": name},
+                    {"field": "dept_id", "old": None, "new": dept_id},
+                ],
+                "payload": {**payload_base, "mode": "roster_insert"},
+            }
+        )
+    return changes
+
+
+def _apply_leorg_sync_changes(db, selected):
+    """按草稿条目应用变更。"""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    counts = {"org": 0, "user": 0, "roster": 0, "close": 0}
+    # 部门：先 insert/bind，再 update（含 parent）
+    org_items = [c for c in selected if c.get("kind") == "org"]
+    other = [c for c in selected if c.get("kind") != "org"]
+
+    # 第一遍：insert / bind
+    for c in org_items:
+        p = c.get("payload") or {}
+        mode = p.get("mode")
+        lid = int(p["leorg_id"])
+        name = p.get("name") or f"org-{lid}"
+        mgr = p.get("manager_leorg_emp_id")
+        if mode == "insert":
+            cur = db.execute(
+                """INSERT INTO departments
+                (name, parent_id, owner_user_id, leorg_id, manager_leorg_emp_id, sort_order)
+                VALUES (?,?,NULL,?,?,?)""",
+                (name, None, lid, mgr, lid),
+            )
+            counts["org"] += 1
+        elif mode == "bind":
+            db.execute(
+                """UPDATE departments SET leorg_id = ?, manager_leorg_emp_id = ?, name = ?
+                WHERE id = ?""",
+                (lid, mgr, name, int(p["local_id"])),
+            )
+            counts["org"] += 1
+
+    leorg_to_local, _ = _leorg_dept_maps(db)
+
+    # 第二遍：update + 统一挂 parent
+    for c in org_items:
+        p = c.get("payload") or {}
+        lid = int(p["leorg_id"])
+        local_id = p.get("local_id") or leorg_to_local.get(lid)
+        if not local_id:
+            continue
+        if p.get("mode") == "update":
+            db.execute(
+                """UPDATE departments SET name = ?, manager_leorg_emp_id = ?
+                WHERE id = ?""",
+                (p.get("name"), p.get("manager_leorg_emp_id"), int(local_id)),
+            )
+            counts["org"] += 1
+        parent_leorg = p.get("parent_leorg_id")
+        parent_local = (
+            leorg_to_local.get(int(parent_leorg)) if parent_leorg else None
+        )
+        if parent_local == int(local_id):
+            parent_local = None
+        db.execute(
+            "UPDATE departments SET parent_id = ? WHERE id = ?",
+            (parent_local, int(local_id)),
+        )
+
+    # 刷新部门映射后再处理人员
+    leorg_to_local, _ = _leorg_dept_maps(db)
+
+    for c in other:
+        p = c.get("payload") or {}
+        mode = p.get("mode")
+        if mode == "user_update":
+            uid = int(p["user_id"])
+            sets = []
+            params = []
+            for f in p.get("fields") or []:
+                fld = f.get("field")
+                if fld in (
+                    "display_name",
+                    "dept_id",
+                    "phone",
+                    "email",
+                    "itcode",
+                    "beisen_user_id",
+                    "leorg_emp_id",
+                ):
+                    sets.append(f"{fld} = ?")
+                    params.append(f.get("new"))
+            if sets:
+                params.append(uid)
+                db.execute(
+                    f"UPDATE users SET {', '.join(sets)} WHERE id = ?", params
+                )
+                counts["user"] += 1
+        elif mode == "roster_insert":
+            db.execute(
+                """INSERT INTO hr_sync_roster
+                (display_name, dept_id, phone, email, emp_no, leorg_emp_id, beisen_user_id, source, status, synced_at)
+                VALUES (?,?,?,?,?,?,?, 'leorg', 'pending', ?)""",
+                (
+                    p.get("display_name"),
+                    p.get("dept_id"),
+                    p.get("phone"),
+                    p.get("email"),
+                    p.get("emp_no"),
+                    p.get("leorg_emp_id"),
+                    p.get("beisen_user_id"),
+                    now,
+                ),
+            )
+            counts["roster"] += 1
+        elif mode == "roster_update":
+            db.execute(
+                """UPDATE hr_sync_roster
+                SET display_name=?, dept_id=?, phone=?, email=?, emp_no=?,
+                    leorg_emp_id=?, beisen_user_id=?, source='leorg', synced_at=?
+                WHERE id=?""",
+                (
+                    p.get("display_name"),
+                    p.get("dept_id"),
+                    p.get("phone"),
+                    p.get("email"),
+                    p.get("emp_no"),
+                    p.get("leorg_emp_id"),
+                    p.get("beisen_user_id"),
+                    now,
+                    int(p["roster_id"]),
+                ),
+            )
+            counts["roster"] += 1
+        elif mode == "close":
+            close_leuc_user(db, int(p["user_id"]))
+            counts["close"] += 1
+    return counts
+# AI-GEN-END
 
 
 def _sync_leorg_organizations(db, orgs):
@@ -5862,9 +6989,9 @@ def _sync_leorg_organizations(db, orgs):
             else:
                 cur = db.execute(
                     """INSERT INTO departments
-                    (name, parent_id, owner_user_id, leorg_id, manager_leorg_emp_id)
-                    VALUES (?,?,NULL,?,?)""",
-                    (name, None, lid, mgr),
+                    (name, parent_id, owner_user_id, leorg_id, manager_leorg_emp_id, sort_order)
+                    VALUES (?,?,NULL,?,?,?)""",
+                    (name, None, lid, mgr, lid),
                 )
                 local_id = int(cur.lastrowid)
                 inserted += 1
@@ -5899,7 +7026,7 @@ def _sync_leorg_organizations(db, orgs):
 def _resolve_dept_owners_from_leorg(db):
     """按 departments.manager_leorg_emp_id → users.leorg_emp_id 回填主负责人。
 
-    已建 LEUC 账号才写入 owner_user_id；普通员工升为 dept_owner。
+    已建 LEUC 账号才写入 owner_user_id；不自动改用户角色（与角色多对多解耦）。
     LeOrg 未指定负责人时清空该部门主负责人（不影响额外负责人）。
     """
     # AI-GEN-BEGIN
@@ -5936,10 +7063,6 @@ def _resolve_dept_owners_from_leorg(db):
             db.execute(
                 "UPDATE departments SET owner_user_id = ? WHERE id = ?",
                 (uid, d["id"]),
-            )
-        if u["role"] in ("employee", "employee_a", "employee_b"):
-            db.execute(
-                "UPDATE users SET role = 'dept_owner' WHERE id = ?", (uid,)
             )
         resolved += 1
     return {"resolved": resolved, "pending": pending, "cleared": cleared}
@@ -6134,9 +7257,9 @@ def _sync_leorg_employees(db, emps):
 def require_sys_owner(user, system_id=None):
     """超管 / 系统管理员；指定 system_id 时校验是否为该系统管理员（可多人）。"""
     # AI-GEN-BEGIN
-    if user["role"] == "super_admin":
+    if user_has_role(user, "super_admin"):
         return True
-    if user["role"] != "system_owner":
+    if not user_has_role(user, "system_owner"):
         return False
     if system_id is None:
         return True
@@ -6209,9 +7332,9 @@ def fetch_system_owners(db, system_id):
 
 def managed_system_ids(db, user):
     """当前用户可管理的系统 id 列表；超管返回 None 表示全部。"""
-    if user["role"] == "super_admin":
+    if user_has_role(user, "super_admin"):
         return None
-    if user["role"] != "system_owner":
+    if not user_has_role(user, "system_owner"):
         return []
     ids = {
         r["system_id"]
@@ -6405,7 +7528,7 @@ def bind_user_bound_accounts(user):
 @login_required
 def bind_direct(user):
     """超管 / 人事专员：直接绑定（一 LEUC 可绑多个系统账号）。"""
-    if not (user_has_cap(user, "direct_bind") or user["role"] in ("hr_specialist", "super_admin")):
+    if not (user_has_cap(user, "direct_bind") or user_has_role(user, "hr_specialist", "super_admin")):
         return jsonify({"ok": False, "error": "未开通直接绑定能力"}), 403
     data = request.get_json(force=True) or {}
     items = data.get("items") or []
@@ -6540,7 +7663,7 @@ def bind_apply(user):
     leuc_user_ids = list(data.get("leuc_user_ids") or data.get("user_ids") or [])
     if data.get("leuc_user_id"):
         leuc_user_ids = [data.get("leuc_user_id")]
-    if not leuc_user_ids and not items and user["role"] in ("employee_a", "employee_b"):
+    if not leuc_user_ids and not items and user_has_role(user, "employee_a", "employee_b"):
         leuc_user_ids = [user["id"]]
 
     db = get_db()
@@ -7350,6 +8473,120 @@ def _import_accounts_from_csv(system_id, text, source):
             updated += 1
     db.commit()
     return {"added": added, "updated": updated}
+
+
+# AI-GEN-BEGIN
+def _beisen_id_of_emp(row) -> str | None:
+    v = row.get("beisen_id")
+    if v is None or v == "":
+        v = row.get("beisenId") or row.get("beisen_user_id")
+    if v is None or v == "":
+        return None
+    return str(v).strip()
+
+
+def sync_beisen_accounts_from_org(db, system_id: int) -> dict:
+    """北森账号池真实同步：优先 LeOrg /v1/employees（beisen_id），失败则用本系统组织人员。
+
+    文档：https://leorg-ai.lecoosys.com/api/docs/
+    """
+    migrate_schema(db)
+    now = datetime.now().strftime("%Y-%m-%d")
+    added = 0
+    updated = 0
+    skipped = 0
+    source = "leorg"
+    source_label = "LeOrg"
+    people: list[dict] = []
+
+    cfg = leorg_load_config()
+    if cfg and cfg.enabled and LeorgClient is not None:
+        try:
+            client = LeorgClient(cfg)
+            seen: set[int] = set()
+            # 在职 + 试用（与部门人员同步一致）
+            for st in (1, 2):
+                for e in client.list_employees(emp_status=st):
+                    eid = e.get("id")
+                    if eid is not None:
+                        if int(eid) in seen:
+                            continue
+                        seen.add(int(eid))
+                    people.append(e)
+        except Exception as exc:
+            # 降级：用本地组织已同步的北森 ID
+            source = "local_org"
+            source_label = f"本系统组织人员（LeOrg 失败：{exc}）"
+            people = []
+
+    if not people:
+        source = "local_org" if source != "leorg" else "local_org"
+        source_label = "本系统组织人员" if source_label == "LeOrg" else source_label
+        rows = db.execute(
+            """SELECT username, display_name, phone, email, itcode, beisen_user_id
+            FROM users
+            WHERE beisen_user_id IS NOT NULL AND TRIM(beisen_user_id) != ''
+              AND COALESCE(status, 'active') != 'closed'
+            ORDER BY id"""
+        ).fetchall()
+        for r in rows:
+            people.append(
+                {
+                    "beisen_id": r["beisen_user_id"],
+                    "name": r["display_name"],
+                    "emp_no": r["itcode"] or r["username"],
+                    "email": r["email"],
+                    "mobile": r["phone"],
+                    "username": r["username"],
+                }
+            )
+
+    for e in people:
+        bid = _beisen_id_of_emp(e)
+        if not bid:
+            skipped += 1
+            continue
+        name = (e.get("name") or e.get("display_name") or "").strip() or bid
+        emp_no = (e.get("emp_no") or e.get("itcode") or "").strip()
+        email = (e.get("email") or "").strip() or None
+        phone = (e.get("mobile") or e.get("phone") or "").strip() or None
+        if phone and "*" in phone:
+            phone = None
+        uname = (e.get("username") or "").strip()
+        if email and "@" in email:
+            account_name = email.split("@", 1)[0]
+        elif emp_no:
+            account_name = emp_no
+        elif uname:
+            account_name = uname
+        else:
+            account_name = f"beisen_{bid}"
+        _, is_new = upsert_system_account(
+            db,
+            system_id,
+            account_uid=bid,
+            account_name=account_name,
+            display_name=name,
+            phone=phone,
+            email=email,
+            itcode=emp_no or uname or None,
+            source=source,
+            now=now,
+        )
+        if is_new:
+            added += 1
+        else:
+            updated += 1
+
+    db.commit()
+    return {
+        "added": added,
+        "updated": updated,
+        "skipped": skipped,
+        "total": len(people),
+        "source": source,
+        "source_label": source_label,
+    }
 # AI-GEN-END
 
 
@@ -7435,10 +8672,11 @@ def sys_accounts_import(user):
     )
 
 
+@app.post("/api/sys-accounts/sync")
 @app.post("/api/sys-accounts/sync-demo")
 @login_required
-def sys_accounts_sync_demo(user):
-    """模拟从子系统同步一批账号。"""
+def sys_accounts_sync(user):
+    """子系统账号同步。北森：LeOrg 员工 beisen_id → 账号池；其它系统仍为演示数据。"""
     if not require_sys_owner(user):
         return jsonify({"ok": False, "error": "无权限"}), 403
     data = request.get_json(force=True) or {}
@@ -7448,29 +8686,52 @@ def sys_accounts_sync_demo(user):
     # AI-GEN-BEGIN
     db = get_db()
     migrate_schema(db)
-    sys_row = db.execute("SELECT code FROM systems WHERE id = ?", (system_id,)).fetchone()
-    code = sys_row["code"] if sys_row else ""
+    sys_row = db.execute(
+        "SELECT id, code, name FROM systems WHERE id = ?", (system_id,)
+    ).fetchone()
+    if not sys_row:
+        return jsonify({"ok": False, "error": "系统不存在"}), 404
+    code = sys_row["code"] or ""
+
     if code == "beisen":
-        csv_text = (
-            "唯一标识,账号名,姓名,手机,邮箱,itcode\n"
-            "630799001,sync_beisen_a,同步甲,13920000001,a@lecoo.com,synca\n"
-            "630799002,sync_beisen_b,同步乙,13920000002,b@lecoo.com,syncb\n"
+        try:
+            stats = sync_beisen_accounts_from_org(db, system_id)
+        except Exception as exc:
+            return jsonify({"ok": False, "error": f"北森账号同步失败：{exc}"}), 500
+        skip_n = int(stats.get("skipped") or 0)
+        skip_part = f"，跳过无北森ID {skip_n}" if skip_n else ""
+        return jsonify(
+            {
+                "ok": True,
+                **stats,
+                "system": sys_row["name"],
+                "real": True,
+                "message": (
+                    f"已从{stats.get('source_label') or 'LeOrg'}同步北森账号："
+                    f"新增 {stats['added']}、更新 {stats['updated']}"
+                    f"（扫描 {stats.get('total', 0)} 人{skip_part}）"
+                ),
+            }
         )
-    else:
-        csv_text = (
-            "唯一标识,账号名,姓名,手机,邮箱,itcode\n"
-            "SYNC-A-001,sync_demo_a,同步甲,13920000001,a@lecoo.com,synca\n"
-            "SYNC-B-001,sync_demo_b,同步乙,13920000002,b@lecoo.com,syncb\n"
-        )
-    # AI-GEN-END
+
+    csv_text = (
+        "唯一标识,账号名,姓名,手机,邮箱,itcode\n"
+        "SYNC-A-001,sync_demo_a,同步甲,13920000001,a@lecoo.com,synca\n"
+        "SYNC-B-001,sync_demo_b,同步乙,13920000002,b@lecoo.com,syncb\n"
+    )
     stats = _import_accounts_from_csv(system_id, csv_text, "sync")
     return jsonify(
         {
             "ok": True,
             **stats,
-            "message": f"已从子系统同步，新增 {stats['added']}、更新 {stats['updated']} 个账号",
+            "real": False,
+            "message": (
+                f"已演示同步 {sys_row['name']}：新增 {stats['added']}、更新 {stats['updated']} "
+                f"（非北森仍为模拟；北森请选北森后同步）"
+            ),
         }
     )
+    # AI-GEN-END
 
 
 @app.get("/api/admin/systems")
@@ -7479,7 +8740,7 @@ def sys_accounts_sync_demo(user):
 def admin_systems(user):
     """业务系统管理：列举全部可登录系统（申请账号同源列表）。仅超管/系统管理员。"""
     # AI-GEN-BEGIN
-    if user["role"] not in ("super_admin", "system_owner"):
+    if not user_has_role(user, "super_admin", "system_owner"):
         return jsonify({"ok": False, "error": "无权限"}), 403
     db = get_db()
     manage_ids = managed_system_ids(db, user)
@@ -7571,7 +8832,7 @@ def admin_systems(user):
             "systems": out,
             "issuer": _issuer(),
             "owner_candidates": [dict(c) for c in cand],
-            "is_super": user["role"] == "super_admin",
+            "is_super": user_has_role(user, "super_admin"),
             # AI-GEN-BEGIN
             "sso_login_fields": [
                 {"value": v, "label": SSO_LOGIN_FIELD_LABELS[v]} for v in SSO_LOGIN_FIELDS
@@ -7587,7 +8848,7 @@ def admin_systems(user):
 def admin_system_owners(user, sid):
     """超管指定系统管理员（可多人）。"""
     # AI-GEN-BEGIN
-    if user["role"] != "super_admin":
+    if not user_has_role(user, "super_admin"):
         return jsonify({"ok": False, "error": "仅超级管理员可指定系统管理员"}), 403
     data = request.get_json(force=True) or {}
     owner_ids = data.get("owner_user_ids") or data.get("owners") or []
@@ -7708,7 +8969,7 @@ def admin_system_sso_login_field(user, sid):
 @app.post("/api/admin/systems")
 @login_required
 def admin_create_system(user):
-    if user["role"] != "super_admin":
+    if not user_has_role(user, "super_admin"):
         return jsonify({"ok": False, "error": "仅超管可添加系统"}), 403
     data = request.get_json(force=True) or {}
     name = (data.get("name") or "").strip()
@@ -7846,7 +9107,7 @@ def admin_update_system(user, sid):
 
     # 仅超管可改系统管理员（先校验，避免半更新）
     touch_owners = "owner_user_ids" in data or "owners" in data
-    if touch_owners and user["role"] != "super_admin":
+    if touch_owners and not user_has_role(user, "super_admin"):
         return jsonify({"ok": False, "error": "仅超管可修改系统管理员"}), 403
 
     db.execute(
@@ -8029,7 +9290,7 @@ def systems_public():
 
 # AI-GEN-BEGIN
 def _oa_can_view(user):
-    return user["role"] in ("hr_specialist", "system_owner", "super_admin")
+    return user_has_role(user, "hr_specialist", "system_owner", "super_admin")
 
 
 def _oa_hr_user_id(db):
@@ -8786,14 +10047,8 @@ def demo_portal_systems():
 
 
 # AI-GEN-BEGIN
-def _bound_system_account_for_sso(db, leuc_user_id, system_code: str = "beisen"):
-    """取用户在某系统「已申请开通且可登录」的绑定账号池记录。
-
-    必须同时满足：
-    - system_accounts.leuc_user_id 已绑定
-    - user_system_accounts.can_login = 1（申请/开通后才可登录）
-    不用通讯录 users.beisen_user_id。
-    """
+def _bound_system_accounts_for_sso(db, leuc_user_id, system_code: str = "beisen"):
+    """用户在某系统全部「已开通可登录」的账号池记录（可多条）。"""
     return db.execute(
         """SELECT a.*, s.code AS system_code, s.sso_login_field, u.can_login, u.is_default
         FROM system_accounts a
@@ -8803,10 +10058,48 @@ def _bound_system_account_for_sso(db, leuc_user_id, system_code: str = "beisen")
         WHERE a.leuc_user_id = ? AND s.code = ?
           AND IFNULL(a.status, '') != 'closed'
           AND u.can_login = 1
-        ORDER BY u.is_default DESC, a.id
-        LIMIT 1""",
+        ORDER BY u.is_default DESC, a.id""",
         (leuc_user_id, system_code),
-    ).fetchone()
+    ).fetchall()
+
+
+def _bound_system_account_for_sso(db, leuc_user_id, system_code: str = "beisen"):
+    """取用户在某系统「已申请开通且可登录」的绑定账号池记录。
+
+    必须同时满足：
+    - system_accounts.leuc_user_id 已绑定
+    - user_system_accounts.can_login = 1（申请/开通后才可登录）
+    不用通讯录 users.beisen_user_id。
+    多账号时优先：默认账号 → 合法北森用户ID(正整数) → id 较小。
+    """
+    rows = _bound_system_accounts_for_sso(db, leuc_user_id, system_code)
+    if not rows:
+        return None
+    if len(rows) == 1:
+        return rows[0]
+    # 优先合法正整数 account_uid（uty=id）
+    numeric = []
+    for r in rows:
+        uid = (r["account_uid"] or "").strip()
+        if _beisen_sub_is_positive_id(uid):
+            numeric.append(r)
+    if len(numeric) == 1:
+        return numeric[0]
+    if numeric:
+        # 多个合法：仍取默认优先（已 ORDER BY is_default）
+        return numeric[0]
+    return rows[0]
+
+
+def _beisen_sub_is_positive_id(sub: str) -> bool:
+    """uty=id 时北森要求 BeisenUserID 为正整数；非数字会被当成 0 报错。"""
+    s = (sub or "").strip()
+    if not s or not s.isdigit():
+        return False
+    try:
+        return int(s) > 0
+    except ValueError:
+        return False
 
 
 def _value_from_sso_login_field(acct_row, field: str) -> str:
@@ -8819,8 +10112,21 @@ def _value_from_sso_login_field(acct_row, field: str) -> str:
     return ""
 
 
-def _beisen_sso_diagnose(user) -> dict:
-    """诊断北森 SSO 不可用原因（不含通讯录兜底）。"""
+def _serialize_beisen_sso_account(acct, field: str = "account_uid") -> dict:
+    sub = _value_from_sso_login_field(acct, field)
+    return {
+        "pool_account_id": acct["id"],
+        "account_name": acct["account_name"],
+        "display_name": acct["display_name"] if "display_name" in acct.keys() else None,
+        "account_uid": (acct["account_uid"] or None) if "account_uid" in acct.keys() else None,
+        "sub": sub,
+        "is_default": bool(acct["is_default"]) if "is_default" in acct.keys() else False,
+        "uty_id_ok": _beisen_sub_is_positive_id(sub) if field == "account_uid" else bool(sub),
+    }
+
+
+def _beisen_sso_diagnose(user, account_id=None) -> dict:
+    """诊断北森 SSO 不可用原因（不含通讯录兜底）；支持多账号。"""
     db = get_db()
     migrate_schema(db)
     sys_row = db.execute(
@@ -8838,19 +10144,19 @@ def _beisen_sso_diagnose(user) -> dict:
         else "account_uid"
     )
     field_label = sso_login_field_label(field, "beisen")
+    rows = _bound_system_accounts_for_sso(db, user["id"], "beisen")
+    accounts = [_serialize_beisen_sso_account(r, field) for r in rows]
+
     # 池中有绑定但不可登录
     pool_any = db.execute(
-        """SELECT a.id, a.account_uid, a.account_name, a.status, u.can_login
-        FROM system_accounts a
+        """SELECT a.id FROM system_accounts a
         JOIN systems s ON s.id = a.system_id
-        LEFT JOIN user_system_accounts u ON u.user_id = a.leuc_user_id
-          AND u.system_id = a.system_id AND u.account_name = a.account_name
         WHERE a.leuc_user_id = ? AND s.code = 'beisen'
-        ORDER BY a.id LIMIT 1""",
+        LIMIT 1""",
         (user["id"],),
     ).fetchone()
-    acct = _bound_system_account_for_sso(db, user["id"], "beisen")
-    if not acct:
+
+    if not accounts:
         if pool_any is not None:
             return {
                 "ok": False,
@@ -8861,6 +10167,7 @@ def _beisen_sso_diagnose(user) -> dict:
                 "need_apply": True,
                 "sso_login_field": field,
                 "sso_login_field_label": field_label,
+                "accounts": [],
             }
         return {
             "ok": False,
@@ -8872,62 +10179,151 @@ def _beisen_sso_diagnose(user) -> dict:
             "need_bind": True,
             "sso_login_field": field,
             "sso_login_field_label": field_label,
+            "accounts": [],
         }
-    sub = _value_from_sso_login_field(acct, field)
+
+    chosen = None
+    if account_id is not None:
+        try:
+            aid = int(account_id)
+        except (TypeError, ValueError):
+            return {
+                "ok": False,
+                "error": "账号选择无效",
+                "accounts": accounts,
+                "need_choose": True,
+                "sso_login_field": field,
+                "sso_login_field_label": field_label,
+            }
+        for r in rows:
+            if int(r["id"]) == aid:
+                chosen = r
+                break
+        if not chosen:
+            return {
+                "ok": False,
+                "error": "所选北森账号未绑定或不属于当前用户",
+                "accounts": accounts,
+                "need_choose": True,
+                "sso_login_field": field,
+                "sso_login_field_label": field_label,
+            }
+    elif len(accounts) > 1:
+        # 多账号且未指定：要求选择（避免误用演示账号 SYNC-*）
+        return {
+            "ok": False,
+            "error": f"您绑定了 {len(accounts)} 个北森账号，请选择要用哪个登录",
+            "need_choose": True,
+            "accounts": accounts,
+            "sso_login_field": field,
+            "sso_login_field_label": field_label,
+        }
+    else:
+        chosen = rows[0]
+
+    sub = _value_from_sso_login_field(chosen, field)
     if not sub:
         return {
             "ok": False,
             "error": (
-                f"已绑定北森账号 {acct['account_name']}，但缺少「{field_label}」。"
+                f"已绑定北森账号 {chosen['account_name']}，但缺少「{field_label}」。"
                 "请在系统账号管理补全该账号池字段后再登录。"
             ),
             "need_sso_field": True,
-            "account_name": acct["account_name"],
+            "account_name": chosen["account_name"],
+            "accounts": accounts,
+            "sso_login_field": field,
+            "sso_login_field_label": field_label,
+        }
+    if field == "account_uid" and not _beisen_sub_is_positive_id(sub):
+        return {
+            "ok": False,
+            "error": (
+                f"账号 {chosen['account_name']} 的北森用户ID「{sub}」不是正整数，"
+                "北森 SSO（uty=id）会报 Argument not positive。"
+                "请改选真实北森用户ID，或在账号池修正唯一标识。"
+            ),
+            "need_sso_field": True,
+            "need_choose": len(accounts) > 1,
+            "account_name": chosen["account_name"],
+            "accounts": accounts,
             "sso_login_field": field,
             "sso_login_field_label": field_label,
         }
     return {
         "ok": True,
         "sub": sub,
-        "account_name": acct["account_name"],
-        "pool_account_id": acct["id"],
+        "account_name": chosen["account_name"],
+        "pool_account_id": chosen["id"],
         "sso_login_field": field,
         "sso_login_field_label": field_label,
         "source": "system_accounts",
+        "accounts": accounts,
     }
 
 
-def _beisen_resolve_sub(user, data=None, uty: str = "id"):
+def _beisen_resolve_sub(user, data=None, uty: str = "id", account_id=None):
     """解析北森 SSO sub：仅用已开通绑定的账号池字段（不用通讯录 beisen_user_id）。"""
     data = data or {}
-    # 仅显式传 sub 时覆盖（联调）；正常流程必须走绑定账号
     override = (data.get("sub") or request.args.get("sub") or "").strip()
     if override:
         return override
+    if account_id is None:
+        account_id = data.get("account_id") or data.get("pool_account_id")
+        if account_id is None and request:
+            account_id = request.args.get("account_id")
     mode = (uty or "id").strip().lower()
+    detail = _beisen_sso_diagnose(user, account_id=account_id)
+    if not detail.get("ok"):
+        return ""
     if mode == "email":
-        # 仍要求已开通绑定；字段取自账号池 email
-        detail = _beisen_sso_diagnose(user)
-        if not detail.get("ok"):
-            return ""
         db = get_db()
-        acct = _bound_system_account_for_sso(db, user["id"], "beisen")
+        acct = None
+        for r in _bound_system_accounts_for_sso(db, user["id"], "beisen"):
+            if int(r["id"]) == int(detail["pool_account_id"]):
+                acct = r
+                break
         return _value_from_sso_login_field(acct, "email")
     if mode in ("jobcode", "job_code"):
-        detail = _beisen_sso_diagnose(user)
-        if not detail.get("ok"):
-            return ""
         db = get_db()
-        acct = _bound_system_account_for_sso(db, user["id"], "beisen")
+        acct = None
+        for r in _bound_system_accounts_for_sso(db, user["id"], "beisen"):
+            if int(r["id"]) == int(detail["pool_account_id"]):
+                acct = r
+                break
         return _value_from_sso_login_field(acct, "itcode")
-    detail = _beisen_sso_diagnose(user)
-    return (detail.get("sub") or "").strip() if detail.get("ok") else ""
+    return (detail.get("sub") or "").strip()
+# AI-GEN-END
 
 
 @app.get("/api/beisen/sso/status")
 def beisen_sso_status():
     """北森真实 SSO 是否已配置。"""
     return jsonify({"ok": True, **beisen_status_dict()})
+
+
+@app.get("/api/beisen/sso/accounts")
+@login_required
+def beisen_sso_accounts(user):
+    """当前用户可 SSO 的北森账号列表（多账号时需选择）。"""
+    # AI-GEN-BEGIN
+    detail = _beisen_sso_diagnose(user, account_id=None)
+    accounts = detail.get("accounts") or []
+    tip = session.pop("beisen_sso_choose_tip", None) or None
+    return jsonify(
+        {
+            "ok": True,
+            "need_choose": bool(detail.get("need_choose")) or len(accounts) > 1,
+            "accounts": accounts,
+            "sso_login_field": detail.get("sso_login_field"),
+            "sso_login_field_label": detail.get("sso_login_field_label"),
+            "error": None if accounts else detail.get("error"),
+            "tip": tip,
+            "need_bind": bool(detail.get("need_bind")),
+            "need_apply": bool(detail.get("need_apply")),
+        }
+    )
+    # AI-GEN-END
 
 
 @app.post("/api/beisen/sso/launch")
@@ -8946,23 +10342,46 @@ def beisen_sso_launch(user):
     data = request.get_json(silent=True) or {}
     uty = (data.get("uty") or request.args.get("uty") or cfg.uty or "id").strip()
     # AI-GEN-BEGIN
-    detail = _beisen_sso_diagnose(user)
+    account_id = data.get("account_id") or data.get("pool_account_id") or request.args.get("account_id")
+    detail = _beisen_sso_diagnose(user, account_id=account_id)
     override = (data.get("sub") or request.args.get("sub") or "").strip()
-    sub = override or _beisen_resolve_sub(user, data, uty=uty)
-    if not sub:
-        tip = detail.get("error") if not detail.get("ok") else "缺少登录标识 sub"
-        if uty == "email":
-            tip = tip or "绑定账号缺少邮箱"
-        if uty in ("jobcode", "job_code"):
-            tip = tip or "绑定账号缺少 itcode"
+    if not override and detail.get("need_choose") and not account_id:
         return jsonify(
             {
                 "ok": False,
-                "error": tip,
+                "error": detail.get("error") or "请选择北森账号",
+                "need_choose": True,
+                "accounts": detail.get("accounts") or [],
+                "uty": uty,
+            }
+        ), 400
+    if not override and not detail.get("ok"):
+        return jsonify(
+            {
+                "ok": False,
+                "error": detail.get("error") or "缺少登录标识 sub",
                 "uty": uty,
                 "need_bind": bool(detail.get("need_bind")),
                 "need_apply": bool(detail.get("need_apply")),
                 "need_sso_field": bool(detail.get("need_sso_field")),
+                "need_choose": bool(detail.get("need_choose")),
+                "accounts": detail.get("accounts") or [],
+            }
+        ), 400
+    sub = override or detail.get("sub") or ""
+    if not sub:
+        return jsonify({"ok": False, "error": "缺少登录标识 sub", "uty": uty}), 400
+    if (uty or "id").lower() == "id" and not _beisen_sub_is_positive_id(sub):
+        return jsonify(
+            {
+                "ok": False,
+                "error": (
+                    f"sub「{sub}」不是正整数 BeisenUserID，北森会报 Argument not positive。"
+                    "请选择真实北森用户ID账号。"
+                ),
+                "need_choose": True,
+                "accounts": detail.get("accounts") or [],
+                "uty": uty,
             }
         ), 400
     # AI-GEN-END
@@ -8987,6 +10406,7 @@ def beisen_sso_launch(user):
             # AI-GEN-BEGIN
             "sso_source": "override" if override else "system_accounts",
             "bound_account": detail.get("account_name") if detail.get("ok") else None,
+            "pool_account_id": detail.get("pool_account_id") if detail.get("ok") else None,
             # AI-GEN-END
             "user": {
                 "id": user["id"],
@@ -8998,9 +10418,50 @@ def beisen_sso_launch(user):
     )
 
 
+def _beisen_choose_html(user, accounts, *, return_url, uty, error=None):
+    """多北森账号选择页 HTML。"""
+    # AI-GEN-BEGIN
+    rows = []
+    for a in accounts:
+        ok = a.get("uty_id_ok")
+        badge = (
+            '<span style="color:#067647;font-size:12px">可用</span>'
+            if ok
+            else '<span style="color:#b42318;font-size:12px">ID非法(非正整数)</span>'
+        )
+        q = urlencode(
+            {
+                "account_id": a["pool_account_id"],
+                "uty": uty or "id",
+                "return_url": return_url or "https://www.italent.cn/",
+            }
+        )
+        disabled = "" if ok else "opacity:.55;pointer-events:none"
+        rows.append(
+            f"""<a href="/beisen/sso/go?{q}" style="display:block;padding:12px 14px;margin:8px 0;
+            border:1px solid #d0d5dd;border-radius:10px;text-decoration:none;color:#101828;{disabled}">
+            <b>{a.get('display_name') or a.get('account_name')}</b>
+            · <code>{a.get('account_name')}</code>
+            · 北森用户ID <code>{a.get('account_uid') or '-'}</code>
+            {badge}
+            </a>"""
+        )
+    err = f"<p style='color:#b42318'>{error}</p>" if error else ""
+    return f"""<!doctype html><meta charset=utf-8>
+<title>选择北森账号</title>
+<body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:520px;margin:40px auto;padding:0 16px">
+<h2>选择北森账号登录</h2>
+<p>{user.get('display_name')}（{user.get('username')}）绑定了多个北森账号，请选择本次 SSO 使用哪一个。</p>
+{err}
+{''.join(rows) or '<p>暂无可用账号</p>'}
+<p style="margin-top:20px"><a href="/demo/home">返回业务系统导航</a> · <a href="/">用户中心</a></p>
+</body>"""
+    # AI-GEN-END
+
+
 @app.get("/beisen/sso/go")
 def beisen_sso_go():
-    """浏览器直达：未登录先走 /sso，已登录 302 跳北森。"""
+    """浏览器直达：未登录先走 /sso，已登录 302 跳北森；多账号时先选择。"""
     cfg = beisen_load_config()
     if not cfg or not getattr(cfg, "enabled", False):
         return (
@@ -9017,6 +10478,7 @@ def beisen_sso_go():
             "sub": (request.args.get("sub") or "").strip() or None,
             "uty": (request.args.get("uty") or "").strip() or None,
             "return_url": request.args.get("return_url"),
+            "account_id": (request.args.get("account_id") or "").strip() or None,
         }
         return redirect("/sso?next=beisen_sso")
     pending = session.pop("beisen_sso_pending", None) or {}
@@ -9026,13 +10488,38 @@ def beisen_sso_go():
         "return_url": request.args.get("return_url")
         if "return_url" in request.args
         else pending.get("return_url"),
+        "account_id": request.args.get("account_id") or pending.get("account_id"),
     }
     uty = (data.get("uty") or cfg.uty or "id").strip()
     # AI-GEN-BEGIN
-    detail = _beisen_sso_diagnose(user)
-    sub = _beisen_resolve_sub(user, data, uty=uty)
-    if not sub:
-        tip = (detail.get("error") if not detail.get("ok") else None) or "缺少登录标识 sub。"
+    account_id = data.get("account_id")
+    detail = _beisen_sso_diagnose(user, account_id=account_id)
+    ret = data.get("return_url") or cfg.return_url or "https://www.italent.cn/"
+    # 多账号 / 非法 ID：回用户中心首页弹窗选择（不再用独立简陋页）
+    if detail.get("need_choose") and not account_id:
+        session["beisen_sso_choose_tip"] = detail.get("error") or ""
+        q = urlencode(
+            {
+                "beisen_sso_choose": "1",
+                "return_url": ret,
+                "uty": uty,
+            }
+        )
+        return redirect(f"/?{q}")
+    override = (data.get("sub") or "").strip()
+    sub = override or (detail.get("sub") if detail.get("ok") else "") or ""
+    if not detail.get("ok") and not override:
+        tip = detail.get("error") or "缺少登录标识 sub。"
+        if detail.get("need_choose") or (detail.get("accounts") or []):
+            session["beisen_sso_choose_tip"] = tip
+            q = urlencode(
+                {
+                    "beisen_sso_choose": "1",
+                    "return_url": ret,
+                    "uty": uty,
+                }
+            )
+            return redirect(f"/?{q}")
         tip += (
             " <a href='/'>回用户中心申请北森账号</a> · "
             "<a href='/demo/home'>返回导航</a>"
@@ -9043,6 +10530,19 @@ def beisen_sso_go():
             400,
             {"Content-Type": "text/html; charset=utf-8"},
         )
+    if (uty or "id").lower() == "id" and not _beisen_sub_is_positive_id(sub):
+        session["beisen_sso_choose_tip"] = (
+            f"账号标识「{sub}」不是正整数北森用户ID，无法 SSO。"
+            "请选择真实北森用户ID账号（如 630702408）。"
+        )
+        q = urlencode(
+            {
+                "beisen_sso_choose": "1",
+                "return_url": ret,
+                "uty": uty,
+            }
+        )
+        return redirect(f"/?{q}")
     # AI-GEN-END
     try:
         out = beisen_launch_url(

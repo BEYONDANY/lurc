@@ -454,6 +454,51 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   <!-- AI-GEN-END -->
 </div></div>
 
+<!-- AI-GEN-BEGIN -->
+<div class="mask" id="m-edit-member"><div class="modal" style="max-width:480px">
+  <h3>编辑人员</h3>
+  <div class="callout" id="edit-member-hint">可改姓名、部门、手机、邮箱与状态；关闭后可再打开。</div>
+  <input type="hidden" id="edit-member-id">
+  <div class="field"><label>姓名</label><input id="edit-member-name"></div>
+  <div class="field"><label>登录账号</label><input id="edit-member-username" readonly style="background:#f1f5f9"></div>
+  <div class="field"><label>部门</label><select id="edit-member-dept"></select></div>
+  <div class="field"><label>手机</label><input id="edit-member-phone"></div>
+  <div class="field"><label>邮箱</label><input id="edit-member-email"></div>
+  <div class="field"><label>状态</label>
+    <select id="edit-member-status">
+      <option value="active">正常（可登录）</option>
+      <option value="closed">已关闭</option>
+    </select>
+  </div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-edit-member')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitEditMember()">保存</button>
+  </div>
+</div></div>
+
+<div class="mask" id="m-sync-diff"><div class="modal" style="max-width:720px">
+  <h3 id="sync-diff-title">同步变更确认</h3>
+  <div class="callout" id="sync-diff-hint">以下为与 LeOrg 的差异，勾选后接受才会写入本地。</div>
+  <div class="toolbar" style="margin-bottom:8px">
+    <button class="btn btn-sm btn-line" onclick="syncDiffToggleAll(true)">全选</button>
+    <button class="btn btn-sm btn-line" onclick="syncDiffToggleAll(false)">全不选</button>
+    <span class="note" id="sync-diff-meta"></span>
+  </div>
+  <div style="max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:8px">
+    <table>
+      <thead><tr>
+        <th style="width:36px"></th><th>类型</th><th>变更</th><th>明细</th>
+      </tr></thead>
+      <tbody id="sync-diff-body"></tbody>
+    </table>
+  </div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeSyncDiff()">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitSyncDiff()">接受所选变更</button>
+  </div>
+</div></div>
+<!-- AI-GEN-END -->
+
 <div class="mask" id="m-import"><div class="modal">
   <h3>导入人员</h3>
   <div class="sub">CSV：姓名,手机,邮箱,角色(可选)。账号按拼音自动生成。</div>
@@ -743,6 +788,18 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   <div id="perm-body"></div>
   <div class="foot"><button class="btn btn-line" onclick="closeModal('m-perm')">关闭</button></div>
 </div></div>
+
+<!-- AI-GEN-BEGIN -->
+<div class="mask" id="m-beisen-choose"><div class="modal" style="max-width:520px">
+  <h3>选择北森账号</h3>
+  <div class="callout" id="beisen-choose-hint">您绑定了多个北森账号，请选择本次 SSO 使用哪一个。仅<strong>正整数北森用户ID</strong>可登录 italent。</div>
+  <div id="beisen-choose-list" style="display:flex;flex-direction:column;gap:8px;margin:12px 0;max-height:320px;overflow:auto"></div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="cancelBeisenChoose()">取消</button>
+    <a class="btn btn-line" href="/demo/home" style="text-decoration:none;display:inline-flex;align-items:center">回业务导航</a>
+  </div>
+</div></div>
+<!-- AI-GEN-END -->
 
 <script>
 // AI-GEN-BEGIN
@@ -1276,6 +1333,42 @@ async function renderAdminRoles(el){
   const { data } = await api('/api/admin/roles');
   if (!data.ok) { el.innerHTML = `<div class="ptitle">角色与权限</div><div class="warn">${data.error||'无权'}</div>`; return; }
   state.roleAdmin = data;
+  if (!state.roleUiTab) state.roleUiTab = 'by_user';
+  const tab = state.roleUiTab === 'by_role' ? 'by_role' : 'by_user';
+  state.roleUiTab = tab;
+  const canConfig = !!(data.can_config) || hasBtn('config_roles') || state.user?.role === 'super_admin';
+  const canAssign = !!(data.can_assign) || hasBtn('role_assign') || canConfig;
+  const tabs = `<div class="tabs">
+    <div class="${tab==='by_user'?'on':''}" onclick="state.roleUiTab='by_user';renderMain()">按用户</div>
+    <div class="${tab==='by_role'?'on':''}" onclick="state.roleUiTab='by_role';renderMain()">按角色</div>
+  </div>`;
+  if (tab === 'by_user') {
+    el.innerHTML = `
+      <div class="ptitle">角色与权限 <span class="pill p-blue">多对多</span>
+        <span class="pill p-gray">用户 ↔ 角色</span></div>
+      <div class="callout">仅列出<strong>已绑定本系统角色</strong>的用户（不含仅普通员工）。
+        点选用户可多选角色并保存；可通过<strong>组织筛选</strong>添加未在列表中的用户。</div>
+      ${tabs}
+      <div class="org-layout">
+        <div>
+          <div class="toolbar">
+            <input id="role-users-q" placeholder="筛选姓名/账号" style="width:160px"
+              onkeydown="if(event.key==='Enter')loadRoleUsersList()">
+            <button class="btn btn-sm btn-line" onclick="loadRoleUsersList()">筛选</button>
+            ${canAssign?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openPickUserForRoles()">添加用户</button>`:''}
+          </div>
+          <div class="card" style="padding:0;max-height:70vh;overflow:auto" id="role-users-list">
+            <div class="note" style="padding:12px">加载中…</div>
+          </div>
+        </div>
+        <div class="card" id="role-user-detail">
+          <div class="note">请选择左侧用户查看/编辑角色</div>
+        </div>
+      </div>`;
+    await loadRoleUsersList();
+    return;
+  }
+
   const focus = state.roleFocus || (data.roles[0] && data.roles[0].role) || 'super_admin';
   state.roleFocus = focus;
   const cur = (data.roles||[]).find(r => r.role === focus) || data.roles[0];
@@ -1295,8 +1388,6 @@ async function renderAdminRoles(el){
     if (!menusByGroup[g]) { menusByGroup[g] = []; groupOrder.push(g); }
     menusByGroup[g].push(m);
   });
-  const canConfig = !!(data.can_config) || hasBtn('config_roles') || state.user?.role === 'super_admin';
-  const canAssign = !!(data.can_assign) || hasBtn('role_assign') || canConfig;
   const dis = canConfig ? '' : 'disabled';
   const treeHtml = groupOrder.map(g => {
     const menus = menusByGroup[g] || [];
@@ -1329,9 +1420,10 @@ async function renderAdminRoles(el){
   }).join('');
   el.innerHTML = `
     <div class="ptitle">角色与权限 <span class="pill p-blue">可配置</span>
-      <span class="pill p-gray">角色 + 人员 + 菜单 + 按钮</span></div>
-    <div class="callout">左侧选角色可查看<strong>本角色人员</strong>；有分配权限时可<strong>解除绑定</strong>（改回普通员工）。
-      角色清单可新增/改名/删除；树形勾选菜单与按钮。</div>
+      <span class="pill p-gray">角色 → 人员 · 菜单 · 按钮</span></div>
+    <div class="callout">左侧选角色可查看<strong>本角色人员</strong>；有分配权限时可<strong>解除该角色绑定</strong>。
+      新增人员绑定请到「按用户」页签。部门负责人是部门属性，与角色无必然关系。</div>
+    ${tabs}
     <div class="org-layout">
       <div class="org-tree" style="max-height:70vh">
         ${canConfig?`<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
@@ -1373,17 +1465,120 @@ async function renderAdminRoles(el){
           </div>
           <div id="role-members-box" class="note">加载中…</div>
         </div>
-        ${canAssign?`<div class="card" style="margin-top:12px">
-          <h4>给人分配角色</h4>
-          <div class="toolbar">
-            <input id="role-assign-q" placeholder="搜索姓名/账号" style="width:180px">
-            <button class="btn btn-sm btn-line" onclick="searchRoleAssign()">查询</button>
-          </div>
-          <div id="role-assign-box" class="note">输入关键字查询通讯录人员后分配</div>
-        </div>`:''}
       </div>
     </div>`;
   loadRoleMembers();
+  // AI-GEN-END
+}
+
+async function loadRoleUsersList(){
+  // AI-GEN-BEGIN
+  const box = document.getElementById('role-users-list');
+  if (!box) return;
+  const q = (document.getElementById('role-users-q')?.value || '').trim();
+  box.innerHTML = '<div class="note" style="padding:12px">加载中…</div>';
+  const qs = q ? ('?q=' + encodeURIComponent(q)) : '';
+  const { data } = await api('/api/admin/role-users' + qs);
+  if (!data.ok) { box.innerHTML = `<div class="warn" style="padding:12px">${data.error||'失败'}</div>`; return; }
+  state.roleUsersList = data.users || [];
+  const focusId = state.roleUserFocus;
+  if (!state.roleUsersList.length) {
+    box.innerHTML = '<div class="note" style="padding:12px">暂无已绑本系统角色的用户' + (q?'（筛选无结果）':'') + '</div>';
+    return;
+  }
+  box.innerHTML = `<table>
+    <thead><tr><th>姓名</th><th>账号</th><th>角色</th></tr></thead>
+    <tbody>${state.roleUsersList.map(u => {
+      const labs = (u.system_roles || u.roles || []).map(c => {
+        const hit = (u.role_labels||[]).find(x => x.code===c);
+        return hit ? hit.label : c;
+      }).join('、');
+      const on = String(focusId)===String(u.id);
+      return `<tr style="cursor:pointer;${on?'background:#EEF3FF':''}" onclick="selectRoleUser(${u.id})">
+        <td>${u.display_name}</td>
+        <td><code>${u.username}</code></td>
+        <td class="note">${labs||'—'}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+  if (focusId && state.roleUsersList.some(u => u.id === focusId)) {
+    await showRoleUserDetail(focusId);
+  }
+  // AI-GEN-END
+}
+
+async function selectRoleUser(uid){
+  // AI-GEN-BEGIN
+  state.roleUserFocus = uid;
+  await loadRoleUsersList();
+  await showRoleUserDetail(uid);
+  // AI-GEN-END
+}
+
+async function showRoleUserDetail(uid){
+  // AI-GEN-BEGIN
+  const box = document.getElementById('role-user-detail');
+  if (!box) return;
+  box.innerHTML = '<div class="note">加载中…</div>';
+  const { data } = await api('/api/admin/users/' + uid + '/roles');
+  if (!data.ok) { box.innerHTML = `<div class="warn">${data.error||'失败'}</div>`; return; }
+  const allRoles = (state.roleAdmin?.roles || []).filter(r =>
+    !['employee','employee_a','employee_b'].includes(r.role)
+  );
+  const selected = new Set((data.roles || []).filter(c => !['employee','employee_a','employee_b'].includes(c)));
+  const canAssign = !!(data.can_assign) || hasBtn('role_assign') || hasBtn('config_roles') || state.user?.role === 'super_admin';
+  const isSysAdmin = (data.username || '') === 'admin';
+  const dis = canAssign && !isSysAdmin ? '' : 'disabled';
+  box.innerHTML = `
+    <h4 style="margin:0 0 8px">${data.display_name}
+      <code style="margin-left:6px">${data.username}</code>
+      <span class="note">主角色 ${data.role||'—'}</span>
+      ${isSysAdmin?'<span class="pill p-gray">超管账号</span>':''}
+    </h4>
+    <div class="note" style="margin-bottom:10px">勾选本系统角色（可多选）；保存后权限为各角色菜单/按钮并集。</div>
+    <div style="max-height:50vh;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:10px">
+      ${allRoles.map(r => `
+        <label style="display:flex;align-items:center;gap:8px;margin:6px 0;font-size:13px">
+          <input type="checkbox" class="user-role-cb" value="${r.role}"
+            ${selected.has(r.role)?'checked':''} ${dis}>
+          <span>${r.label}</span>
+          <code class="note">${r.role}</code>
+        </label>`).join('') || '<div class="note">暂无角色目录</div>'}
+    </div>
+    ${canAssign && !isSysAdmin ? `
+    <div class="foot" style="justify-content:flex-start;margin-top:12px">
+      <button class="btn btn-pri" style="width:auto" onclick="saveUserRoles(${uid})">保存角色</button>
+    </div>` : '<div class="note" style="margin-top:10px">只读或无权分配</div>'}`;
+  // AI-GEN-END
+}
+
+async function saveUserRoles(uid){
+  // AI-GEN-BEGIN
+  const roles = [...document.querySelectorAll('.user-role-cb:checked')].map(el => el.value);
+  const { data } = await api('/api/admin/users/' + uid + '/roles', {
+    method: 'PUT',
+    body: JSON.stringify({ roles }),
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  await loadRoleUsersList();
+  await showRoleUserDetail(uid);
+  // AI-GEN-END
+}
+
+async function openPickUserForRoles(){
+  // AI-GEN-BEGIN
+  state.pickMode = 'role_user_bind';
+  state.pickSensStep = null;
+  state.pickOnSelect = null;
+  state.pickForLineKey = null;
+  state.pickDept = state.pickDept || '';
+  state.pickQ = state.pickQ || '';
+  document.getElementById('pick-people-title').textContent = '组织筛选 · 添加用户绑定角色';
+  document.getElementById('pick-people-hint').textContent = '选择人员后进入角色勾选；仅普通员工也可添加。';
+  document.getElementById('pick-q').value = state.pickQ;
+  await loadPickPeople();
+  openModal('m-pick-people');
   // AI-GEN-END
 }
 
@@ -1408,28 +1603,45 @@ async function loadRoleMembers(){
   }
   box.innerHTML = `${data.truncated ? '<div class="note" style="margin-bottom:8px">仅显示前 200 人，请用筛选缩小范围</div>' : ''}
     <table>
-      <thead><tr><th>姓名</th><th>账号</th><th>部门</th><th>操作</th></tr></thead>
-      <tbody>${members.map(m => `
-        <tr>
+      <thead><tr><th>姓名</th><th>账号</th><th>部门</th><th>全部角色</th><th>操作</th></tr></thead>
+      <tbody>${members.map(m => {
+        const labs = (m.role_labels||[]).map(x => x.label).join('、') || (m.role_label||'');
+        return `<tr>
           <td>${m.display_name}${m.is_system_admin?' <span class="pill p-gray">超管账号</span>':''}</td>
           <td><code>${m.username}</code></td>
           <td class="note">${m.dept_name || '—'}</td>
+          <td class="note">${labs}</td>
           <td>${
             !canAssign || isEmployeeRole || m.is_system_admin
               ? '<span class="note">—</span>'
               : `<button class="btn btn-sm btn-line" style="color:#b42318;border-color:#f3b4b0"
-                  onclick="unbindUserRole(${m.id},'${(m.display_name||'').replace(/'/g,"\\'")}','${(m.role_label||'').replace(/'/g,"\\'")}')">解除绑定</button>`
+                  onclick="unbindUserFromRole(${m.id},'${role}','${(m.display_name||'').replace(/'/g,"\\'")}','${(data.role_label||'').replace(/'/g,"\\'")}')">解除本角色</button>`
           }</td>
-        </tr>`).join('')}
+        </tr>`;
+      }).join('')}
       </tbody>
     </table>`;
   // AI-GEN-END
 }
 
+async function unbindUserFromRole(uid, role, name, roleLabel){
+  // AI-GEN-BEGIN
+  if (!uid || !role) return;
+  if (!confirm(`确定解除「${name}」与角色「${roleLabel||role}」的绑定？`)) return;
+  const { data } = await api('/api/admin/users/' + uid + '/roles/' + encodeURIComponent(role), {
+    method: 'DELETE',
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  renderMain();
+  // AI-GEN-END
+}
+
 async function unbindUserRole(uid, name, roleLabel){
+  // 兼容旧调用：解除全部本系统角色
   // AI-GEN-BEGIN
   if (!uid) return;
-  if (!confirm(`确定解除「${name}」与角色「${roleLabel||''}」的绑定？\n解除后将改回普通员工。`)) return;
+  if (!confirm(`确定解除「${name}」的全部本系统角色？\n解除后将改回普通员工。`)) return;
   const { data } = await api('/api/admin/users/' + uid + '/role', { method: 'DELETE' });
   if (!data.ok) return toast(data.error);
   toast(data.message);
@@ -1480,22 +1692,23 @@ async function deleteRole(role, label, userCount){
   if (!role) return;
   if (!hasBtn('config_roles') && state.user?.role !== 'super_admin') return toast('无权配置');
   const tip = userCount > 0
-    ? `确定删除「${label}」？其下 ${userCount} 人将改回普通员工。`
+    ? `确定删除「${label}」？其下 ${userCount} 人将解除该角色绑定。`
     : `确定删除自定义角色「${label}」？`;
   if (!confirm(tip)) return;
   const { data } = await api('/api/admin/roles/'+encodeURIComponent(role), { method:'DELETE' });
   if (!data.ok) return toast(data.error);
   toast(data.message);
   if (state.roleFocus === role) state.roleFocus = 'employee';
+  const me = await api('/api/me');
+  if (me.data?.ok) { state.user = me.data.user; renderSide(); }
   renderMain();
 }
-// AI-GEN-END
 
 async function saveRoleConfig(role){
   if (!role) return;
   if (!hasBtn('config_roles') && state.user?.role !== 'super_admin') return toast('无权配置');
-  const menus = [...document.querySelectorAll('.role-menu:checked')].map(i => i.value);
-  const caps = [...document.querySelectorAll('.role-btn:checked')].map(i => i.value);
+  const menus = [...document.querySelectorAll('.role-menu:checked')].map(el => el.value);
+  const caps = [...document.querySelectorAll('.role-btn:checked')].map(el => el.value);
   const { data } = await api('/api/admin/roles/'+role+'/config', {
     method:'POST', body: JSON.stringify({ menus, caps })
   });
@@ -1505,45 +1718,8 @@ async function saveRoleConfig(role){
   if (me.data?.ok) { state.user = me.data.user; renderSide(); }
   renderMain();
 }
-
-async function searchRoleAssign(){
-  const q = (document.getElementById('role-assign-q')?.value || '').trim();
-  const box = document.getElementById('role-assign-box');
-  if (!box) return;
-  if (!q) { box.innerHTML = '<span class="note">请输入关键字</span>'; return; }
-  const { data } = await api('/api/org/overview?scope=manage&q='+encodeURIComponent(q));
-  if (!data.ok) return toast(data.error);
-  const roles = (state.roleAdmin?.roles||[]).filter(r => !['employee_a','employee_b'].includes(r.role));
-  const members = (data.members||[]).slice(0, 30);
-  box.innerHTML = members.length ? `<table>
-    <thead><tr><th>姓名</th><th>账号</th><th>当前角色</th><th>分配</th></tr></thead>
-    <tbody>${members.map(m => `
-      <tr>
-        <td>${m.display_name}</td><td><code>${m.username}</code></td>
-        <td>${m.role_label||m.role||''}</td>
-        <td>
-          <select id="role-pick-${m.id}" style="min-width:120px">
-            ${roles.map(r => `<option value="${r.role}" ${r.role===(m.role||'employee')?'selected':''}>${r.label}</option>`).join('')}
-          </select>
-          <button class="btn btn-sm btn-line" onclick="assignUserRole(${m.id})">保存</button>
-        </td>
-      </tr>`).join('')}
-    </tbody></table>` : '<span class="note">无匹配人员</span>';
-}
-
-async function assignUserRole(uid){
-  const sel = document.getElementById('role-pick-'+uid);
-  const role = sel?.value;
-  if (!role) return;
-  const { data } = await api('/api/admin/users/'+uid+'/role', {
-    method:'POST', body: JSON.stringify({ role })
-  });
-  if (!data.ok) return toast(data.error);
-  toast(data.message);
-  searchRoleAssign();
-  loadRoleMembers();
-}
 // AI-GEN-END
+
 
 function renderTreeNodes(nodes, depth=0) {
   // AI-GEN-BEGIN
@@ -1656,7 +1832,7 @@ function orgMembersTableHtml(data){
   return `<table class="org-members-table">
     <thead><tr>
       ${data.can_manage?'<th><input type="checkbox" onchange="toggleAll(this.checked)"></th>':''}
-      <th>姓名</th><th>账号</th><th>部门</th><th>北森用户ID</th>
+      <th>姓名</th><th>账号</th><th>状态</th><th>部门</th><th>北森用户ID</th>
       <th style="min-width:220px">关联系统账号</th><th>敏感</th>
       ${canExpire?'<th class="col-expire">有效期</th>':''}
       <th class="col-actions">操作</th>
@@ -1683,23 +1859,28 @@ function orgMembersTableHtml(data){
       const beisenCell = m.beisen_user_id
         ? `<code title="通讯录/LeOrg 同步字段，仅展示；SSO 须用「系统账号管理」已绑定的北森账号唯一标识">${m.beisen_user_id}</code>`
         : '<span class="note">—</span>';
+      const st = m.status === 'closed'
+        ? '<span class="pill p-orange">已关闭</span>'
+        : '<span class="pill p-green">正常</span>';
       return `<tr>
         ${data.can_manage?`<td>${manageable?`<input type="checkbox" ${state.selectedIds.has(m.id)?'checked':''} onchange="togSel(${m.id},this.checked)">`:''}</td>`:''}
         <td style="white-space:nowrap">${m.display_name}${m.person_type==='external'?' <span class="pill p-orange">外部</span>':''}</td>
         <td style="white-space:nowrap"><code>${m.username}</code></td>
+        <td>${st}</td>
         <td>${dname}</td>
         <td style="white-space:nowrap">${beisenCell}</td>
         <td>${acctLines}</td>
         <td>${m.has_sensitive?'<span class="pill p-red">有</span>':'<span class="pill p-gray">无</span>'}</td>
         ${canExpire?`<td class="col-expire">${expireLabel}</td>`:''}
         <td class="col-actions"><div class="row-actions">
+          ${manageable?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openEditMember(${m.id})">编辑</button>`:''}
           ${data.can_manage||m.id===state.user.id?`<button class="btn btn-sm btn-line" onclick="showPerm(${m.id})">权限</button>`:''}
           ${canExpire&&manageable?`<button class="btn btn-sm btn-line" onclick="openSetExpire([${m.id}])">设有效期</button>`:''}
           ${m.id!==state.user.id?`<button class="btn btn-sm btn-line" onclick="openMsg(${m.id},'${m.display_name}')">消息</button>`:''}
         </div></td>
       </tr>`;
     }).join('') || (() => {
-      const colSpan = (data.can_manage?7:6) + (canExpire?1:0) + 1;
+      const colSpan = (data.can_manage?8:7) + (canExpire?1:0) + 1;
       return `<tr><td colspan="${colSpan}" class="note">无人员</td></tr>`;
     })()}
     </tbody>
@@ -1719,9 +1900,16 @@ function orgRightPanelHtml(data){
       const extras = (d.extra_owners||[]).map(e => e.display_name).filter(Boolean);
       ownerCard = `<div class="card" style="margin-bottom:12px">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <div>
+          <div style="flex:1;min-width:220px">
             <h4 style="margin:0 0 6px">当前部门 · ${d.name}
               <span class="note">dept#${d.id}</span></h4>
+            ${canSet?`<div class="field" style="margin:8px 0">
+              <label>部门名称</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input id="dept-rename-input" value="${(d.name||'').replace(/"/g,'&quot;')}" style="flex:1">
+                <button class="btn btn-sm btn-line" onclick="saveDeptName(${d.id})">改名</button>
+              </div>
+            </div>`:''}
             <div class="kv"><span class="lab">主负责人</span>
               <b>${d.owner_name?`${d.owner_name}（${d.owner_username||'-'}）`:'<span class="pill p-gray">未指定</span>'}</b>
               ${d.owner_user_id!=null?`<span class="note">uid#${d.owner_user_id}</span>`:''}
@@ -1729,7 +1917,11 @@ function orgRightPanelHtml(data){
             <div class="kv"><span class="lab">额外负责人</span>
               <b>${extras.length?extras.join('、'):'<span class="note">无</span>'}</b></div>
           </div>
-          ${canSet?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openSetDeptOwner(${d.id})">设置负责人</button>`:''}
+          <div style="display:flex;flex-direction:column;gap:6px">
+            ${canSet?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openSetDeptOwner(${d.id})">设置负责人</button>`:''}
+            ${canSet?`<button class="btn btn-sm btn-line" onclick="moveDept(${d.id},'up')">同级上移</button>
+            <button class="btn btn-sm btn-line" onclick="moveDept(${d.id},'down')">同级下移</button>`:''}
+          </div>
         </div>
       </div>`;
     }
@@ -1911,9 +2103,8 @@ async function renderOrg(el) {
         ${state.leorgSync?`<span class="pill p-gray">${state.leorgSync.last_mode||'-'} · ${state.leorgSync.updated_at||'未同步'}</span>`:''}
       </h4>
       <div class="note" style="margin-bottom:8px">
-        <strong>增量</strong>：只拉 LeOrg「近期有变更」的员工（快，日常用）。
-        <strong>全量</strong>：重拉全部部门 + 全部在职/试用约九百人（慢，对账用）。
-        两边都会幂等更新，点多次不会重复建人。首次/清空后点增量也会自动先走全量。
+        <strong>增量/全量</strong>会先对比 LeOrg 与本地差异，确认后再写入。
+        待初始化人员仍需「确认创建」。首次/清空后点增量也会自动先走全量拉取。
       </div>
       <div class="toolbar">
         <button class="btn btn-sm btn-pri" style="width:auto" onclick="hrPull()">增量同步</button>
@@ -3652,6 +3843,26 @@ async function pickPersonIntoLine(uid){
     return;
   }
 
+  // AI-GEN-BEGIN
+  if (state.pickMode === 'role_user_bind') {
+    closeModal('m-pick-people');
+    state.pickMode = null;
+    state.roleUiTab = 'by_user';
+    state.roleUserFocus = m.id;
+    if (state.page !== 'admin_roles') {
+      state.page = 'admin_roles';
+      renderMain();
+      // 等角色页渲染后再打开详情
+      setTimeout(() => { selectRoleUser(m.id); }, 80);
+    } else {
+      await loadRoleUsersList();
+      await showRoleUserDetail(m.id);
+    }
+    toast(`已选 ${m.display_name}，请勾选角色并保存`);
+    return;
+  }
+  // AI-GEN-END
+
   if (state.pickMode === 'finance') {
     const el = document.getElementById('finance-assignee-id');
     const lab = document.getElementById('finance-assignee-label');
@@ -4110,24 +4321,27 @@ async function hrSyncOne(id){
   renderMain();
 }
 async function hrPull(){
-  toast('正在增量同步（只拉有变更的人）…');
-  const { data } = await api('/api/hr/sync-pull', { method:'POST', body: JSON.stringify({ mode: 'auto' }) });
+  // AI-GEN-BEGIN
+  toast('正在增量拉取并对比…');
+  const { data } = await api('/api/hr/sync-pull', {
+    method:'POST', body: JSON.stringify({ mode: 'auto', preview: true }),
+  });
   if (!data.ok) return toast(data.error);
   state.leorgSync = data.sync_state || state.leorgSync;
-  const n = (data.fetched && data.fetched.employees) || 0;
-  const tag = data.mode === 'full' ? '【实际走了全量】' : '【增量】';
-  toast(`${tag} 人员拉取 ${n} 人 · ${data.message}`);
-  renderMain();
+  await openSyncDiffModal(data);
+  // AI-GEN-END
 }
 async function hrPullFull(){
-  if (!confirm('全量同步会重拉全部部门 + 全部在职/试用人员（约九百人），比增量慢。\n可重复执行，不会重复建人。确认？')) return;
-  toast('正在全量同步（拉全部人员）…');
-  const { data } = await api('/api/hr/sync-pull', { method:'POST', body: JSON.stringify({ mode: 'full' }) });
+  // AI-GEN-BEGIN
+  if (!confirm('全量同步会重拉全部部门 + 全部在职/试用人员（约九百人），比增量慢。\n将先展示差异供确认，不会直接覆盖。确认拉取？')) return;
+  toast('正在全量拉取并对比…');
+  const { data } = await api('/api/hr/sync-pull', {
+    method:'POST', body: JSON.stringify({ mode: 'full', preview: true }),
+  });
   if (!data.ok) return toast(data.error);
   state.leorgSync = data.sync_state || state.leorgSync;
-  const n = (data.fetched && data.fetched.employees) || 0;
-  toast(`【全量】人员拉取 ${n} 人 · ${data.message}`);
-  renderMain();
+  await openSyncDiffModal(data);
+  // AI-GEN-END
 }
 async function hrOrgClear(){
   if (!confirm('【仅测试】确认清空人员与部门数据？\n将删除全部部门与普通员工，保留管理演示账号。\n上线版本将移除此按钮。')) return;
@@ -4198,6 +4412,150 @@ async function openAdd(){
   // AI-GEN-END
   openModal('m-add');
 }
+// AI-GEN-BEGIN
+async function openEditMember(uid){
+  const m = (state.deptData?.members||[]).find(x => Number(x.id)===Number(uid));
+  if (!m) return toast('人员不存在');
+  const manageIds = state.deptData?.manage_dept_ids || [];
+  if (!manageIds.includes(m.dept_id)) return toast('无权编辑该人员');
+  document.getElementById('edit-member-id').value = m.id;
+  document.getElementById('edit-member-name').value = m.display_name || '';
+  document.getElementById('edit-member-username').value = m.username || '';
+  document.getElementById('edit-member-phone').value = m.phone || '';
+  document.getElementById('edit-member-email').value = m.email || '';
+  document.getElementById('edit-member-status').value = m.status === 'closed' ? 'closed' : 'active';
+  const depts = (state.deptData?.departments||[]).filter(d => manageIds.includes(d.id));
+  // 保证当前部门在选项中
+  if (m.dept_id && !depts.find(d => d.id === m.dept_id)) {
+    const cur = (state.deptData?.departments||[]).find(d => d.id === m.dept_id);
+    if (cur) depts.unshift(cur);
+  }
+  document.getElementById('edit-member-dept').innerHTML = depts.map(d =>
+    `<option value="${d.id}" ${d.id===m.dept_id?'selected':''}>${d.name}</option>`
+  ).join('');
+  document.getElementById('edit-member-hint').innerHTML =
+    `编辑 <strong>${m.display_name}</strong>（${m.username}）。关闭后不可登录，可再打开。`;
+  openModal('m-edit-member');
+}
+async function submitEditMember(){
+  const uid = document.getElementById('edit-member-id').value;
+  const body = {
+    display_name: document.getElementById('edit-member-name').value.trim(),
+    phone: document.getElementById('edit-member-phone').value.trim(),
+    email: document.getElementById('edit-member-email').value.trim(),
+    dept_id: document.getElementById('edit-member-dept').value,
+    status: document.getElementById('edit-member-status').value,
+  };
+  const { data } = await api('/api/org/members/'+uid, {
+    method:'PATCH', body: JSON.stringify(body),
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  closeModal('m-edit-member');
+  await refreshOrgMembers();
+}
+async function saveDeptName(deptId){
+  const el = document.getElementById('dept-rename-input');
+  const name = (el?.value || '').trim();
+  if (!name) return toast('名称不能为空');
+  const { data } = await api('/api/org/departments/'+deptId, {
+    method:'PATCH', body: JSON.stringify({ name }),
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  state.deptData = null;
+  renderMain();
+}
+async function moveDept(deptId, direction){
+  const { data } = await api('/api/org/departments/'+deptId+'/move', {
+    method:'POST', body: JSON.stringify({ direction }),
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  const keep = state.deptFilter;
+  state.deptData = null;
+  state.orgCollapsed = null;
+  await renderMain();
+  if (keep) await selectOrgDept(keep);
+}
+async function openSyncDiffModal(data){
+  // AI-GEN-BEGIN
+  state._syncDraftId = data.draft_id;
+  state._syncChanges = data.changes || [];
+  // 无差异：不弹窗，直接刷新页面（含待初始化列表）
+  if (!(data.changes || []).length) {
+    toast(data.message || '无差异，无需确认');
+    state._syncDraftId = null;
+    state._syncChanges = [];
+    state.deptData = null;
+    await renderMain();
+    return;
+  }
+  const tag = data.mode === 'full' ? '全量' : '增量';
+  document.getElementById('sync-diff-title').textContent = `同步变更确认 · ${tag}`;
+  document.getElementById('sync-diff-hint').innerHTML =
+    `${data.message || ''}。未勾选的变更本轮不会写入。`;
+  const s = data.summary || {};
+  document.getElementById('sync-diff-meta').textContent =
+    `共 ${(data.changes||[]).length} 条 · 部门 ${s.org||0} / 人员 ${s.user||0} / 花名册 ${s.roster||0}`
+    + (s.close ? ` / 关闭 ${s.close}` : '');
+  const kindLabel = { org:'部门', user:'人员', roster:'花名册', close:'关闭' };
+  const actionLabel = { insert:'新增', update:'更新', bind:'映射', close:'关闭' };
+  document.getElementById('sync-diff-body').innerHTML = data.changes.map(c => `
+      <tr>
+        <td><input type="checkbox" class="sync-diff-cb" value="${c.key}" checked></td>
+        <td><span class="pill p-blue">${kindLabel[c.kind]||c.kind}</span>
+          <span class="note">${actionLabel[c.action]||c.action}</span></td>
+        <td>${c.title||''}</td>
+        <td class="note" style="font-size:12px">${c.detail||''}</td>
+      </tr>`).join('');
+  openModal('m-sync-diff');
+  // AI-GEN-END
+}
+function syncDiffToggleAll(on){
+  document.querySelectorAll('.sync-diff-cb').forEach(cb => { cb.checked = !!on; });
+}
+async function closeSyncDiff(){
+  // AI-GEN-BEGIN
+  closeModal('m-sync-diff');
+  state._syncDraftId = null;
+  state._syncChanges = [];
+  state.deptData = null;
+  await renderMain();
+  // AI-GEN-END
+}
+async function submitSyncDiff(){
+  // AI-GEN-BEGIN
+  const draftId = state._syncDraftId;
+  if (!draftId) {
+    toast('无待确认草稿');
+    await closeSyncDiff();
+    return;
+  }
+  const keys = [...document.querySelectorAll('.sync-diff-cb:checked')].map(cb => cb.value);
+  if (!keys.length) {
+    if (!confirm('未勾选任何变更，将丢弃本次草稿。继续？')) return;
+    state._syncDraftId = null;
+    closeModal('m-sync-diff');
+    state.deptData = null;
+    await renderMain();
+    return;
+  }
+  const { data } = await api('/api/hr/sync-apply', {
+    method:'POST',
+    body: JSON.stringify({ draft_id: draftId, keys }),
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  state.leorgSync = data.sync_state || state.leorgSync;
+  state._syncDraftId = null;
+  state._syncChanges = [];
+  closeModal('m-sync-diff');
+  state.deptData = null;
+  await renderMain();
+  // AI-GEN-END
+}
+// AI-GEN-END
 function pickPersonType(el){
   document.querySelectorAll('#add-ptype div').forEach(d => d.classList.remove('on'));
   el.classList.add('on');
@@ -4626,6 +4984,7 @@ async function renderSysAccounts(el){
       <span class="pill p-orange">无归属 ${st.unbound||0}</span>
     </div>
     <div class="callout">统一管理子系统账号池：同步/导入/添加、确认绑定。账号须含<strong>唯一标识</strong>（各系统 SSO 登录字段；北森为北森用户ID）。
+      <strong>北森</strong>点「同步」将从 <a href="https://leorg-ai.lecoosys.com/api/docs/" target="_blank" rel="noopener">LeOrg</a> 拉取组织人员的 <code>beisen_id</code> 写入账号池（失败则用本系统已有北森ID的组织人员）。
       <strong>北森 SSO 只认此处已绑定且可登录的账号</strong>，通讯录里的北森ID不能直接登录。
       匹配字段：${(ov.match_fields||[]).join(' / ')}。</div>
     <div class="toolbar">
@@ -4641,7 +5000,12 @@ async function renderSysAccounts(el){
       <button class="btn btn-sm btn-line" onclick="state.acctOv.q=document.getElementById('sa-q').value.trim();renderMain()">查询</button>
       <button class="btn btn-sm btn-line" onclick="state.acctOv={system_id:'',unbound_only:false,q:''};state.sysAcctFilter='';renderMain()">重置</button>
       ${(hasBtn('sys_acct_sync')||state.isSysSuper)?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openSaAdd()">添加账号</button>
-      <button class="btn btn-sm btn-line" onclick="saSync()">模拟同步</button>
+      <button class="btn btn-sm btn-line" onclick="saSync()">${(() => {
+        const sid = state.sysAcctFilter || state.acctOv?.system_id;
+        const sys = ((state.sysAcctData&&state.sysAcctData.systems)||[]).find(s=>String(s.id)===String(sid))
+          || ((state.adminSystems||[]).find(s=>String(s.id)===String(sid)));
+        return (sys&&sys.code==='beisen') ? '同步北森账号' : '同步账号';
+      })()}</button>
       <button class="btn btn-sm btn-line" onclick="openSaImport()">导入账号</button>`:''}
     </div>
     <div class="card" style="margin-bottom:14px">
@@ -4847,11 +5211,21 @@ async function saReject(grantId){
   toast(data.message); renderMain();
 }
 async function saSync(){
-  const sid = state.sysAcctFilter || state.sysAcctData?.systems?.[0]?.id;
+  // AI-GEN-BEGIN
+  const sid = state.sysAcctFilter || state.acctOv?.system_id || state.sysAcctData?.systems?.[0]?.id;
   if (!sid) return toast('请先选择系统');
-  const { data } = await api('/api/sys-accounts/sync-demo', { method:'POST', body: JSON.stringify({ system_id: Number(sid) }) });
+  const sys = ((state.sysAcctData && state.sysAcctData.systems) || [])
+    .find(s => String(s.id)===String(sid))
+    || ((state.adminSystems||[]).find(s => String(s.id)===String(sid)));
+  const isBeisen = sys && sys.code === 'beisen';
+  if (isBeisen && !confirm('将从 LeOrg 拉取组织人员北森ID写入账号池（已有唯一标识幂等更新）。继续？')) return;
+  toast(isBeisen ? '正在从 LeOrg 同步北森账号…' : '正在同步…');
+  const { data } = await api('/api/sys-accounts/sync', {
+    method:'POST', body: JSON.stringify({ system_id: Number(sid) })
+  });
   if (!data.ok) return toast(data.error);
   toast(data.message); renderMain();
+  // AI-GEN-END
 }
 function openSaImport(){
   // AI-GEN-BEGIN
