@@ -8993,6 +8993,52 @@ def bind_apply(user):
             )
             init_title = f"账号申请 · {names}（审批中）"
             primary_sid = int(sys_rows[0]["id"])
+            # AI-GEN-BEGIN
+            # 落库全部明细行（不去重），供审批详情按行展示
+            line_items = []
+            for it in g.get("items") or []:
+                sid = int(it.get("system_id") or 0)
+                sy = next((s for s in sys_rows if int(s["id"]) == sid), None)
+                aid = it.get("account_id")
+                acct_name = (it.get("account_name") or "").strip()
+                if not acct_name and aid:
+                    ar = db.execute(
+                        "SELECT account_name FROM user_system_accounts WHERE id = ?",
+                        (int(aid),),
+                    ).fetchone()
+                    if not ar:
+                        ar = db.execute(
+                            "SELECT account_name FROM system_accounts WHERE id = ?",
+                            (int(aid),),
+                        ).fetchone()
+                    if ar:
+                        acct_name = ar["account_name"]
+                perm_ids = it.get("perm_ids") or []
+                perm_names = list(it.get("perm_names") or [])
+                if perm_ids and not perm_names:
+                    for pid in perm_ids:
+                        pr = db.execute(
+                            "SELECT perm_name FROM sensitive_perm_defs WHERE id = ?",
+                            (int(pid),),
+                        ).fetchone()
+                        if pr:
+                            perm_names.append(pr["perm_name"])
+                line_items.append(
+                    {
+                        "leuc_user_id": uid,
+                        "display_name": urow["display_name"],
+                        "username": urow["username"],
+                        "system_id": sid,
+                        "system_name": sy["name"] if sy else it.get("system_name"),
+                        "account_id": aid,
+                        "account_name": acct_name,
+                        "create_new": bool(it.get("create_new")),
+                        "with_sensitive": bool(it.get("with_sensitive")),
+                        "perm_ids": [int(x) for x in perm_ids if x is not None],
+                        "perm_names": perm_names,
+                    }
+                )
+            # AI-GEN-END
             app_id, first_todo, first_assignee, preview = start_multi_step_apply(
                 db,
                 flow_code=flow_code,
@@ -9009,6 +9055,7 @@ def bind_apply(user):
                     "leuc_user_id": uid,
                     "with_sensitive": with_sensitive,
                     "create_new": True,
+                    "items": line_items,
                 },
                 cc_list=cc_list,
             )

@@ -530,54 +530,73 @@ def build_apply_form_view(db, meta: dict | None, app=None) -> dict:
         "account_apply",
         "account_apply_sensitive",
         "sensitive",
-    ) or meta.get("create_new") is not None or meta.get("system_ids"):
+    ) or meta.get("create_new") is not None or meta.get("system_ids") or meta.get("items"):
         section_title = "申请明细"
-        row("applicant", "申请人", _user_label(db, uid))
-        sids = meta.get("system_ids") or []
-        if not sids and (meta.get("system_id") or app.get("system_id")):
-            sids = [meta.get("system_id") or app.get("system_id")]
-        create_new = bool(meta.get("create_new"))
-        with_sens = bool(meta.get("with_sensitive") or meta.get("sensitive_flag"))
+        # 优先用落库的明细行 items（多行完整保留）；否则回退 system_ids
+        raw_items = meta.get("items") or meta.get("lines") or []
+        if not isinstance(raw_items, list):
+            raw_items = []
         lines = []
-        for i, sid in enumerate(sids or [None], start=1):
-            lines.append(
-                [
-                    str(i),
-                    _user_label(db, uid),
-                    _sys_label(db, sid) if sid else "—",
-                    "新建" if create_new else (meta.get("account_name") or "已有账号"),
-                    "是" if with_sens else "否",
-                ]
-            )
+        if raw_items:
+            for i, it in enumerate(raw_items, start=1):
+                if not isinstance(it, dict):
+                    continue
+                person = it.get("display_name") or _user_label(
+                    db, it.get("leuc_user_id") or uid
+                )
+                if it.get("username") and "（" not in str(person):
+                    person = f"{person}（{it['username']}）"
+                sys_name = it.get("system_name") or _sys_label(db, it.get("system_id"))
+                if it.get("create_new"):
+                    acct = "新建账号"
+                else:
+                    acct = it.get("account_name") or (
+                        f"账号#{it['account_id']}" if it.get("account_id") else "已有账号"
+                    )
+                perms = it.get("perm_names") or []
+                if isinstance(perms, str):
+                    perms = [perms]
+                perm_txt = "、".join(str(x) for x in perms if x) or "—"
+                sens = "是" if it.get("with_sensitive") else "否"
+                lines.append([str(i), person, sys_name, acct, perm_txt, sens])
+        if not lines:
+            sids = meta.get("system_ids") or []
+            if not isinstance(sids, list):
+                sids = [sids] if sids else []
+            if not sids and (meta.get("system_id") or app.get("system_id")):
+                sids = [meta.get("system_id") or app.get("system_id")]
+            create_new = bool(meta.get("create_new"))
+            with_sens = bool(meta.get("with_sensitive") or meta.get("sensitive_flag"))
+            for i, sid in enumerate(sids or [None], start=1):
+                lines.append(
+                    [
+                        str(i),
+                        _user_label(db, uid),
+                        _sys_label(db, sid) if sid else "—",
+                        "新建账号" if create_new else (meta.get("account_name") or "已有账号"),
+                        "—",
+                        "是" if with_sens else "否",
+                    ]
+                )
         if not lines:
             lines = [
                 [
                     "1",
                     _user_label(db, uid),
                     _sys_label(db, app.get("system_id")),
-                    "新建" if create_new else "—",
-                    "是" if with_sens else "否",
+                    "—",
+                    "—",
+                    "否",
                 ]
             ]
         table = {
-            "title": "申请明细",
-            "headers": ["#", "人员", "业务系统", "业务系统账号", "敏感权限"],
+            "title": f"申请明细（共 {len(lines)} 行）",
+            "headers": ["#", "人员", "业务系统", "业务系统账号", "权限", "敏感权限"],
             "rows": lines,
         }
-        row(
-            "create_new",
-            "新建账号",
-            create_new,
-            editable=True,
-            input_type="bool",
-        )
-        row(
-            "with_sensitive",
-            "含敏感权限",
-            with_sens,
-            editable=True,
-            input_type="bool",
-        )
+        # 摘要只保留申请人；具体明细看表格（避免多行被压成一行摘要）
+        row("applicant", "申请人", _user_label(db, uid))
+        row("line_count", "明细行数", str(len(lines)))
         if meta.get("remark"):
             row("remark", "备注", meta.get("remark"), editable=True, input_type="textarea")
         return {

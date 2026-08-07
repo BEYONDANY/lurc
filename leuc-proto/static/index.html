@@ -4538,12 +4538,30 @@ async function submitAccountBind(mode){
     msgs.push(data.message);
   } else {
     // 仅「新建账号」走账号绑定申请；已绑定账号只走权限/敏感
-    const newItems = lines.filter(ln => ln.create_new).map(ln => ({
-      leuc_user_id: Number(ln.uid),
-      system_id: Number(ln.system_id),
-      create_new: true,
-      with_sensitive: !!(ln.with_sensitive && (state.bindDraft.systems||[]).find(x => x.id === ln.system_id)?.has_sensitive),
-    }));
+    // AI-GEN-BEGIN
+    const newItems = lines.filter(ln => ln.create_new).map(ln => {
+      const s = (state.bindDraft.systems||[]).find(x => x.id === ln.system_id);
+      const p = (state.bindDraft.peoplePool||[]).find(x => x.id === ln.uid);
+      const perms = (s && s.permissions) || [];
+      const perm_names = (ln.perm_ids||[]).map(pid => {
+        const hit = perms.find(x => x.id === Number(pid));
+        return hit ? hit.perm_name : '';
+      }).filter(Boolean);
+      return {
+        leuc_user_id: Number(ln.uid),
+        display_name: p?.display_name || '',
+        username: p?.username || '',
+        system_id: Number(ln.system_id),
+        system_name: s?.name || '',
+        create_new: true,
+        account_id: ln.account_id || null,
+        account_name: '',
+        perm_ids: (ln.perm_ids||[]).map(Number),
+        perm_names,
+        with_sensitive: !!(ln.with_sensitive && s?.has_sensitive),
+      };
+    });
+    // AI-GEN-END
     if (newItems.length) {
       const { data } = await api('/api/bind/apply', { method:'POST', body: JSON.stringify({ items: newItems }) });
       if (!data.ok) return toast(data.error);
