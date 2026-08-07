@@ -2975,8 +2975,12 @@ function renderPickTree(nodes, depth=0){
 
 async function loadPickPeople(){
   state.pickQ = (document.getElementById('pick-q')?.value || '').trim();
-  let url = '/api/org/overview?q=' + encodeURIComponent(state.pickQ || '');
+  // AI-GEN-BEGIN
+  const isDemo = state.pickMode === 'demo_switch';
+  let url = (isDemo ? '/api/demo/org-pick' : '/api/org/overview')
+    + '?q=' + encodeURIComponent(state.pickQ || '');
   if (state.pickDept) url += '&dept_id=' + state.pickDept;
+  // AI-GEN-END
   const { data } = await api(url);
   if (!data.ok) return toast(data.error);
   state.pickData = data;
@@ -2984,17 +2988,24 @@ async function loadPickPeople(){
     <div class="node ${!state.pickDept?'on':''}" onclick="state.pickDept='';loadPickPeople()"><b>全部组织</b></div>
     ${renderPickTree(data.tree||[])}`;
   const members = data.members || [];
-  document.getElementById('pick-members').innerHTML = members.length ? `<table>
-    <thead><tr><th>姓名</th><th>账号</th><th>组织</th><th></th></tr></thead>
+  const tip = data.truncated
+    ? `<div class="note" style="padding:8px 12px;border-bottom:1px solid #EDF2FB">${data.hint||'请用组织或搜索缩小范围'}</div>`
+    : '';
+  document.getElementById('pick-members').innerHTML = tip + (members.length ? `<table>
+    <thead><tr><th>姓名</th><th>账号</th><th>组织</th><th>角色</th><th></th></tr></thead>
     <tbody>${members.map(m => {
-      const dname = (data.departments.find(d=>d.id===m.dept_id)||{}).name || '';
+      const dname = m.dept_id
+        ? ((data.departments.find(d=>d.id===m.dept_id)||{}).name || '')
+        : (m.username === 'admin' ? '系统' : '—');
+      const btnLabel = isDemo ? '切换' : '选择';
       return `<tr>
         <td>${m.display_name}${m.person_type==='external'?' <span class="pill p-orange">外部</span>':''}</td>
-        <td>${m.username}</td>
+        <td><code>${m.username}</code></td>
         <td>${dname}</td>
-        <td><button class="btn btn-sm btn-pri" style="width:auto" onclick="pickPersonIntoLine(${m.id})">选择</button></td>
+        <td class="note">${m.role_label||m.role||''}</td>
+        <td><button class="btn btn-sm btn-pri" style="width:auto" onclick="pickPersonIntoLine(${m.id})">${btnLabel}</button></td>
       </tr>`;
-    }).join('')}</tbody></table>` : '<div class="note" style="padding:12px">当前组织下无匹配人员</div>';
+    }).join('')}</tbody></table>` : '<div class="note" style="padding:12px">当前组织下无匹配人员</div>');
 }
 
 async function pickPersonIntoLine(uid){
@@ -3004,6 +3015,13 @@ async function pickPersonIntoLine(uid){
   if (!m) return toast('人员不存在');
   const depts = state.pickData?.departments || [];
   const deptName = (depts.find(d => String(d.id)===String(state.pickDept))||{}).name || '';
+
+  if (state.pickMode === 'demo_switch') {
+    closeModal('m-pick-people');
+    state.pickMode = null;
+    await quickRole(m.username);
+    return;
+  }
 
   if (state.pickMode === 'finance') {
     const el = document.getElementById('finance-assignee-id');
@@ -4191,8 +4209,14 @@ async function apiLogout(){
 async function loadRoleButtons(){
   const { data } = await api('/api/demo-users');
   const box = document.getElementById('role-switch');
-  const label = box.querySelector('span');
-  box.innerHTML=''; box.appendChild(label);
+  const label = box.querySelector('span') || (() => {
+    const s = document.createElement('span');
+    s.style.cssText = 'font-size:11px;color:#6B7AA8';
+    s.textContent = '快速切换角色';
+    return s;
+  })();
+  box.innerHTML = '';
+  box.appendChild(label);
   // AI-GEN-BEGIN
   (data.users||[]).forEach(u=>{
     const b=document.createElement('button');
@@ -4202,6 +4226,12 @@ async function loadRoleButtons(){
     b.onclick=()=>quickRole(u.username);
     box.appendChild(b);
   });
+  const more = document.createElement('button');
+  more.textContent = '切换任何人…';
+  more.title = '按组织筛选，切换到任意通讯录人员';
+  more.style.borderStyle = 'dashed';
+  more.onclick = () => openDemoSwitchAnyone();
+  box.appendChild(more);
   // AI-GEN-END
 }
 function markRoleBtn(username){
@@ -4214,6 +4244,22 @@ async function quickRole(username){
   toast('已切换为 '+data.user.display_name+'（'+data.user.username+'）');
   await enterHome();
 }
+
+// AI-GEN-BEGIN
+async function openDemoSwitchAnyone(){
+  state.pickMode = 'demo_switch';
+  state.pickSensStep = null;
+  state.pickOnSelect = null;
+  state.pickForLineKey = null;
+  state.pickDept = '';
+  state.pickQ = '';
+  document.getElementById('pick-people-title').textContent = '演示切换 · 选人';
+  document.getElementById('pick-people-hint').textContent = '左侧按组织筛选，右侧点选一人立即切换登录（含系统超管 admin）。';
+  document.getElementById('pick-q').value = '';
+  await loadPickPeople();
+  openModal('m-pick-people');
+}
+// AI-GEN-END
 
 document.getElementById('username').addEventListener('change', refreshRisk);
 (async function boot(){

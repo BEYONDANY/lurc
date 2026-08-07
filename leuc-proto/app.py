@@ -30,7 +30,6 @@ from db import (
     ensure_roles_seeded,
     ensure_username_available,
     init_db,
-    load_role_labels,
     migrate_schema,
     name_to_pinyin,
     normalize_username,
@@ -959,7 +958,7 @@ def provision_account_apply(
 
 
 def serialize_todo(db, row):
-    """待办序列化：附带排查用 ID 与开通表单标记。"""
+    """待办序列化：附带排查用 ID、当前审核人与进度。"""
     # AI-GEN-BEGIN
     d = dict(row)
     meta = {}
@@ -983,6 +982,9 @@ def serialize_todo(db, row):
             d["flow_code"] = flow_code
             d["applicant_id"] = app_row["applicant_id"]
             d["system_id"] = app_row["system_id"]
+            d["app_status"] = app_row["status"]
+            d["total_steps"] = app_row["total_steps"]
+            d["current_step"] = app_row["current_step"]
             step = db.execute(
                 """SELECT * FROM application_steps
                 WHERE application_id = ? AND step_order = ?""",
@@ -1005,8 +1007,31 @@ def serialize_todo(db, row):
                 ).fetchone()
                 if sy:
                     system = dict(sy)
+            summary = build_application_flow(db, app_id)
+            d["current_approver"] = summary.get("current_approver")
+            d["progress"] = summary.get("progress")
+            d["progress_label"] = summary.get("progress_label")
+            d["forecast_count"] = len(summary.get("forecast") or [])
+    else:
+        assignee = _user_brief(db, d.get("assignee_id"))
+        d["current_approver"] = (
+            None
+            if d.get("status") in ("approved", "rejected") and d.get("bucket") == "done"
+            else assignee
+        )
+        d["progress"] = "1/1"
+        d["progress_label"] = d.get("todo_type") or "审批"
+        d["forecast_count"] = 0
+        if meta.get("leuc_user_id"):
+            au = db.execute(
+                "SELECT id, username, display_name, role FROM users WHERE id = ?",
+                (int(meta["leuc_user_id"]),),
+            ).fetchone()
+            if au:
+                applicant = dict(au)
     d["applicant"] = applicant
     d["system"] = system
+    d["initiator"] = _user_brief(db, d.get("initiator_id"))
     create_new = bool(meta.get("create_new"))
     need_form = (
         d.get("todo_type") == "账号申请"
@@ -1020,13 +1045,267 @@ def serialize_todo(db, row):
         meta.get("with_sensitive")
         or (flow_code in ("account_apply_sensitive", "sensitive") if flow_code else False)
     )
-    # 建议账号名
     if applicant and system:
         d["suggest_account"] = f"{applicant['username']}_{system['code']}"
     else:
         d["suggest_account"] = ""
     return d
     # AI-GEN-END
+
+
+def _user_brief(db, uid):
+    # AI-GEN-BEGIN
+    if not uid:
+        return None
+    u = db.execute(
+        "SELECT id, username, display_name, role FROM users WHERE id = ?",
+        (int(uid),),
+    ).fetchone()
+    return dict(u) if u else None
+    # AI-GEN-END
+
+
+def build_application_flow(db, app_id):
+    """拼装申请单流程：时间线 / 当前审核人 / 预测步骤。"""
+    # AI-GEN-BEGIN
+    app = db.execute("SELECT * FROM applications WHERE id = ?", (app_id,)).fetchone()
+    if not app:
+        return {
+            "application": None,
+            "timeline": [],
+            "forecast": [],
+            "current_approver": None,
+            "progress": "",
+            "progress_label": "",
+        }
+    steps = db.execute(
+        """SELECT * FROM application_steps
+        WHERE application_id = ? ORDER BY step_order""",
+        (app_id,),
+    ).fetchall()
+    timeline = []
+    current_approver = None
+    current_label = None
+    current_order = None
+    for s in steps:
+        st = (s["status"] or "").strip()
+        assignee = _user_brief(db, s["assignee_id"])
+        if st in ("approved", "rejected", "skipped"):
+            phase = "done"
+        elif st == "pending":
+            phase = "current"
+            current_approver = assignee
+            current_label = s["step_label"]
+            current_order = s["step_order"]
+        else:
+            phase = "forecast"
+        timeline.append(
+            {
+                "step_order": s["step_order"],
+                "step_key": s["step_key"],
+                "step_label": s["step_label"],
+                "status": st,
+                "phase": phase,
+                "assignee": assignee,
+                "assignee_id": s["assignee_id"],
+                "todo_id": s["todo_id"],
+                "decided_at": s["decided_at"],
+            }
+        )
+    forecast = [t for t in timeline if t["phase"] == "forecast"]
+    total = int(app["total_steps"] or len(timeline) or 1)
+    cur = int(current_order or app["current_step"] or 1)
+    if app["status"] in ("approved", "rejected", "done"):
+        progress = f"{total}/{total}"
+        progress_label = "已结束"
+        current_approver = None
+    else:
+        progress = f"{cur}/{total}"
+        progress_label = current_label or f"第{cur}步"
+    applicant = _user_brief(db, app["applicant_id"])
+    system = None
+    if app["system_id"]:
+        sy = db.execute(
+            "SELECT id, code, name FROM systems WHERE id = ?", (app["system_id"],)
+        ).fetchone()
+        if sy:
+            system = dict(sy)
+    return {
+        "application": {
+            "id": app["id"],
+            "flow_code": app["flow_code"],
+            "title": app["title"],
+            "status": app["status"],
+            "current_step": app["current_step"],
+            "total_steps": app["total_steps"],
+            "created_at": app["created_at"],
+            "updated_at": app["updated_at"],
+            "applicant": applicant,
+            "system": system,
+        },
+        "timeline": timeline,
+        "forecast": forecast,
+        "current_approver": current_approver,
+        "progress": progress,
+        "progress_label": progress_label,
+    }
+    # AI-GEN-END
+
+
+def build_todo_flow(db, todo_row):
+    """待办完整流程视图（有 application 走多级链，否则单步）。"""
+    # AI-GEN-BEGIN
+    todo = dict(todo_row)
+    app_id = todo.get("application_id")
+    if app_id:
+        flow = build_application_flow(db, app_id)
+        flow["todo"] = {
+            "id": todo.get("id"),
+            "title": todo.get("title"),
+            "todo_type": todo.get("todo_type"),
+            "status": todo.get("status"),
+            "bucket": todo.get("bucket"),
+            "created_at": todo.get("created_at"),
+            "step_order": todo.get("step_order"),
+            "initiator": _user_brief(db, todo.get("initiator_id")),
+            "assignee": _user_brief(db, todo.get("assignee_id")),
+        }
+        return flow
+    meta = {}
+    try:
+        meta = json.loads(todo.get("meta") or "{}")
+    except Exception:
+        meta = {}
+    assignee = _user_brief(db, todo.get("assignee_id"))
+    st = (todo.get("status") or "").strip()
+    done = todo.get("bucket") == "done" or st in ("approved", "rejected")
+    phase = "done" if done else "current"
+    step_label = meta.get("step_label") or todo.get("todo_type") or "审批"
+    timeline = [
+        {
+            "step_order": 1,
+            "step_key": "direct_leader",
+            "step_label": step_label,
+            "status": st if done else "pending",
+            "phase": phase,
+            "assignee": assignee,
+            "assignee_id": todo.get("assignee_id"),
+            "todo_id": todo.get("id"),
+            "decided_at": todo.get("created_at") if done else None,
+        }
+    ]
+    return {
+        "application": None,
+        "todo": {
+            "id": todo.get("id"),
+            "title": todo.get("title"),
+            "todo_type": todo.get("todo_type"),
+            "status": todo.get("status"),
+            "bucket": todo.get("bucket"),
+            "created_at": todo.get("created_at"),
+            "step_order": 1,
+            "initiator": _user_brief(db, todo.get("initiator_id")),
+            "assignee": assignee,
+            "meta": meta,
+        },
+        "timeline": timeline,
+        "forecast": [],
+        "current_approver": None if done else assignee,
+        "progress": "1/1",
+        "progress_label": step_label,
+    }
+    # AI-GEN-END
+
+
+def preview_apply_flow(
+    db, *, apply_type, subject_id, system_id=None, with_sensitive=False, days=90
+):
+    """提交前流程预测（不落库）。"""
+    # AI-GEN-BEGIN
+    subject = db.execute(
+        "SELECT * FROM users WHERE id = ?", (int(subject_id),)
+    ).fetchone()
+    if not subject:
+        return {"ok": False, "error": "目标用户不存在"}
+    steps = []
+    flow_code = apply_type
+    title = ""
+    if apply_type in (
+        "account_extend",
+        "account_close",
+        "account",
+        "normal_perm",
+        "system_access",
+    ):
+        direct = find_approver(db, subject_id)
+        if not direct or int(direct) == int(subject_id):
+            return {"ok": False, "error": "未找到直属审批人"}
+        steps = [("direct_leader", "直属领导", int(direct))]
+        flow_code = apply_type
+        title = {
+            "account_extend": f"账号延期 {days} 天",
+            "account_close": "账号关闭",
+        }.get(apply_type, "直属审批")
+    elif apply_type in ("sensitive_close", "sensitive", "external"):
+        code = "external" if apply_type == "external" else "sensitive"
+        steps = materialize_approval_chain(db, code, subject_id)
+        flow_code = apply_type
+        title = "敏感/外部审批链"
+    elif apply_type in ("account_apply", "account_apply_sensitive"):
+        if not system_id:
+            return {"ok": False, "error": "请先选择业务系统"}
+        sys_row = db.execute(
+            "SELECT * FROM systems WHERE id = ?", (int(system_id),)
+        ).fetchone()
+        if not sys_row:
+            return {"ok": False, "error": "系统不存在"}
+        use_sens = bool(with_sensitive) and int(sys_row["has_sensitive"] or 0)
+        if use_sens:
+            steps = materialize_approval_chain(db, "sensitive", subject_id)
+            flow_code = "account_apply_sensitive"
+            title = f"账号申请 · {sys_row['name']} · 含敏感"
+        else:
+            direct = find_approver(db, subject_id)
+            if not direct or int(direct) == int(subject_id):
+                return {"ok": False, "error": "未找到直属审批人"}
+            steps = [("direct_leader", "直属领导", int(direct))]
+            flow_code = "account_apply"
+            title = f"账号申请 · {sys_row['name']}"
+        steps = append_system_owner_step(db, int(system_id), steps)
+    else:
+        return {"ok": False, "error": f"未知类型: {apply_type}"}
+
+    if not steps:
+        return {"ok": False, "error": "审批链为空"}
+    preview = []
+    for i, (key, label, aid) in enumerate(steps, start=1):
+        preview.append(
+            {
+                "step_order": i,
+                "step_key": key,
+                "step_label": label,
+                "phase": "forecast" if i > 1 else "current",
+                "status": "waiting" if i > 1 else "pending",
+                "assignee": _user_brief(db, aid),
+            }
+        )
+    return {
+        "ok": True,
+        "flow_code": flow_code,
+        "title": title,
+        "subject": _user_brief(db, subject_id),
+        "timeline": preview,
+        "forecast": [p for p in preview if p["phase"] == "forecast"],
+        "current_approver": preview[0]["assignee"] if preview else None,
+        "progress": f"1/{len(preview)}",
+        "progress_label": preview[0]["step_label"] if preview else "",
+        "chain_text": " → ".join(
+            f"{p['step_label']}({(p['assignee'] or {}).get('display_name') or '?'})"
+            for p in preview
+        ),
+    }
+    # AI-GEN-END
+
 
 
 def start_multi_step_apply(
@@ -1462,6 +1741,57 @@ def demo_users():
     return jsonify({"ok": True, "users": users})
     # AI-GEN-END
 
+
+# AI-GEN-BEGIN
+@app.get("/api/demo/org-pick")
+def demo_org_pick():
+    """演示切换：按组织筛选任意人（免登录，仅原型）。含 admin。"""
+    db = get_db()
+    depts = all_departments(db)
+    q = (request.args.get("q") or "").strip()
+    dept_id = request.args.get("dept_id")
+    focus_id = int(dept_id) if dept_id else None
+
+    sql = "SELECT * FROM users WHERE 1=1"
+    params: list = []
+    if focus_id:
+        ids = subtree_ids(depts, focus_id)
+        if not ids:
+            members = []
+        else:
+            sql += f" AND dept_id IN ({','.join('?' * len(ids))})"
+            params.extend(ids)
+            if q:
+                like = f"%{q}%"
+                sql += " AND (display_name LIKE ? OR username LIKE ? OR phone LIKE ? OR email LIKE ?)"
+                params.extend([like, like, like, like])
+            sql += " ORDER BY dept_id, id"
+            members = list(db.execute(sql, params).fetchall())
+    else:
+        if q:
+            like = f"%{q}%"
+            sql += " AND (display_name LIKE ? OR username LIKE ? OR phone LIKE ? OR email LIKE ?)"
+            params.extend([like, like, like, like])
+        sql += " ORDER BY CASE WHEN username = ? THEN 0 ELSE 1 END, dept_id, id"
+        params.append(SYSTEM_ADMIN_USERNAME)
+        members = list(db.execute(sql, params).fetchall())
+
+    out = [member_row_enriched(m) for m in members]
+    # 未筛选时人数过多，截断以免弹窗卡顿
+    truncated = False
+    if not focus_id and not q and len(out) > 80:
+        out = out[:80]
+        truncated = True
+    return jsonify({
+        "ok": True,
+        "departments": depts,
+        "tree": build_org_tree(depts),
+        "members": out,
+        "focus_dept_id": focus_id,
+        "truncated": truncated,
+        "hint": "未选组织时仅显示前 80 人，请用左侧组织或搜索缩小范围" if truncated else None,
+    })
+# AI-GEN-END
 
 
 # AI-GEN-BEGIN
