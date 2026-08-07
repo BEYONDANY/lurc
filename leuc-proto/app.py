@@ -90,6 +90,7 @@ from db import (
 from leuc_approval_ext import (
     append_applicant_confirm,
     build_apply_form_fields,
+    build_apply_form_view,
     collect_cc_for_system_owners,
     editable_form_keys,
     group_bind_items_by_owner,
@@ -1339,7 +1340,11 @@ def serialize_todo(db, row):
         )
     )
     d["reject_from_step"] = reject_from
-    form_fields = build_apply_form_fields(db, meta, app_row if app_id else None)
+    form_view = build_apply_form_view(db, meta, app_row if app_id else None)
+    form_fields = form_view.get("rows") or build_apply_form_fields(
+        db, meta, app_row if app_id else None
+    )
+    d["form_view"] = form_view
     d["form_fields"] = form_fields
     d["editable_keys"] = editable_form_keys(form_fields) if d["can_resubmit"] else []
     # 延期：展示用户权限详情（突出敏感）

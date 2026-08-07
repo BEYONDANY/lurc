@@ -2784,40 +2784,74 @@ async function loadApplyPreviewBox(elId, payload){
   box.innerHTML = `<h5>预计审批链</h5>${renderFlowPreviewInline(data)}`;
 }
 function renderApplyFormFieldsHtml(fields, opts){
+  // 兼容旧入参：转成 form_view
+  return renderApplyFormViewHtml({ section_title: '申请明细', rows: fields || [] }, opts);
+}
+function renderApplyFormViewHtml(view, opts){
   // AI-GEN-BEGIN
   opts = opts || {};
-  const list = fields || [];
-  if (!list.length) return '<div class="note">暂无申请表单内容</div>';
+  view = view || {};
+  const list = view.rows || [];
+  const table = view.table || null;
+  const section = view.section_title || '申请明细';
+  if (!list.length && !table) return '<div class="note">暂无申请表单内容</div>';
   const editable = !!opts.editable;
   const editKeys = new Set(opts.editableKeys || []);
+  const rowHtml = list.map(f => {
+    const canEdit = editable && editKeys.has(f.key);
+    const raw = (f.value==null ? '' : String(f.value));
+    if (canEdit) {
+      if (f.input_type === 'bool') {
+        const on = raw === '是' || raw.indexOf('是') === 0 || raw === 'true' || raw === '1';
+        return `<div class="field" style="margin:8px 0 0"><label>${escapeHtml(f.label)}</label>
+          <select class="flow-form-input" data-key="${escapeHtml(f.key)}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px">
+            <option value="true" ${on?'selected':''}>是</option>
+            <option value="false" ${!on?'selected':''}>否</option>
+          </select></div>`;
+      }
+      if (f.input_type === 'textarea') {
+        return `<div class="field" style="margin:8px 0 0"><label>${escapeHtml(f.label)}</label>
+          <textarea class="flow-form-input" data-key="${escapeHtml(f.key)}" rows="2"
+            style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit">${escapeHtml(raw)}</textarea></div>`;
+      }
+      // 延期天数等：从「是/否」文案中剥离纯数字
+      let inputVal = raw;
+      if (f.input_type === 'number') {
+        const m = String(raw).match(/\d+/);
+        inputVal = m ? m[0] : '';
+      }
+      return `<div class="field" style="margin:8px 0 0"><label>${escapeHtml(f.label)}</label>
+        <input class="flow-form-input" data-key="${escapeHtml(f.key)}" type="${f.input_type==='number'?'number':'text'}"
+          value="${escapeHtml(inputVal)}"
+          style="width:140px;padding:8px;border:1px solid var(--line);border-radius:8px"></div>`;
+    }
+    return `<div class="kv"><span class="lab">${escapeHtml(f.label)}</span><b style="white-space:pre-wrap;word-break:break-word">${escapeHtml(raw)}</b></div>`;
+  }).join('');
+  let tableHtml = '';
+  if (table && (table.rows||[]).length) {
+    const heads = table.headers || [];
+    tableHtml = `
+      <div style="margin-top:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <b style="font-size:13px">${escapeHtml(table.title || section)}</b>
+        </div>
+        <div style="overflow:auto;border:1px solid #DDE7F7;border-radius:8px">
+          <table class="tbl" style="margin:0">
+            <thead><tr>${heads.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
+            <tbody>${(table.rows||[]).map(r =>
+              `<tr>${(r||[]).map(c=>`<td>${escapeHtml(c==null?'':String(c))}</td>`).join('')}</tr>`
+            ).join('')}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
   return `<div class="callout" style="margin-bottom:12px">
-    <strong>申请内容</strong>
-    <div style="margin-top:8px">
-      ${list.map(f => {
-        const canEdit = editable && editKeys.has(f.key);
-        const raw = (f.value==null ? '' : String(f.value));
-        if (canEdit) {
-          if (f.input_type === 'bool') {
-            const on = raw === '是' || raw === 'true' || raw === '1';
-            return `<div class="field" style="margin:6px 0"><label>${escapeHtml(f.label)}</label>
-              <select class="flow-form-input" data-key="${escapeHtml(f.key)}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px">
-                <option value="true" ${on?'selected':''}>是</option>
-                <option value="false" ${!on?'selected':''}>否</option>
-              </select></div>`;
-          }
-          if (f.input_type === 'textarea') {
-            return `<div class="field" style="margin:6px 0"><label>${escapeHtml(f.label)}</label>
-              <textarea class="flow-form-input" data-key="${escapeHtml(f.key)}" rows="2"
-                style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit">${escapeHtml(raw==='是'||raw==='否'?'':raw)}</textarea></div>`;
-          }
-          return `<div class="field" style="margin:6px 0"><label>${escapeHtml(f.label)}</label>
-            <input class="flow-form-input" data-key="${escapeHtml(f.key)}" type="${f.input_type==='number'?'number':'text'}"
-              value="${escapeHtml(raw==='是'||raw==='否'?'':raw)}"
-              style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px"></div>`;
-        }
-        return `<div class="kv"><span class="lab">${escapeHtml(f.label)}</span><b style="white-space:pre-wrap;word-break:break-word">${escapeHtml(raw)}</b></div>`;
-      }).join('')}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <strong>${escapeHtml(section)}</strong>
+      <span class="note" style="margin:0">与申请表单一致</span>
     </div>
+    <div>${rowHtml || ''}</div>
+    ${tableHtml}
   </div>`;
   // AI-GEN-END
 }
@@ -2860,26 +2894,14 @@ async function openTodoFlow(tid, opts){
     && Number(todo.assignee_id) === Number(state.user && state.user.id));
   const showRemark = canHandle;
   const canResubmit = !!(todo.can_resubmit && canHandle);
-  const formFields = todo.form_fields || [];
+  const formView = todo.form_view || { section_title: '申请明细', rows: todo.form_fields || [] };
   document.getElementById('flow-body').innerHTML = `
     <div style="margin-bottom:12px">
       <div class="kv"><span class="lab">创建时间</span><b>${app.created_at || todo.created_at || '—'}</b></div>
       <div class="kv"><span class="lab">更新时间</span><b>${app.updated_at || '—'}</b></div>
       <div class="kv"><span class="lab">申请状态</span><b>${statusMap[app.status] || app.status || todo.status || '—'}</b></div>
     </div>
-    ${renderApplyFormFieldsHtml(formFields, { editable: canResubmit, editableKeys: todo.editable_keys || [] })}
-    ${(() => {
-      const up = todo.user_permissions;
-      if (!up) return '';
-      const sens = up.sensitive_accounts || [];
-      const all = up.accounts || [];
-      return `<div class="callout" style="margin-bottom:12px">
-        <strong>申请人权限详情</strong>（延期审批重点核对敏感权限）
-        <div class="note" style="margin-top:6px">共 ${up.account_count||0} 个账号，敏感 ${up.sensitive_count||0} 个</div>
-        ${sens.length ? `<div style="margin-top:8px"><b>敏感权限</b>${sens.map(a=>`<div>· <span class="pill p-red">敏感</span> ${a.system_name} / ${a.account_name} · ${a.perm_summary||''}</div>`).join('')}</div>` : '<div class="note">无敏感权限账号</div>'}
-        ${all.length ? `<details style="margin-top:8px"><summary>全部账号</summary>${all.map(a=>`<div>· ${a.has_sensitive?'<span class="pill p-red">敏感</span> ':''}${a.system_name} / ${a.account_name} · ${a.perm_summary||''}</div>`).join('')}</details>` : ''}
-      </div>`;
-    })()}
+    ${renderApplyFormViewHtml(formView, { editable: canResubmit, editableKeys: todo.editable_keys || [] })}
     <h4 style="font-size:13px;margin:0 0 8px">流程时间线（各节点明细）</h4>
     ${renderFlowTimelineHtml(data.timeline)}
     <div class="flow-preview" style="margin-top:14px">

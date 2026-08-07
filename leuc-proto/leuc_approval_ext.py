@@ -382,18 +382,46 @@ def merge_todo_meta_updates(meta_raw, updates: dict | None) -> dict:
     return meta
 
 
-def build_apply_form_fields(db, meta: dict | None, app=None) -> list[dict]:
-    """把申请 meta 转成详情可读字段列表。"""
+def _user_label(db, uid) -> str:
+    if not uid:
+        return "—"
+    u = db.execute(
+        "SELECT display_name, username FROM users WHERE id = ?", (int(uid),)
+    ).fetchone()
+    if not u:
+        return f"#{uid}"
+    return f"{u['display_name'] or u['username']}（{u['username']}）"
+
+
+def _sys_label(db, sid) -> str:
+    if not sid:
+        return "—"
+    sy = db.execute(
+        "SELECT name, code FROM systems WHERE id = ?", (int(sid),)
+    ).fetchone()
+    if not sy:
+        return f"#{sid}"
+    return sy["name"] or sy["code"] or f"#{sid}"
+
+
+def build_apply_form_view(db, meta: dict | None, app=None) -> dict:
+    """按申请表单样式组装详情：摘要行 + 明细表（与自助申请面板一致）。"""
+    # AI-GEN-BEGIN
     meta = meta if isinstance(meta, dict) else {}
     app = dict(app) if app and not isinstance(app, dict) else (app or {})
-    fields: list[dict] = []
+    flow = (app.get("flow_code") or "").strip()
+    todo_hint = (meta.get("todo_type") or app.get("title") or "").strip()
+    uid = meta.get("leuc_user_id") or app.get("applicant_id")
+    rows: list[dict] = []
+    table = None
+    section_title = "申请明细"
 
-    def add(key, label, value, *, editable=False, input_type="text"):
-        if value is None or value == "" or value == []:
+    def row(key, label, value, *, editable=False, input_type="text"):
+        if value is None or value == "":
             return
         if isinstance(value, bool):
             value = "是" if value else "否"
-        fields.append(
+        rows.append(
             {
                 "key": key,
                 "label": label,
@@ -403,108 +431,208 @@ def build_apply_form_fields(db, meta: dict | None, app=None) -> list[dict]:
             }
         )
 
-    # 解析关联对象
-    subject_name = None
-    uid = meta.get("leuc_user_id") or app.get("applicant_id")
-    if uid:
-        u = db.execute(
-            "SELECT display_name, username FROM users WHERE id = ?", (int(uid),)
-        ).fetchone()
-        if u:
-            subject_name = u["display_name"] or u["username"]
-            add("leuc_user_id", "申请对象", f"{subject_name}（#{uid}）")
+    # —— 账号延期（与 openAccountExtend 表单一致）——
+    if flow in ("account_extend", "account_extend_sensitive") or meta.get("days") is not None:
+        section_title = "延期明细"
+        row("applicant", "申请人", _user_label(db, uid))
+        # 当前有效期
+        if uid:
+            u = db.execute(
+                "SELECT account_expire FROM users WHERE id = ?", (int(uid),)
+            ).fetchone()
+            row(
+                "account_expire",
+                "当前有效期",
+                (u["account_expire"] if u and u["account_expire"] else "未设置"),
+            )
+        row(
+            "days",
+            "延期天数",
+            meta.get("days"),
+            editable=True,
+            input_type="number",
+        )
+        if meta.get("new_expire"):
+            row("new_expire", "延期后有效期", meta.get("new_expire"))
+        sens = bool(meta.get("with_sensitive"))
+        row(
+            "with_sensitive",
+            "含敏感权限",
+            "是（走直属→一级→财务）" if sens else "否（直属领导）",
+            editable=True,
+            input_type="bool",
+        )
+        snap = meta.get("user_permissions") or {}
+        accts = snap.get("accounts") if isinstance(snap, dict) else None
+        if not accts and uid:
+            snap = user_permission_snapshot(db, int(uid))
+            accts = snap.get("accounts") or []
+        if accts:
+            table = {
+                "title": "关联业务账号（用于判断是否含敏感）",
+                "headers": ["系统", "账号", "登录", "敏感"],
+                "rows": [
+                    [
+                        a.get("system_name") or "—",
+                        a.get("account_name") or "—",
+                        "可登" if a.get("can_login") else "已关",
+                        "敏感" if a.get("has_sensitive") else "—",
+                    ]
+                    for a in accts
+                ],
+            }
+        return {
+            "section_title": section_title,
+            "rows": rows,
+            "table": table,
+            "line_headers": None,
+            "lines": None,
+        }
 
-    sid = meta.get("system_id") or app.get("system_id")
-    if sid:
-        sy = db.execute(
-            "SELECT name, code FROM systems WHERE id = ?", (int(sid),)
-        ).fetchone()
-        if sy:
-            add("system_id", "业务系统", f"{sy['name']}（{sy['code']}）")
+    # —— 账号/权限关闭 ——
+    if flow in (
+        "account_close",
+        "sensitive_close",
+        "account_close_sensitive",
+    ) or meta.get("close_login") or meta.get("close_sensitive"):
+        section_title = "关闭明细"
+        row("applicant", "申请人", _user_label(db, uid))
+        sys_name = meta.get("system_name") or _sys_label(
+            db, meta.get("system_id") or app.get("system_id")
+        )
+        acct_name = meta.get("account_name") or "—"
+        action = []
+        if meta.get("close_login"):
+            action.append("关闭登录")
+        if meta.get("close_sensitive"):
+            action.append("关闭敏感权限")
+        if not action:
+            action.append("关闭权限")
+        table = {
+            "title": "关闭明细",
+            "headers": ["#", "人员", "业务系统", "系统账号", "操作"],
+            "rows": [
+                ["1", _user_label(db, uid), sys_name, acct_name, "、".join(action)]
+            ],
+        }
+        if meta.get("remark"):
+            row("remark", "备注", meta.get("remark"), editable=True, input_type="textarea")
+        return {
+            "section_title": section_title,
+            "rows": rows,
+            "table": table,
+            "line_headers": None,
+            "lines": None,
+        }
 
-    sids = meta.get("system_ids") or []
-    if isinstance(sids, list) and sids:
-        names = []
-        for x in sids:
-            try:
-                sy = db.execute(
-                    "SELECT name, code FROM systems WHERE id = ?", (int(x),)
-                ).fetchone()
-                if sy:
-                    names.append(f"{sy['name']}（{sy['code']}）")
-                else:
-                    names.append(str(x))
-            except Exception:
-                names.append(str(x))
-        add("system_ids", "业务系统列表", "、".join(names))
+    # —— 账号、权限申请 ——
+    if flow in (
+        "account_apply",
+        "account_apply_sensitive",
+        "sensitive",
+    ) or meta.get("create_new") is not None or meta.get("system_ids"):
+        section_title = "申请明细"
+        row("applicant", "申请人", _user_label(db, uid))
+        sids = meta.get("system_ids") or []
+        if not sids and (meta.get("system_id") or app.get("system_id")):
+            sids = [meta.get("system_id") or app.get("system_id")]
+        create_new = bool(meta.get("create_new"))
+        with_sens = bool(meta.get("with_sensitive") or meta.get("sensitive_flag"))
+        lines = []
+        for i, sid in enumerate(sids or [None], start=1):
+            lines.append(
+                [
+                    str(i),
+                    _user_label(db, uid),
+                    _sys_label(db, sid) if sid else "—",
+                    "新建" if create_new else (meta.get("account_name") or "已有账号"),
+                    "是" if with_sens else "否",
+                ]
+            )
+        if not lines:
+            lines = [
+                [
+                    "1",
+                    _user_label(db, uid),
+                    _sys_label(db, app.get("system_id")),
+                    "新建" if create_new else "—",
+                    "是" if with_sens else "否",
+                ]
+            ]
+        table = {
+            "title": "申请明细",
+            "headers": ["#", "人员", "业务系统", "业务系统账号", "敏感权限"],
+            "rows": lines,
+        }
+        row(
+            "create_new",
+            "新建账号",
+            create_new,
+            editable=True,
+            input_type="bool",
+        )
+        row(
+            "with_sensitive",
+            "含敏感权限",
+            with_sens,
+            editable=True,
+            input_type="bool",
+        )
+        if meta.get("remark"):
+            row("remark", "备注", meta.get("remark"), editable=True, input_type="textarea")
+        return {
+            "section_title": section_title,
+            "rows": rows,
+            "table": table,
+            "line_headers": None,
+            "lines": None,
+        }
 
-    labels = {
-        "days": ("延期天数", "number", True),
-        "with_sensitive": ("含敏感权限", "bool", True),
-        "create_new": ("新建账号", "bool", True),
-        "remark": ("申请备注", "textarea", True),
-        "account_name": ("拟开通账号", "text", True),
-        "account_id": ("账号池ID", "number", False),
-        "phone": ("手机", "text", True),
-        "email": ("邮箱", "text", True),
-        "applicant_name": ("姓名", "text", True),
-        "applicant_job": ("岗位", "text", True),
-        "oa_person_code": ("OA人员编码", "text", False),
-        "beisen_user_id": ("北森用户ID", "text", False),
-        "new_expire": ("延期后有效期", "text", False),
-        "perm_summary": ("权限摘要", "text", True),
-        "reason": ("申请原因", "textarea", True),
-        "comment": ("说明", "textarea", True),
-    }
-    shown = {
-        "leuc_user_id",
-        "system_id",
-        "system_ids",
-        "steps",
-        "step_label",
-        "pending_ccs",
-        "cc",
-        "cc_label",
-        "read_only",
-        "effect_done",
-        "needs_resubmit",
-        "reject_from_step",
-        "reject_to_step",
-        "owner_id",
-        "user_permissions",
-    }
-    for key, (label, itype, editable) in labels.items():
-        if key in meta and key not in shown:
-            add(key, label, meta.get(key), editable=editable, input_type=itype)
-            shown.add(key)
-    # 其余未识别字段也展示（便于看全表单）
-    for k, v in meta.items():
-        if k in shown:
-            continue
-        if isinstance(v, (dict, list)) and k not in ("items",):
-            try:
-                v = json.dumps(v, ensure_ascii=False)
-            except Exception:
-                v = str(v)
-        add(k, k, v, editable=False)
-    # 申请单头信息
-    if app.get("flow_code"):
-        fields.insert(0, {
-            "key": "flow_code",
-            "label": "流程类型",
-            "value": app.get("flow_code"),
-            "editable": False,
-            "input_type": "text",
-        })
+    # —— 其它申请：通用按行明细 ——
+    section_title = "申请明细"
+    row("applicant", "申请人", _user_label(db, uid or app.get("applicant_id")))
     if app.get("title"):
-        fields.insert(0, {
-            "key": "title",
-            "label": "申请标题",
-            "value": app.get("title"),
-            "editable": False,
-            "input_type": "text",
-        })
-    return fields
+        row("title", "申请事项", app.get("title"))
+    if meta.get("system_name") or app.get("system_id") or meta.get("system_id"):
+        row(
+            "system",
+            "业务系统",
+            meta.get("system_name")
+            or _sys_label(db, meta.get("system_id") or app.get("system_id")),
+        )
+    if meta.get("account_name"):
+        row("account_name", "系统账号", meta.get("account_name"), editable=True)
+    if meta.get("applicant_name"):
+        row("applicant_name", "姓名", meta.get("applicant_name"), editable=True)
+    if meta.get("phone"):
+        row("phone", "手机", meta.get("phone"), editable=True)
+    if meta.get("email"):
+        row("email", "邮箱", meta.get("email"), editable=True)
+    if meta.get("remark") or meta.get("reason") or meta.get("comment"):
+        row(
+            "remark",
+            "说明",
+            meta.get("remark") or meta.get("reason") or meta.get("comment"),
+            editable=True,
+            input_type="textarea",
+        )
+    # 兜底：若几乎无内容，给一行提示
+    if len(rows) <= 1 and app.get("title"):
+        row("title", "申请事项", app.get("title"))
+    return {
+        "section_title": section_title,
+        "rows": rows,
+        "table": table,
+        "line_headers": None,
+        "lines": None,
+    }
+    # AI-GEN-END
+
+
+def build_apply_form_fields(db, meta: dict | None, app=None) -> list[dict]:
+    """兼容旧调用：返回摘要行字段。"""
+    view = build_apply_form_view(db, meta, app)
+    return list(view.get("rows") or [])
 
 
 def editable_form_keys(form_fields: list[dict]) -> list[str]:
