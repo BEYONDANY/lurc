@@ -1,6 +1,6 @@
-# LEUC 多角色交互原型（SQLite）
+# LEUC 多角色交互原型（PostgreSQL）
 
-Lecoo 用户中心（LEUC）可点击原型，数据落在本地 SQLite。
+Lecoo 用户中心（LEUC）可点击原型，数据落在 PostgreSQL。
 
 ## 启动
 
@@ -35,7 +35,7 @@ docker compose down
 手机同网访问：`http://<电脑局域网IP>:5055`
 
 说明：
-- 数据持久化在 `./data`（SQLite）
+- Postgres 数据卷 `leuc_pgdata`；`./data` 挂载非库文件
 - 端口可用环境变量覆盖：`LEUC_PORT=5055 docker compose up --build -d`
 - 首次强制重建种子库（会清空）：`LEUC_FORCE_INIT=1 docker compose up --build -d`
 

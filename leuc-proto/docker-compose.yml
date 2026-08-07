@@ -1,17 +1,37 @@
 # AI-GEN-BEGIN
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: leuc-pgsql
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-leuc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leuc}
+      POSTGRES_DB: ${POSTGRES_DB:-leuc}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - leuc_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U leuc -d leuc"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   leuc:
     build: .
     image: leuc-proto:local
     container_name: leuc-proto
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "${LEUC_PORT:-5055}:5055"
     environment:
       LEUC_HOST: "0.0.0.0"
       LEUC_PORT: "5055"
       LEUC_FORCE_INIT: "${LEUC_FORCE_INIT:-0}"
-      # Windows 绑定卷上 WAL 不稳定，Docker 默认 DELETE
-      LEUC_SQLITE_JOURNAL: "${LEUC_SQLITE_JOURNAL:-DELETE}"
+      DATABASE_URL: "${DATABASE_URL:-postgresql://leuc:leuc@db:5432/leuc}"
     # 有 .env 时加载 LeOrg / 北森配置；没有也不阻塞启动
     env_file:
       - path: .env
@@ -19,4 +39,7 @@ services:
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+
+volumes:
+  leuc_pgdata:
 # AI-GEN-END
