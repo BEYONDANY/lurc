@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS departments (
   owner_user_id INTEGER,
   leorg_id INTEGER UNIQUE,
   manager_leorg_emp_id INTEGER,
+  sort_order INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (parent_id) REFERENCES departments(id)
 );
 
@@ -247,6 +248,14 @@ CREATE TABLE IF NOT EXISTS roles (
   is_builtin INTEGER NOT NULL DEFAULT 0,
   sort_order INTEGER NOT NULL DEFAULT 100,
   created_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS user_roles (
+  user_id INTEGER NOT NULL,
+  role TEXT NOT NULL,
+  PRIMARY KEY (user_id, role),
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (role) REFERENCES roles(code)
 );
 
 CREATE TABLE IF NOT EXISTS oauth_codes (
@@ -476,6 +485,14 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE departments ADD COLUMN manager_leorg_emp_id INTEGER"
         )
+    # AI-GEN-BEGIN
+    dept_cols = _table_cols(conn, "departments")
+    if dept_cols and "sort_order" not in dept_cols:
+        conn.execute(
+            "ALTER TABLE departments ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0"
+        )
+        conn.execute("UPDATE departments SET sort_order = id WHERE sort_order = 0 OR sort_order IS NULL")
+    # AI-GEN-END
     # AI-GEN-END
     roster_cols = _table_cols(conn, "hr_sync_roster")
     if roster_cols and "leorg_emp_id" not in roster_cols:
@@ -578,6 +595,18 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     )
     ensure_roles_seeded(conn)
     # AI-GEN-BEGIN
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS user_roles (
+          user_id INTEGER NOT NULL,
+          role TEXT NOT NULL,
+          PRIMARY KEY (user_id, role),
+          FOREIGN KEY (user_id) REFERENCES users(id),
+          FOREIGN KEY (role) REFERENCES roles(code)
+        )"""
+    )
+    ensure_user_roles_migrated(conn)
+    # AI-GEN-END
+    # AI-GEN-BEGIN
     user_cols2 = _table_cols(conn, "users")
     if user_cols2 and "status" not in user_cols2:
         conn.execute(
@@ -596,6 +625,18 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     if msg_cols and "ref_id" not in msg_cols:
         conn.execute("ALTER TABLE messages ADD COLUMN ref_id INTEGER")
     ensure_todo_notify_trigger(conn)
+    # AI-GEN-BEGIN
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS leorg_sync_draft (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          created_by INTEGER,
+          mode TEXT,
+          max_change_id INTEGER DEFAULT 0,
+          changes_json TEXT NOT NULL,
+          created_at TEXT
+        )"""
+    )
+    # AI-GEN-END
     # AI-GEN-END
 
 
@@ -702,6 +743,13 @@ def ensure_roles_seeded(conn: sqlite3.Connection) -> None:
             "INSERT OR IGNORE INTO role_menus (role, menu_id) VALUES (?, 'oa_forms')",
             (role,),
         )
+    # 软补：添加/删除部门按钮
+    for role in ("super_admin", "hr_specialist", "dept_owner"):
+        for cap in ("org_dept_add", "org_dept_delete"):
+            conn.execute(
+                "INSERT OR IGNORE INTO role_caps (role, cap_id) VALUES (?, ?)",
+                (role, cap),
+            )
     # AI-GEN-END
     # 兼容旧演示角色：若库里仍有人占用则登记，否则忽略
     for code, label in (("employee_a", "普通员工A"), ("employee_b", "普通员工B")):
@@ -712,6 +760,64 @@ def ensure_roles_seeded(conn: sqlite3.Connection) -> None:
                 VALUES (?, ?, 1, 15, ?)""",
                 (code, label, now),
             )
+
+
+# AI-GEN-BEGIN
+EMPLOYEE_ROLE_CODES = frozenset({"employee", "employee_a", "employee_b"})
+SYSTEM_ROLE_EXCLUDE = EMPLOYEE_ROLE_CODES  # 「本系统角色」不含普通员工类
+
+
+def ensure_user_roles_migrated(conn: sqlite3.Connection) -> None:
+    """从 users.role 补种 user_roles（幂等）。"""
+    try:
+        conn.execute(
+            """INSERT OR IGNORE INTO user_roles (user_id, role)
+            SELECT id, role FROM users
+            WHERE role IS NOT NULL AND role != ''"""
+        )
+    except Exception:
+        pass
+
+
+def user_roles_of(conn: sqlite3.Connection, user_id: int) -> list:
+    """用户已绑角色 code 列表（按 sort_order）。"""
+    rows = conn.execute(
+        """SELECT ur.role FROM user_roles ur
+        LEFT JOIN roles r ON r.code = ur.role
+        WHERE ur.user_id = ?
+        ORDER BY COALESCE(r.sort_order, 999), ur.role""",
+        (int(user_id),),
+    ).fetchall()
+    codes = [r["role"] for r in rows if r["role"]]
+    if codes:
+        return codes
+    # 回退：仅主角色
+    u = conn.execute("SELECT role FROM users WHERE id = ?", (int(user_id),)).fetchone()
+    if u and u["role"]:
+        return [u["role"]]
+    return ["employee"]
+
+
+def sync_primary_role(conn: sqlite3.Connection, user_id: int) -> str:
+    """按 user_roles 回写 users.role：优先非员工角色中 sort 最小，否则 employee。"""
+    roles = user_roles_of(conn, user_id)
+    primary = "employee"
+    for code in roles:
+        if code not in EMPLOYEE_ROLE_CODES:
+            primary = code
+            break
+    else:
+        if roles:
+            primary = roles[0] if roles[0] in EMPLOYEE_ROLE_CODES else "employee"
+        else:
+            primary = "employee"
+            conn.execute(
+                "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'employee')",
+                (int(user_id),),
+            )
+    conn.execute("UPDATE users SET role = ? WHERE id = ?", (primary, int(user_id)))
+    return primary
+# AI-GEN-END
 
 
 def load_role_labels(conn: sqlite3.Connection) -> dict:
@@ -839,7 +945,7 @@ def seed(conn: sqlite3.Connection) -> None:
     # 末项 sso_login_field：北森用 account_uid，其它用 account_name
     systems = [
         # access_mode; forbid_external; has_sensitive; sso_login_field; is_builtin
-        (1, "oa", "OA 办公", "client_oa", "sk_oa_demo_secret", f"{portal_cb}?app=oa", "openid profile email", "authorization_code", "client_secret_post", 1, "open", 0, 0, "account_name", "enabled", 0, None, now),
+        (1, "oa", "OA 办公", "client_oa", "sk_oa_demo_secret", f"{portal_cb}?app=oa", "openid profile email", "authorization_code", "client_secret_post", 1, "apply", 0, 0, "account_name", "enabled", 0, None, now),
         (2, "bip", "BIP", "client_bip", "sk_bip_demo_secret", f"{portal_cb}?app=bip", "openid profile", "authorization_code", "client_secret_post", 1, "open", 0, 0, "account_name", "enabled", 0, None, now),
         (3, "laiku_erp", "来酷ERP", "client_laiku_erp", "sk_laiku_erp_secret", f"{portal_cb}?app=laiku_erp", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 0, 1, "account_name", "enabled", 0, None, now),
         (4, "keji_erp", "科技ERP", "client_keji_erp", "sk_keji_erp_secret", f"{portal_cb}?app=keji_erp", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 0, 1, "account_name", "enabled", 0, None, now),
@@ -979,6 +1085,8 @@ ALL_BUTTONS = [
     {"id": "org_import", "label": "导入人员", "menu": "my_org"},
     {"id": "org_sync", "label": "部门同步", "menu": "my_org"},
     {"id": "org_set_owner", "label": "设置部门负责人", "menu": "my_org"},
+    {"id": "org_dept_add", "label": "添加部门", "menu": "my_org"},
+    {"id": "org_dept_delete", "label": "删除部门", "menu": "my_org"},
     {"id": "proxy_apply", "label": "代人申请账号/权限", "menu": "my_org"},
     {"id": "direct_bind", "label": "直接绑定", "menu": "my_org"},
     {"id": "set_account_expire", "label": "设置账号有效期", "menu": "my_org"},
@@ -1013,16 +1121,22 @@ DEFAULT_ROLE_CAPS = {
     "finance": [],
     "hr_specialist": [
         "manage_all_org", "org_add", "org_import", "org_sync", "org_set_owner",
+        "org_dept_add", "org_dept_delete",
         "proxy_apply", "direct_bind", "set_account_expire",
     ],
     "system_owner": ["manage_systems", "sys_perm_edit", "sys_acct_sync"],
     "super_admin": [
         "manage_all_org", "org_add", "org_import", "org_sync", "org_set_owner",
+        "org_dept_add", "org_dept_delete",
         "proxy_apply", "direct_bind", "set_account_expire",
         "manage_systems", "sys_add", "sys_perm_edit", "sys_acct_sync",
         "config_roles", "role_assign", "sensitive_config",
     ],
-    "dept_owner": ["org_add", "org_import", "org_set_owner", "proxy_apply", "set_account_expire"],
+    "dept_owner": [
+        "org_add", "org_import", "org_set_owner",
+        "org_dept_add", "org_dept_delete",
+        "proxy_apply", "set_account_expire",
+    ],
 }
 
 ROLE_MENUS = DEFAULT_ROLE_MENUS  # 兼容旧引用；运行时优先 DB

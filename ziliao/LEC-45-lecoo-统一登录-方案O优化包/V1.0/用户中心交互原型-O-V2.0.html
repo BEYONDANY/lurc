@@ -287,14 +287,15 @@ tr:hover td{background:#F7FAFF}
     <nav>
       <a class="on" onclick="scr('portal','p-home',this)">🏠 工作台</a>
       <a onclick="scr('portal','p-profile',this)">👤 个人中心</a>
-      <div class="grp">开发者中心</div>
-      <a onclick="scr('portal','p-myapps',this)">📦 我创建的应用</a>
-      <a onclick="scr('portal','p-create',this)">➕ 创建应用</a>
+      <!-- AI-GEN-BEGIN -->
+      <div class="grp">应用管理</div>
+      <a onclick="scr('portal','p-myapps',this)">📦 应用列表</a>
       <a onclick="scr('portal','p-appdetail',this)">🔑 应用详情 · PMS</a>
-      <div class="grp">工单</div>
-      <a onclick="scr('portal','p-tickets',this)">📋 工单中心</a>
-      <div class="grp">团队管理</div>
-      <a onclick="scr('portal','p-team-accounts',this)">👥 团队账号管理</a>
+      <div class="grp">待办</div>
+      <a onclick="scr('portal','p-tickets',this)">📋 我的待办</a>
+      <div class="grp">部门管理</div>
+      <a onclick="scr('portal','p-team-accounts',this)">👥 部门账号管理</a>
+      <!-- AI-GEN-END -->
     </nav>
     <div class="me"><span class="avatar">吴</span><div>chuanbin.wu<br><span style="color:#7C8BB8;font-size:11px">租户 Owner · Acme Corp</span></div></div>
   </aside>
@@ -318,9 +319,11 @@ tr:hover td{background:#F7FAFF}
     </div>
     <div class="cards g2">
       <div class="card"><h4>待办 · 3</h4>
+        <!-- AI-GEN-BEGIN -->
         <div class="kv"><span>【待我审批】李雷的 CRM 权限申请</span><span class="pill p-blue">审批</span></div>
-        <div class="kv"><span>【我的申请】数据看板接入 — 审核中</span><span class="pill p-orange">进行中</span></div>
+        <div class="kv"><span>【我的申请】外部账号延期 — 审批中</span><span class="pill p-orange">进行中</span></div>
         <div class="kv"><span>【转交待办】离职同事张伟名下应用 1 个</span><span class="pill p-red">30天内</span></div>
+        <!-- AI-GEN-END -->
       </div>
       <div class="card"><h4>通知</h4>
         <div class="kv"><span>PMS 应用 Key 已重置（操作人：你）</span><span class="lab">10:24</span></div>
@@ -366,51 +369,29 @@ tr:hover td{background:#F7FAFF}
     </div>
   </section>
 
-  <!-- 我创建的应用 -->
+  <!-- AI-GEN-BEGIN -->
+  <!-- 应用列表（无注册入口，仅列表与管理） -->
   <section id="p-myapps" class="screen">
-    <div class="crumb">员工端 / 开发者中心 / 我创建的应用</div>
-    <div class="ptitle">我创建的应用 <button class="btn btn-pri btn-sm right" style="width:auto" onclick="scr('portal','p-create',document.querySelectorAll('#view-portal .side nav a')[3])">＋ 创建应用</button></div>
+    <div class="crumb">员工端 / 应用管理 / 应用列表</div>
+    <div class="ptitle">应用列表 <span class="pill p-blue">我负责 / 共同负责</span></div>
     <table>
       <tr><th>应用</th><th>协议</th><th>状态</th><th>授权用户</th><th>近30天登录</th><th>操作</th></tr>
-      <tr><td><b>项目管理 PMS</b></td><td>OAuth2+PKCE</td><td><span class="pill p-green">已启用</span></td><td>326</td><td>8,412</td><td><a style="color:var(--blue-d);cursor:pointer" onclick="scr('portal','p-appdetail',document.querySelectorAll('#view-portal .side nav a')[4])">管理</a></td></tr>
-      <tr><td><b>数据看板</b></td><td>OAuth2</td><td><span class="pill p-orange">审核中</span></td><td>—</td><td>—</td><td><a style="color:var(--muted)">查看</a></td></tr>
-      <tr><td><b>老工具站</b></td><td>CAS 3.0</td><td><span class="pill p-red">已驳回</span></td><td>—</td><td>—</td><td><a style="color:var(--blue-d);cursor:pointer">查看原因并重提</a></td></tr>
+      <tr><td><b>项目管理 PMS</b></td><td>OAuth2+PKCE</td><td><span class="pill p-green">已启用</span></td><td>326</td><td>8,412</td><td><a style="color:var(--blue-d);cursor:pointer" onclick="scr('portal','p-appdetail',document.querySelectorAll('#view-portal .side nav a')[2])">管理</a></td></tr>
+      <tr><td><b>数据看板</b></td><td>OAuth2</td><td><span class="pill p-green">已启用</span></td><td>198</td><td>4,220</td><td><a style="color:var(--blue-d);cursor:pointer" onclick="scr('portal','p-appdetail',document.querySelectorAll('#view-portal .side nav a')[2])">管理</a></td></tr>
+      <tr><td><b>老工具站</b></td><td>CAS 3.0</td><td><span class="pill p-orange">待转交</span></td><td>45</td><td>120</td><td><a style="color:var(--blue-d);cursor:pointer">转交负责人</a></td></tr>
     </table>
+    <p class="note" style="margin-top:10px">应用由平台统一接入维护；本页仅展示你负责的应用列表，可进入详情管理凭证、回调与授权。</p>
   </section>
-
-  <!-- 创建应用 -->
-  <section id="p-create" class="screen">
-    <div class="crumb">员工端 / 开发者中心 / 创建应用</div>
-    <div class="ptitle">创建应用</div>
-    <div class="steps"><div class="cur">① 填写信息</div><div>② 平台审核</div><div>③ 获取凭证</div><div>④ 下载 Skill 对接</div><div>⑤ 沙箱联调</div></div>
-    <div class="card form">
-      <div class="field"><label>应用名称 *（全局唯一，2~30 字）</label><input placeholder="如：数据看板"></div>
-      <div class="field"><label>应用负责人 *（默认本人，可添加共同负责人；审核通过后自动成为应用管理员）</label><input value="吴川斌（chuanbin.wu）"></div>
-      <div class="field"><label>接入协议 *</label>
-        <div class="radio-cards">
-          <div class="on"><b>OAuth2 / OIDC（推荐）</b>授权码 + PKCE，适合新建及前后分离系统</div>
-          <div><b>CAS 3.0</b>适合存量 CAS Client 系统迁移</div>
-        </div></div>
-      <div class="field"><label>回调地址 callback_url *（可多个，须 HTTPS）</label><input placeholder="https://dash.company.com/auth/callback"></div>
-      <div class="field"><label>用户唯一标识 *</label>
-        <div class="radio-cards">
-          <div class="on"><b>itcode（推荐）</b>不可变，内部员工全覆盖</div>
-          <div><b>手机号</b>⚠️ 存在换号风险，换号需工单</div>
-          <div><b>OA 用户编号</b>覆盖率校验：87%，缺失 261 人</div>
-        </div></div>
-      <div class="field"><label>用途说明 / 预计用户规模</label><textarea rows="2" placeholder="供审核参考"></textarea></div>
-      <button class="btn btn-pri" style="width:auto">提交审核（生成应用接入工单）</button>
-    </div>
-  </section>
+  <!-- AI-GEN-END -->
 
   <!-- 应用详情 -->
   <section id="p-appdetail" class="screen">
-    <div class="crumb">员工端 / 开发者中心 / 应用详情</div>
+    <div class="crumb">员工端 / 应用管理 / 应用详情</div>
     <div class="ptitle">项目管理 PMS <span class="pill p-green">已启用</span><span class="pill p-blue">OAuth2+PKCE</span></div>
     <div class="cards g2">
       <div class="card"><h4>凭证管理（生产）</h4>
         <div class="kv"><span class="lab">client_id</span><b>pms_8f2e91c04a7b 📋</b></div>
-        <div class="kv"><span class="lab">client_secret</span><b>••••••••••••3f8a（仅创建/重置时展示一次）</b></div>
+        <div class="kv"><span class="lab">client_secret</span><b>••••••••••••3f8a（仅重置时展示一次）</b></div>
         <div class="countdown" style="margin-top:10px">🔁 <div>旧 Key 宽限中，<b id="cd">05:12:33</b> 后失效<br><span style="font-size:11.5px">新旧 Key 并行可用，请尽快完成生产发布</span></div>
           <button class="btn btn-danger btn-sm right">立即作废旧 Key</button></div>
         <div style="margin-top:12px;display:flex;gap:10px">
@@ -443,10 +424,11 @@ tr:hover td{background:#F7FAFF}
     </div>
   </section>
 
-  <!-- 工单中心 -->
+  <!-- AI-GEN-BEGIN -->
+  <!-- 我的待办 -->
   <section id="p-tickets" class="screen">
-    <div class="crumb">员工端 / 工单中心</div>
-    <div class="ptitle">工单中心
+    <div class="crumb">员工端 / 我的待办</div>
+    <div class="ptitle">我的待办
       <button class="btn btn-pri btn-sm right" style="width:auto" onclick="openModal('m-extend')">＋ 发起申请</button></div>
     <div class="toolbar">
       <span class="pill p-blue" style="padding:6px 14px;cursor:pointer">待我审批 2</span>
@@ -455,18 +437,21 @@ tr:hover td{background:#F7FAFF}
       <span class="pill p-gray" style="padding:6px 14px;cursor:pointer">抄送我</span>
     </div>
     <table>
-      <tr><th>工单号</th><th>类型</th><th>申请人</th><th>当前节点</th><th>渠道</th><th>提交时间</th><th>操作</th></tr>
+      <tr><th>待办编号</th><th>类型</th><th>申请人</th><th>当前节点</th><th>渠道</th><th>提交时间</th><th>操作</th></tr>
       <tr><td>T20260721-018</td><td>应用权限申请（CRM · viewer）</td><td>李雷</td><td><span class="pill p-blue">待你审批</span></td><td>本系统</td><td>今天 09:41</td><td><a style="color:var(--green);cursor:pointer">同意</a> · <a style="color:var(--red);cursor:pointer">驳回</a> · <a style="color:var(--blue-d);cursor:pointer">转办</a></td></tr>
       <tr><td>T20260721-011</td><td>外部账号延期（王强 · +90天）</td><td>吴川斌（代提）</td><td><span class="pill p-orange">一级领导审批中</span></td><td>飞书审批 ↗</td><td>今天 08:52</td><td><a style="color:var(--muted)">催办</a></td></tr>
-      <tr><td>T20260720-206</td><td>应用接入申请（数据看板）</td><td>吴川斌</td><td><span class="pill p-orange">平台管理员审核</span></td><td>本系统</td><td>昨天</td><td><a style="color:var(--muted)">撤回</a></td></tr>
+      <!-- AI-GEN-BEGIN -->
+      <tr><td>T20260720-206</td><td>账号开通申请（CRM）</td><td>吴川斌</td><td><span class="pill p-orange">系统负责人处理中</span></td><td>本系统</td><td>昨天</td><td><a style="color:var(--muted)">催办</a></td></tr>
+      <!-- AI-GEN-END -->
       <tr><td>T20260719-152</td><td>外部人员换号（陈芳）</td><td>吴川斌（代提）</td><td><span class="pill p-green">已完成</span></td><td>本系统</td><td>07-19</td><td><a style="color:var(--muted)">详情</a></td></tr>
     </table>
   </section>
+  <!-- AI-GEN-END -->
 
-  <!-- AI-GEN-BEGIN O-V2.0 team account management -->
+  <!-- AI-GEN-BEGIN O-V2.0 department account management -->
   <section id="p-team-accounts" class="screen">
-    <div class="crumb">员工入口 / 团队管理 / 团队账号管理</div>
-    <div class="ptitle">团队账号管理 <span class="pill p-blue">负责人 / 部门上级</span><button class="btn btn-pri btn-sm right" style="width:auto" onclick="openTeamBulk('新建账号')">＋ 新建账号</button></div>
+    <div class="crumb">员工入口 / 部门管理 / 部门账号管理</div>
+    <div class="ptitle">部门账号管理 <span class="pill p-blue">负责人 / 部门上级</span><button class="btn btn-pri btn-sm right" style="width:auto" onclick="openTeamBulk('新建账号')">＋ 新建账号</button></div>
     <div class="banner">当前管理范围：<strong>来酷 PC 事业部 / 产品运作</strong>，共 45 人。范围来自飞书/北森组织关系及本系统责任人配置，不可越权管理其他部门。</div>
     <div class="cards g4" style="margin-bottom:14px">
       <div class="card kpi"><b>45</b><span>可管理人员</span></div>
@@ -527,7 +512,7 @@ tr:hover td{background:#F7FAFF}
       <a onclick="scr('admin','a-perm-explorer',this)">🧭 集中权限查看</a>
       <a onclick="scr('admin','a-org',this)">🌲 组织与负责人</a>
       <div class="grp">应用与权限</div>
-      <a onclick="scr('admin','a-apps',this)">📦 应用管理 / 审核</a>
+      <!-- AI-GEN-BEGIN --><a onclick="scr('admin','a-apps',this)">📦 应用管理</a><!-- AI-GEN-END -->
       <a onclick="scr('admin','a-roles',this)">🎭 角色权限查看</a>
       <a onclick="scr('admin','a-grant',this)">🛡 授权管理</a>
       <a onclick="scr('admin','a-xperm',this)">🗂 跨系统权限目录</a>
@@ -566,8 +551,8 @@ tr:hover td{background:#F7FAFF}
         <div class="kv"><span>30 天内到期</span><b style="color:var(--orange)">89</b></div>
         <div class="kv"><span>已过期待处置</span><b style="color:var(--red)">12</b></div>
         <div class="kv"><span>休眠（90 天未登录）</span><b>26</b></div></div>
-      <div class="card"><h4>工单时效</h4>
-        <div class="kv"><span>待处理工单</span><b>14</b></div>
+      <div class="card"><h4>待办时效</h4>
+        <div class="kv"><span>待处理事项</span><b>14</b></div>
         <div class="kv"><span>平均审批时长</span><b>6.8 小时</b></div>
         <div class="kv"><span>超 48h 未处理</span><b style="color:var(--orange)">2（已提醒）</b></div>
         <div class="kv"><span>飞书渠道占比</span><b>64%</b></div></div>
@@ -737,12 +722,13 @@ tr:hover td{background:#F7FAFF}
     </div>
   </section>
 
+  <!-- AI-GEN-BEGIN -->
   <section id="a-apps" class="screen">
     <div class="crumb">管理后台 / 应用管理</div>
-    <div class="ptitle">应用管理 <span class="pill p-red">待审核 3</span></div>
+    <div class="ptitle">应用管理 <span class="pill p-blue">列表 · 启停 · 凭证</span></div>
     <table>
       <tr><th>应用</th><th>负责人</th><th>协议</th><th>状态</th><th>授权用户</th><th>近30天登录</th><th>操作</th></tr>
-      <tr style="background:#FFFBF3"><td><b>数据看板</b></td><td>吴川斌</td><td>OAuth2</td><td><span class="pill p-orange">待审核</span></td><td>—</td><td>—</td><td><a style="color:var(--green);cursor:pointer" onclick="openModal('m-approve')">审核</a></td></tr>
+      <tr><td><b>数据看板</b></td><td>吴川斌</td><td>OAuth2</td><td><span class="pill p-green">已启用</span></td><td>198</td><td>4,220</td><td><a style="color:var(--gray)">停用</a> · <a style="color:var(--gray)">转交</a></td></tr>
       <tr><td><b>项目管理 PMS</b></td><td>吴川斌 +1</td><td>OAuth2+PKCE</td><td><span class="pill p-green">已启用</span></td><td>326</td><td>8,412</td><td><a style="color:var(--gray)">停用</a> · <a style="color:var(--gray)">转交</a></td></tr>
       <tr><td><b>CRM 客户系统</b></td><td>李雷</td><td>OIDC</td><td><span class="pill p-green">已启用</span></td><td>512</td><td>22,180</td><td><a style="color:var(--gray)">详情</a></td></tr>
       <tr><td><b>老工具站</b></td><td>张伟（已离职）</td><td>CAS</td><td><span class="pill p-red">待转交</span></td><td>45</td><td>120</td><td><a style="color:var(--orange)">强制转交</a></td></tr>
@@ -751,7 +737,9 @@ tr:hover td{background:#F7FAFF}
       <table><tr><th>时间</th><th>应用</th><th>操作</th><th>操作人</th><th>Key 指纹</th></tr>
       <tr><td>今日 10:24</td><td>PMS</td><td>重置 secret（旧 Key 6h 宽限）</td><td>chuanbin.wu</td><td>SHA256:9f2e…a1</td></tr>
       <tr><td>07-15</td><td>CRM</td><td>应急作废旧 Key</td><td>li.lei</td><td>SHA256:77b0…3c</td></tr></table></div>
+    <p class="note" style="margin-top:10px">应用由平台统一接入维护；本页提供列表、启停、负责人转交与凭证轮换，不提供自助注册审批流。</p>
   </section>
+  <!-- AI-GEN-END -->
 
   <section id="a-grant" class="screen">
     <div class="crumb">管理后台 / 授权管理</div>
@@ -976,11 +964,12 @@ adapters/oidc.ts     <span class="c"># OIDC + PKCE</span>
     <div class="ptitle">审批管理</div>
     <div class="cards g2">
       <div class="card"><h4>审批模板与路由（全部本系统托管）</h4>
-        <table><tr><th>工单类型</th><th>审批链</th><th>渠道</th></tr>
+        <table><tr><th>待办类型</th><th>审批链</th><th>渠道</th></tr>
         <tr><td>外部账号开通</td><td>sponsor 一级领导 → 管理员</td><td><span class="pill p-blue">飞书审批</span></td></tr>
         <tr><td>账号延期</td><td>一级领导 → 管理员</td><td><span class="pill p-blue">飞书审批</span></td></tr>
-        <tr><td>应用接入</td><td>平台管理员</td><td><span class="pill p-gray">本系统</span></td></tr>
+        <!-- AI-GEN-BEGIN -->
         <tr><td>应用权限</td><td>应用管理员</td><td><span class="pill p-gray">本系统</span></td></tr>
+        <!-- AI-GEN-END -->
         <tr><td>外部换号</td><td>管理员</td><td><span class="pill p-gray">本系统</span></td></tr></table>
         <p style="font-size:12px;color:var(--muted);margin-top:10px">一级领导自动取飞书组织架构直属上级，取不到回退平台管理员并告警；模板经飞书 API 同步（附录 C4 风险项）</p></div>
       <div class="card"><h4>渠道与超时策略</h4>
@@ -1043,7 +1032,7 @@ adapters/oidc.ts     <span class="c"># OIDC + PKCE</span>
       <tr><td>14:22:31</td><td>授权变更</td><td>platform.admin</td><td>为 李雷 授予 CRM editor 角色</td><td>10.8.1.2</td></tr>
       <tr><td>10:24:07</td><td>Key 操作</td><td>chuanbin.wu</td><td>重置 PMS secret（旧 Key 6h 宽限）</td><td>10.8.12.33</td></tr>
       <tr><td>09:15:44</td><td>生命周期</td><td>系统</td><td>飞书离职事件：张伟 → 禁用 + 全局踢出</td><td>—</td></tr>
-      <tr><td>08:52:10</td><td>工单</td><td>吴川斌</td><td>代提 王强 延期申请（+90 天）</td><td>10.8.12.33</td></tr>
+      <tr><td>08:52:10</td><td>待办</td><td>吴川斌</td><td>代提 王强 延期申请（+90 天）</td><td>10.8.12.33</td></tr>
       <tr><td>03:00:00</td><td>同步</td><td>系统</td><td>飞书全量对账成功 · 1,987 人 · 冲突 2</td><td>—</td></tr>
     </table>
     <p style="font-size:12px;color:var(--muted);margin-top:10px">日志只增不改 · 保留 ≥ 1 年（多租户 RBAC）· 支持导出复核</p>
@@ -1663,16 +1652,8 @@ adapters/oidc.ts     <span class="c"># OIDC + PKCE</span>
   </div>
 </div></div>
 
-<div class="mask" id="m-approve"><div class="modal">
-  <h3>📦 应用接入审核 · 数据看板</h3>
-  <div class="sub">申请人：吴川斌（平台研发部）· 协议：OAuth2+PKCE · 唯一标识：itcode<br>回调：https://dash.company.com/auth/callback（域名白名单 ✔）· 预计用户：200</div>
-  <div class="field"><label>审核意见</label><input placeholder="驳回时必填"></div>
-  <div class="sub" style="margin-top:4px">通过后：自动生成凭证与沙箱测试账号，申请人自动成为应用管理员并收到通知。</div>
-  <div class="foot">
-    <button class="btn btn-line" onclick="closeModal('m-approve')">驳回</button>
-    <button class="btn btn-pri" style="width:auto" onclick="closeModal('m-approve')">通过并生成凭证</button>
-  </div>
-</div></div>
+<!-- AI-GEN-BEGIN：已移除应用接入审核弹窗（无自助注册） -->
+<!-- AI-GEN-END -->
 
 <div class="mask" id="m-extend"><div class="modal">
   <h3>📋 发起延期申请</h3>
@@ -1730,7 +1711,7 @@ adapters/oidc.ts     <span class="c"># OIDC + PKCE</span>
 </div></div>
 
 <div class="mask" id="m-team-bulk"><div class="modal">
-  <h3 id="team-bulk-title">团队账号批量操作</h3>
+  <h3 id="team-bulk-title">部门账号批量操作</h3>
   <div class="sub" id="team-bulk-sub">操作对象：当前已选择人员。系统将校验人员管理范围、现有账号和审批要求。</div>
   <div class="field"><label>目标系统（可多选）</label>
     <div class="chip-row"><label class="source-chip"><input type="checkbox" checked> CRM</label><label class="source-chip"><input type="checkbox"> PMS</label><label class="source-chip"><input type="checkbox"> NC</label><label class="source-chip"><input type="checkbox"> BIP</label><label class="source-chip"><input type="checkbox"> SCM</label></div>
@@ -2136,10 +2117,10 @@ function openTeamBulk(action){
   openModal('m-team-bulk');
 }
 function submitTeamBulk(){
-  const action=(document.getElementById('team-bulk-title')||{}).textContent||'团队账号操作';
+  const action=(document.getElementById('team-bulk-title')||{}).textContent||'部门账号操作';
   const count=document.querySelectorAll('.team-check:checked').length||1;
   closeModal('m-team-bulk');
-  toast(action+'已提交，共 '+count+' 人；自动执行与线下待办结果将在工单中心汇总（演示）');
+  toast(action+'已提交，共 '+count+' 人；自动执行与线下待办结果将在“我的待办”汇总（演示）');
 }
 /* AI-GEN-END */
 </script>

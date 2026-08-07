@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="lib" path="libs/com/google/code/findbugs/jsr305/2.0.1/jsr305-2.0.1.jar"/>
+	<classpathentry kind="lib" path="libs/com/google/code/gson/gson/2.5/gson-2.5-javadoc.jar"/>
+	<classpathentry kind="lib" path="libs/com/google/code/gson/gson/2.5/gson-2.5-sources.jar"/>
+	<classpathentry kind="lib" path="libs/com/google/code/gson/gson/2.5/gson-2.5.jar"/>
+	<classpathentry kind="lib" path="libs/com/google/collections/google-collections/1.0/google-collections-1.0.jar"/>
+	<classpathentry kind="lib" path="libs/com/google/guava/guava/11.0.2/guava-11.0.2.jar"/>
+	<classpathentry kind="lib" path="libs/com/google/guava/guava/18.0/guava-18.0-sources.jar"/>
+	<classpathentry kind="lib" path="libs/com/google/guava/guava/18.0/guava-18.0.jar"/>
+	<classpathentry kind="lib" path="libs/com/google/guava/guava/20.0/guava-20.0.jar"/>
+	<classpathentry kind="lib" path="libs/org/bouncycastle/bcprov-jdk16/1.46/bcprov-jdk16-1.46-javadoc.jar"/>
+	<classpathentry kind="lib" path="libs/org/bouncycastle/bcprov-jdk16/1.46/bcprov-jdk16-1.46-sources.jar"/>
+	<classpathentry kind="lib" path="libs/org/bouncycastle/bcprov-jdk16/1.46/bcprov-jdk16-1.46.jar"/>
+	<classpathentry kind="output" path="out/production/Beisen.OIDC.SDK"/>
+</classpath>

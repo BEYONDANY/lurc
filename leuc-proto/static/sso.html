@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LEUC · 业务系统登录</title>
+<style>
+/* AI-GEN-BEGIN */
+:root{--navy:#101838;--blue:#2E9BFF;--blue-d:#1677E0;--ink:#1B2340;--line:#DDE7F7;--muted:#8B96AD;--bg:#F2F6FD}
+*{box-sizing:border-box;margin:0;padding:0;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+body{background:#0B1126;color:var(--ink);min-height:100vh}
+.bar{display:flex;align-items:center;gap:10px;padding:12px 18px;color:#fff;border-bottom:1px solid #1E2A55}
+.logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#2E9BFF,#7C5CFF);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px}
+.tag{font-size:11px;color:#8FA3D9;border:1px solid #2A3766;border-radius:20px;padding:2px 10px}
+.wrap{max-width:440px;margin:36px auto;padding:0 16px}
+.card{background:#fff;border-radius:16px;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+h1{font-size:20px;margin-bottom:6px}
+.sub{color:var(--muted);font-size:12.5px;line-height:1.7;margin-bottom:14px}
+.callout{background:#FFF8E8;border:1px dashed #F0D9A0;color:#7A5608;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.7;margin-bottom:14px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12.5px;color:#5A6478;margin-bottom:6px}
+.field input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px}
+.btn{border:0;border-radius:9px;padding:11px 16px;font-size:14px;cursor:pointer}
+.btn-pri{background:linear-gradient(90deg,#1677E0,#2E9BFF);color:#fff;width:100%}
+.btn-line{background:#fff;border:1px solid var(--line);color:var(--ink);width:100%;margin-top:8px}
+.acct{border:1.5px solid var(--line);border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.acct.on,.acct:hover{border-color:var(--blue);background:#F3F9FF}
+.acct b{display:block;font-size:13.5px}
+.acct span{font-size:11.5px;color:var(--muted)}
+.warn{background:#FCE9E9;border:1px solid #F0C3C3;color:#A33;padding:12px;border-radius:9px;font-size:13px;line-height:1.7}
+.ok{background:#E7F7EE;border:1px solid #B8E6C8;color:#1D8A4E;padding:12px;border-radius:9px;font-size:13px;line-height:1.7}
+.panel{display:none}.panel.show{display:block}
+.pill{display:inline-block;font-size:11px;padding:2px 10px;border-radius:20px;background:#E8F3FF;color:#1677E0}
+.note{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.7}
+/* AI-GEN-END */
+</style>
+</head>
+<body>
+<!-- AI-GEN-BEGIN -->
+<div class="bar">
+  <div class="logo">L</div>
+  <b>Lecoo 用户中心 LEUC</b>
+  <span class="tag">业务系统授权登录</span>
+</div>
+<div class="wrap">
+  <div class="card">
+    <h1 id="title">授权登录</h1>
+    <div class="sub" id="sub">正在处理…</div>
+    <div class="callout" id="tip">来自业务系统的 LEUC 登录请求。已登录将直接选账号；仅 1 个账号则自动回跳；无权限提示无法使用 LEUC 登录。</div>
+
+    <div class="panel" id="p-loading"><div class="note">检查登录状态…</div></div>
+
+    <div class="panel" id="p-login">
+      <div class="field"><label>账号</label><input id="username" value="lisi"></div>
+      <div class="field"><label>密码</label><input id="password" type="password" value="123456"></div>
+      <button class="btn btn-pri" onclick="doLogin()">登录并继续</button>
+      <div class="note">演示：lisi=来酷ERP 三账号；zhangsan=单账号自动回跳；无来酷权限账号会提示无法使用 LEUC 登录。</div>
+    </div>
+
+    <div class="panel" id="p-select">
+      <div class="sub">您在该系统下有多个业务账号，请选择本次使用的账号。</div>
+      <div id="acct-list"></div>
+      <button class="btn btn-pri" onclick="pickContinue()">进入系统</button>
+    </div>
+
+    <div class="panel" id="p-noperm">
+      <div class="warn"><strong>无法使用 LEUC 登录</strong><br><span id="noperm-detail">当前账号未开通该系统登录权限</span></div>
+      <button class="btn btn-line" onclick="location.href='/demo/home'">返回业务系统导航</button>
+      <button class="btn btn-line" onclick="logoutAndRelogin()">切换账号重新登录</button>
+    </div>
+
+    <div class="panel" id="p-redirect">
+      <div class="ok" id="redir-msg">授权成功，正在返回业务系统…</div>
+    </div>
+  </div>
+</div>
+<script>
+// AI-GEN-BEGIN
+const state = { accounts: [], selectedId: null, systemName: '' };
+
+async function api(path, opts={}) {
+  const res = await fetch(path, {
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', ...(opts.headers||{}) },
+    ...opts,
+  });
+  const data = await res.json().catch(()=>({}));
+  return { res, data };
+}
+function show(id) {
+  ['p-loading','p-login','p-select','p-noperm','p-redirect'].forEach(p => {
+    document.getElementById(p).classList.toggle('show', p===id);
+  });
+}
+function handleFlow(data) {
+  if (data.flow === 'no_permission' || (!data.ok && data.error && String(data.error).includes('无法使用'))) {
+    document.getElementById('noperm-detail').textContent =
+      (data.hint || data.error || '当前账号未开通该系统登录权限') +
+      (data.system ? `（${data.system}）` : '');
+    show('p-noperm');
+    return;
+  }
+  if (!data.ok) {
+    if (data.flow === 'need_login') {
+      show('p-login');
+      return;
+    }
+    alert(data.error || '失败');
+    return;
+  }
+  if (data.flow === 'select_account') {
+    state.accounts = data.accounts || [];
+    state.selectedId = state.accounts[0]?.id || null;
+    state.systemName = data.system?.name || '';
+    document.getElementById('title').textContent = '选择登录账号';
+    document.getElementById('sub').textContent = `目标系统：${state.systemName}`;
+    if (data.user) {
+      document.getElementById('tip').innerHTML =
+        `已登录 LEUC：<b>${data.user.display_name}</b>（${data.user.username}）。请选择本次进入 ${state.systemName} 使用的业务账号。`;
+    }
+    renderAccts();
+    show('p-select');
+    return;
+  }
+  if (data.flow === 'oidc_redirect') {
+    document.getElementById('redir-msg').innerHTML =
+      `授权成功` + (data.auto ? '（单账号，直接回跳）' : '') +
+      `<br>业务账号：<b>${data.account?.account_name||''}</b>` +
+      `<br>正在返回 ${(data.system&&data.system.name)||'业务系统'}…`;
+    show('p-redirect');
+    setTimeout(() => { location.href = data.redirect_uri; }, 600);
+  }
+}
+function renderAccts() {
+  document.getElementById('acct-list').innerHTML = state.accounts.map(a => `
+    <div class="acct ${a.id===state.selectedId?'on':''}" onclick="state.selectedId=${a.id};renderAccts()">
+      <div><b>${a.account_name}</b><span>${a.account_label||''}${a.has_sensitive?' · 敏感':''}</span></div>
+      ${a.is_default?'<span class="pill">默认</span>':''}
+    </div>`).join('');
+}
+async function continueOidc(accountId) {
+  const body = accountId ? { account_id: accountId } : {};
+  const { data } = await api('/api/oidc/continue', { method:'POST', body: JSON.stringify(body) });
+  handleFlow(data);
+}
+async function doLogin() {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  if (window.__beisenSsoLogin) {
+    const { data } = await api('/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password, source: 'leuc' }),
+    });
+    if (!data.ok) return alert(data.error || '登录失败');
+    document.getElementById('redir-msg').textContent = '登录成功，正在跳转北森门户…';
+    show('p-redirect');
+    location.href = '/beisen/sso/go' + (location.search || '');
+    return;
+  }
+  const { data } = await api('/api/login', {
+    method:'POST',
+    body: JSON.stringify({
+      username,
+      password,
+      source: 'oidc',
+    }),
+  });
+  handleFlow(data);
+}
+async function pickContinue() {
+  if (!state.selectedId) return alert('请选择账号');
+  // 优先走选账号接口（依赖 pending_user_id / 已登录会话）
+  let { data } = await api('/api/login/select-account', {
+    method: 'POST',
+    body: JSON.stringify({ account_id: state.selectedId }),
+  });
+  if (!data.ok && data.flow === 'need_login') {
+    ({ data } = await api('/api/oidc/continue', {
+      method: 'POST',
+      body: JSON.stringify({ account_id: state.selectedId }),
+    }));
+  }
+  if (!data.ok && !data.flow) {
+    // select-account 失败时再试 continue
+    ({ data } = await api('/api/oidc/continue', {
+      method: 'POST',
+      body: JSON.stringify({ account_id: state.selectedId }),
+    }));
+  }
+  handleFlow(data);
+}
+async function logoutAndRelogin() {
+  await api('/api/logout', { method:'POST', body:'{}' });
+  show('p-login');
+}
+
+async function bootBeisenSso() {
+  document.getElementById('title').textContent = '登录后进入北森';
+  document.getElementById('sub').textContent = '真实 SSO · 登录后进入 www.italent.cn';
+  document.getElementById('tip').innerHTML =
+    '须已<strong>申请并开通</strong>北森系统账号；SSO 使用账号池中已绑定的<strong>北森用户ID</strong>（非通讯录字段），验票后进入 <a href="https://www.italent.cn/" target="_blank" rel="noopener">iTalent 门户</a>。';
+  const me = await fetch('/api/me', { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({}));
+  if (me.ok && me.user) {
+    document.getElementById('redir-msg').textContent = '已登录，正在跳转北森门户…';
+    show('p-redirect');
+    // 保留 return_url（默认 https://www.italent.cn/）
+    const q = location.search || '';
+    location.href = '/beisen/sso/go' + q;
+    return;
+  }
+  show('p-login');
+  window.__beisenSsoLogin = true;
+}
+
+(async function boot(){
+  show('p-loading');
+  const params = new URLSearchParams(location.search);
+  if (params.get('next') === 'beisen_sso') {
+    await bootBeisenSso();
+    return;
+  }
+  const { data: sess } = await api('/api/oidc/session');
+  if (!sess.ok) {
+    document.getElementById('sub').textContent = sess.error || '无效会话';
+    document.getElementById('tip').innerHTML = '请从 <a href="/demo/home">业务系统导航</a> 重新选择系统并登录。';
+    show('p-login');
+    return;
+  }
+  const name = sess.oidc.system_name || sess.oidc.client_id;
+  document.getElementById('title').textContent = `登录以进入 ${name}`;
+  document.getElementById('sub').textContent = `应用：${name} · client_id=${sess.oidc.client_id}`;
+  if (sess.logged_in && sess.user) {
+    document.getElementById('tip').innerHTML =
+      `当前已登录 LEUC：<b>${sess.user.display_name}</b>（${sess.user.username}）。将校验系统权限并选择业务账号。`;
+    await continueOidc();
+  } else {
+    document.getElementById('tip').innerHTML =
+      `尚未登录 LEUC。请先登录；登录后若有多个业务账号需选择，仅一个则直接返回 ${name}。`;
+    show('p-login');
+  }
+})();
+// AI-GEN-END
+</script>
+<!-- AI-GEN-END -->
+</body>
+</html>

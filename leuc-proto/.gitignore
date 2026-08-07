@@ -1,0 +1,13 @@
+# AI-GEN-BEGIN
+data/leorg.local.json
+.env
+.venv/
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.db-journal
+__pycache__/
+*.pyc
+.DS_Store
+# AI-GEN-END
+

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OIDC Callback · LEUC 演示</title>
+<style>
+body{font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;background:#0B1126;color:#1B2340;margin:0;padding:24px}
+.card{max-width:720px;margin:40px auto;background:#fff;border-radius:14px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+h1{font-size:18px;margin:0 0 8px}
+.sub{color:#8B96AD;font-size:13px;margin-bottom:16px;line-height:1.7}
+.ok{background:#E7F7EE;border:1px solid #B8E6C8;color:#1D8A4E;padding:10px 12px;border-radius:9px;font-size:13px;margin-bottom:12px}
+.warn{background:#FFF8E8;border:1px dashed #F0D9A0;color:#7A5608;padding:10px 12px;border-radius:9px;font-size:12.5px;line-height:1.7;margin-bottom:12px}
+pre{background:#0F1630;color:#7CE7A8;padding:14px;border-radius:10px;overflow:auto;font-size:12px;line-height:1.6}
+.btn{display:inline-block;margin:8px 8px 0 0;padding:10px 16px;border-radius:9px;border:0;background:linear-gradient(90deg,#1677E0,#2E9BFF);color:#fff;cursor:pointer;font-size:13px}
+.btn-line{background:#fff;border:1px solid #DDE7F7;color:#1B2340}
+a{color:#1677E0}
+</style>
+</head>
+<body>
+<!-- AI-GEN-BEGIN -->
+<div class="card">
+  <h1>业务系统 OIDC 回调（演示）</h1>
+  <div class="sub">模拟 OA / BIP / 来酷ERP / 科技ERP / 北森 收到 authorization code 后，用 client_secret + PKCE verifier 换取 token。</div>
+  <div class="ok" id="summary">解析中…</div>
+  <div class="warn"><strong>安全要点</strong>：校验 state；redirect_uri 须与登记一致；Authorization Code + PKCE；code 一次性；token 接口校验 client_secret。</div>
+  <h3 style="font-size:14px;margin:12px 0 6px">Token 响应</h3>
+  <pre id="token-out">等待换票…</pre>
+  <h3 style="font-size:14px;margin:12px 0 6px">UserInfo</h3>
+  <pre id="user-out">—</pre>
+  <button class="btn" onclick="exchange()">用 code 换 token</button>
+  <button class="btn btn-line" onclick="location.href='/'">返回 LEUC</button>
+</div>
+<script>
+// AI-GEN-BEGIN
+const params = new URLSearchParams(location.search);
+const code = params.get('code') || '';
+const state = params.get('state') || '';
+const app = params.get('app') || '';
+document.getElementById('summary').textContent =
+  `app=${app || '-'} · code=${code ? code.slice(0,12)+'…' : '(无)'} · state=${state || '-'}`;
+
+const CLIENTS = {
+  oa: { client_id: 'client_oa', client_secret: 'sk_oa_demo_secret', redirect_uri: 'http://127.0.0.1:5055/oidc/callback?app=oa' },
+  bip: { client_id: 'client_bip', client_secret: 'sk_bip_demo_secret', redirect_uri: 'http://127.0.0.1:5055/oidc/callback?app=bip' },
+  laiku_erp: { client_id: 'client_laiku_erp', client_secret: 'sk_laiku_erp_secret', redirect_uri: 'http://127.0.0.1:5055/oidc/callback?app=laiku_erp' },
+  keji_erp: { client_id: 'client_keji_erp', client_secret: 'sk_keji_erp_secret', redirect_uri: 'http://127.0.0.1:5055/oidc/callback?app=keji_erp' },
+  beisen: { client_id: 'client_beisen', client_secret: 'sk_beisen_demo_secret', redirect_uri: 'http://127.0.0.1:5055/oidc/callback?app=beisen' },
+};
+
+async function exchange() {
+  const c = CLIENTS[app] || CLIENTS.laiku_erp;
+  const verifier = sessionStorage.getItem('pkce_verifier') || '';
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: c.redirect_uri,
+    client_id: c.client_id,
+    client_secret: c.client_secret,
+    code_verifier: verifier,
+  });
+  const res = await fetch('/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+  const data = await res.json();
+  document.getElementById('token-out').textContent = JSON.stringify(data, null, 2);
+  if (data.access_token) {
+    const u = await fetch('/oauth/userinfo', { headers: { Authorization: 'Bearer ' + data.access_token } });
+    document.getElementById('user-out').textContent = JSON.stringify(await u.json(), null, 2);
+  }
+}
+if (code) exchange();
+// AI-GEN-END
+</script>
+<!-- AI-GEN-END -->
+</body>
+</html>

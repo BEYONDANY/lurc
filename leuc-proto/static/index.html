@@ -7,23 +7,26 @@
 <style>
 /* AI-GEN-BEGIN */
 :root{
-  --navy:#101838;--ink:#1B2340;--blue:#2E9BFF;--blue-d:#1677E0;
-  --bg:#F2F6FD;--card:#fff;--line:#DDE7F7;--gray:#5A6478;--muted:#8B96AD;
-  --green:#27AE60;--orange:#E67E22;--red:#D64545;--radius:12px;
+  /* 宽屏产品台 · 参考 Linear inverse / Intercom 轻表面 */
+  --navy:#0F172A;--ink:#0F172A;--blue:#5B6CFF;--blue-d:#4A5AE8;
+  --bg:#F4F5F7;--card:#fff;--line:#E4E7EC;--gray:#475467;--muted:#667085;
+  --green:#12B76A;--orange:#F79009;--red:#F04438;--radius:10px;
   --note:#FFF8E8;--note-b:#F0D9A0;--note-t:#7A5608;
+  --stage-max:1680px;
+  --hairline:#E4E7EC;
   font-size:14px;
 }
-*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
-body{background:#0B1126;color:var(--ink);min-height:100vh}
-.proto-bar{display:flex;align-items:center;gap:10px;padding:10px 18px;color:#fff;position:sticky;top:0;z-index:50;border-bottom:1px solid #1E2A55;flex-wrap:wrap;background:#0B1126}
-.logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#2E9BFF,#7C5CFF);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px}
-.tag{font-size:11px;color:#8FA3D9;border:1px solid #2A3766;border-radius:20px;padding:2px 10px}
+*{margin:0;padding:0;box-sizing:border-box;font-family:"Inter","SF Pro Text","PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+body{background:#0B1220;color:var(--ink);min-height:100vh}
+.proto-bar{display:flex;align-items:center;gap:10px;padding:10px 20px;color:#fff;position:sticky;top:0;z-index:50;border-bottom:1px solid #1E293B;flex-wrap:wrap;background:rgba(11,18,32,.92);backdrop-filter:blur(8px)}
+.logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#5B6CFF,#38BDF8);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px}
+.tag{font-size:11px;color:#94A3B8;border:1px solid #334155;border-radius:20px;padding:2px 10px}
 .role-switch{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.role-switch button{background:#141D42;color:#9FB0D8;border:1px solid #26336A;border-radius:8px;padding:5px 10px;cursor:pointer;font-size:11.5px}
+.role-switch button{background:#1E293B;color:#94A3B8;border:1px solid #334155;border-radius:8px;padding:5px 10px;cursor:pointer;font-size:11.5px}
 .role-switch button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
-.guide{background:linear-gradient(90deg,#FFF7E8,#FFFDF6);border-bottom:1px solid #F5DFB8;padding:10px 18px;font-size:12.5px;color:var(--note-t);line-height:1.7}
+.guide{background:linear-gradient(90deg,#FFF7E8,#FFFDF6);border-bottom:1px solid #F5DFB8;padding:10px 22px;font-size:12.5px;color:var(--note-t);line-height:1.7}
 .guide b{color:#B4720A}
-.stage{max-width:1280px;margin:16px auto 24px;border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45);background:#fff}
+.stage{max-width:var(--stage-max);width:calc(100% - 24px);margin:12px auto 20px;border-radius:14px;overflow:hidden;box-shadow:0 12px 40px rgba(2,6,23,.35);background:#fff;border:1px solid rgba(148,163,184,.18)}
 .screen{display:none}.screen.show{display:block}
 .panel{display:none}.panel.show{display:block}
 .callout{background:var(--note);border:1px dashed var(--note-b);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--note-t);line-height:1.7;margin:0 0 14px}
@@ -69,17 +72,17 @@ body{background:#0B1126;color:var(--ink);min-height:100vh}
 .okbox{background:#E7F7EE;border:1px solid #B8E6C8;color:#1D8A4E;padding:12px;border-radius:9px;font-size:12.5px;line-height:1.7}
 .note{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.7}
 .demo-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.app{display:flex;min-height:720px;background:var(--bg)}
-.side{width:220px;background:var(--navy);color:#B9C6E8;padding:18px 12px;display:flex;flex-direction:column;flex:none}
+.app{display:flex;min-height:calc(100vh - 96px);background:var(--bg)}
+.side{width:248px;background:var(--navy);color:#B9C6E8;padding:18px 12px;display:flex;flex-direction:column;flex:none}
 .side .brand{display:flex;align-items:center;gap:9px;padding:6px 8px 18px;color:#fff;font-weight:700}
-.side .brand i{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#2E9BFF,#7C5CFF);display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:12px}
-.side .grp{font-size:10.5px;color:#5F6FA0;margin:14px 12px 6px;letter-spacing:1px}
-.side nav a{display:block;padding:10px 12px;border-radius:8px;cursor:pointer;font-size:13px;margin-bottom:2px;color:#B9C6E8}
-.side nav a.on,.side nav a:hover{background:#1E2B5E;color:#fff}
-.side .me{margin-top:auto;border-top:1px solid #22305F;padding:12px 8px 4px;font-size:12px;color:#DCE5FA;display:flex;gap:9px;align-items:center}
-.avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#2E9BFF,#27AE60);display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px;flex:none}
-.main{flex:1;padding:20px 24px;overflow:auto}
-.ptitle{font-size:18px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.side .brand i{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#5B6CFF,#38BDF8);display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:12px}
+.side .grp{font-size:10.5px;color:#64748B;margin:14px 12px 6px;letter-spacing:1px}
+.side nav a{display:block;padding:10px 12px;border-radius:8px;cursor:pointer;font-size:13px;margin-bottom:2px;color:#CBD5E1}
+.side nav a.on,.side nav a:hover{background:#1E293B;color:#fff}
+.side .me{margin-top:auto;border-top:1px solid #1E293B;padding:12px 8px 4px;font-size:12px;color:#E2E8F0;display:flex;gap:9px;align-items:center}
+.avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#5B6CFF,#12B76A);display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px;flex:none}
+.main{flex:1;padding:24px 28px 32px;overflow:auto;min-width:0}
+.ptitle{font-size:20px;font-weight:650;letter-spacing:-0.02em;margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .cards{display:grid;gap:12px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr 1fr}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
 .card h4{font-size:13.5px;margin-bottom:10px}
@@ -797,6 +800,22 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   <div class="foot">
     <button class="btn btn-line" onclick="cancelBeisenChoose()">取消</button>
     <a class="btn btn-line" href="/demo/home" style="text-decoration:none;display:inline-flex;align-items:center">回业务导航</a>
+  </div>
+</div></div>
+<!-- AI-GEN-END -->
+
+<!-- AI-GEN-BEGIN -->
+<div class="mask" id="m-add-dept"><div class="modal" style="max-width:440px">
+  <h3>添加部门</h3>
+  <div class="callout">在可管范围内新增部门；默认挂在当前选中部门下。</div>
+  <div class="field"><label>部门名称</label><input id="add-dept-name" placeholder="如：华北大区"></div>
+  <div class="field"><label>上级部门</label>
+    <select id="add-dept-parent"></select>
+    <div class="note">无上级 = 根级（仅人事/超管）</div>
+  </div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-add-dept')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitAddDept()">保存</button>
   </div>
 </div></div>
 <!-- AI-GEN-END -->
@@ -1897,6 +1916,8 @@ function orgRightPanelHtml(data){
     const d = (data.departments||[]).find(x => String(x.id)===String(deptId));
     if (d) {
       const canSet = canSetDeptOwner(d.id);
+      const canDeptAdd = canSet && hasBtn('org_dept_add');
+      const canDeptDel = canSet && hasBtn('org_dept_delete');
       const extras = (d.extra_owners||[]).map(e => e.display_name).filter(Boolean);
       ownerCard = `<div class="card" style="margin-bottom:12px">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
@@ -1919,8 +1940,10 @@ function orgRightPanelHtml(data){
           </div>
           <div style="display:flex;flex-direction:column;gap:6px">
             ${canSet?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openSetDeptOwner(${d.id})">设置负责人</button>`:''}
+            ${canDeptAdd?`<button class="btn btn-sm btn-line" onclick="openAddDept(${d.id})">添加子部门</button>`:''}
             ${canSet?`<button class="btn btn-sm btn-line" onclick="moveDept(${d.id},'up')">同级上移</button>
             <button class="btn btn-sm btn-line" onclick="moveDept(${d.id},'down')">同级下移</button>`:''}
+            ${canDeptDel?`<button class="btn btn-sm btn-line" style="color:#b42318;border-color:#f3b4b0" onclick="deleteDept(${d.id},'${(d.name||'').replace(/'/g,"\\'")}')">删除部门</button>`:''}
           </div>
         </div>
       </div>`;
@@ -2050,6 +2073,8 @@ async function renderOrg(el) {
   const showAdd = hasBtn('org_add');
   const showImport = hasBtn('org_import');
   const showDirect = hasBtn('direct_bind');
+  const showDeptAdd = hasBtn('org_dept_add');
+  const showDeptDelete = hasBtn('org_dept_delete');
 
   const q = state.deptQ || '';
   const deptId = state.deptFilter || '';
@@ -2093,6 +2118,7 @@ async function renderOrg(el) {
       <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('apply')">账号、权限申请</button>
       ${canApplyForOthers()?`<button class="btn btn-sm btn-line" onclick="openAccountBind('apply_for')">代人申请账号/权限</button>`:''}
       ${canManage && showAdd?`<button class="btn btn-sm btn-line" onclick="openAdd()">添加人员</button>`:''}
+      ${canManage && showDeptAdd?`<button class="btn btn-sm btn-line" onclick="openAddDept()">添加部门</button>`:''}
       ${canManage && showImport?`<button class="btn btn-sm btn-line" onclick="openImport()">导入</button>`:''}
       ${canManage && canSetAccountExpire()?`<button class="btn btn-sm btn-line" onclick="openSetExpire()">设置有效期</button>`:''}
       ${canManage && showDirect?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('direct')">直接绑定</button>`:''}
@@ -4478,6 +4504,58 @@ async function moveDept(deptId, direction){
   await renderMain();
   if (keep) await selectOrgDept(keep);
 }
+// AI-GEN-BEGIN
+function openAddDept(parentId){
+  if (!hasBtn('org_dept_add')) return toast('无「添加部门」按钮权限');
+  const manageIds = state.deptData?.manage_dept_ids || [];
+  const canAll = hasBtn('manage_all_org') || ['hr_specialist','super_admin'].includes(state.user?.role);
+  if (!manageIds.length && !canAll) return toast('无权添加部门');
+  const depts = state.deptData?.departments || [];
+  const prefer = parentId != null ? String(parentId)
+    : (state.deptFilter ? String(state.deptFilter) : '');
+  let opts = '';
+  if (canAll) {
+    opts += `<option value="" ${!prefer?'selected':''}>（无上级 · 根级）</option>`;
+  }
+  depts.filter(d => manageIds.includes(d.id) || canAll).forEach(d => {
+    opts += `<option value="${d.id}" ${String(d.id)===prefer?'selected':''}>${d.name}</option>`;
+  });
+  if (!opts) return toast('无可选上级部门');
+  document.getElementById('add-dept-name').value = '';
+  document.getElementById('add-dept-parent').innerHTML = opts;
+  openModal('m-add-dept');
+}
+async function submitAddDept(){
+  if (!hasBtn('org_dept_add')) return toast('无「添加部门」按钮权限');
+  const name = document.getElementById('add-dept-name').value.trim();
+  const parentRaw = document.getElementById('add-dept-parent').value;
+  if (!name) return toast('请填写部门名称');
+  const body = { name };
+  if (parentRaw !== '') body.parent_id = Number(parentRaw);
+  else body.parent_id = null;
+  const { data } = await api('/api/org/departments', {
+    method:'POST', body: JSON.stringify(body),
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  closeModal('m-add-dept');
+  state.deptData = null;
+  state.orgCollapsed = null;
+  await renderMain();
+  if (data.id) await selectOrgDept(data.id);
+}
+async function deleteDept(deptId, name){
+  if (!hasBtn('org_dept_delete')) return toast('无「删除部门」按钮权限');
+  if (!confirm(`确认删除部门「${name||deptId}」？\n须无子部门、无人员。`)) return;
+  const { data } = await api('/api/org/departments/'+deptId, { method:'DELETE' });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  if (String(state.deptFilter) === String(deptId)) state.deptFilter = '';
+  state.deptData = null;
+  state.orgCollapsed = null;
+  await renderMain();
+}
+// AI-GEN-END
 async function openSyncDiffModal(data){
   // AI-GEN-BEGIN
   state._syncDraftId = data.draft_id;
@@ -5627,6 +5705,63 @@ async function openDemoSwitchAnyone(){
 // AI-GEN-END
 
 document.getElementById('username').addEventListener('change', refreshRisk);
+// AI-GEN-BEGIN
+async function openBeisenChooseModal(){
+  const { data } = await api('/api/beisen/sso/accounts');
+  if (!data.ok) return toast(data.error || '加载北森账号失败');
+  if (data.tip) toast(data.tip);
+  if (data.error && !(data.accounts||[]).length) {
+    toast(data.error);
+    return;
+  }
+  const hint = document.getElementById('beisen-choose-hint');
+  hint.innerHTML = data.tip
+    ? data.tip
+    : `您绑定了 <strong>${(data.accounts||[]).length}</strong> 个北森账号，请选择本次 SSO 使用哪一个。仅<strong>正整数北森用户ID</strong>可登录 italent。`;
+  const box = document.getElementById('beisen-choose-list');
+  box.innerHTML = (data.accounts||[]).map(a => {
+    const ok = !!a.uty_id_ok;
+    const badge = ok
+      ? '<span class="pill p-green">可用</span>'
+      : '<span class="pill p-orange">ID非法</span>';
+    const disabled = ok ? '' : 'disabled style="opacity:.55"';
+    return `<button class="btn btn-line" ${disabled} style="width:100%;text-align:left;justify-content:flex-start;height:auto;padding:12px 14px"
+      onclick="confirmBeisenChoose(${a.pool_account_id}, ${ok?'true':'false'})">
+      <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">
+        <div><b>${a.display_name||a.account_name||'-'}</b> ${badge}
+          ${a.is_default?'<span class="pill p-blue">默认</span>':''}</div>
+        <div class="note" style="margin:0">账号 <code>${a.account_name||'-'}</code>
+          · 北森用户ID <code>${a.account_uid||'-'}</code></div>
+      </div>
+    </button>`;
+  }).join('') || '<div class="note">暂无已开通可登录的北森账号</div>';
+  openModal('m-beisen-choose');
+}
+function confirmBeisenChoose(accountId, ok){
+  if (!ok) return toast('该账号北森用户ID不是正整数，无法 SSO，请选其它账号');
+  const ret = state._beisenChooseReturn || 'https://www.italent.cn/';
+  const uty = state._beisenChooseUty || 'id';
+  closeModal('m-beisen-choose');
+  location.href = '/beisen/sso/go?' + new URLSearchParams({
+    account_id: String(accountId),
+    uty,
+    return_url: ret,
+  }).toString();
+}
+function cancelBeisenChoose(){
+  closeModal('m-beisen-choose');
+  state._beisenChooseReturn = null;
+  toast('已取消北森 SSO');
+}
+async function maybeOpenBeisenChoose(){
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('beisen_sso_choose') !== '1') return;
+  state._beisenChooseReturn = qs.get('return_url') || 'https://www.italent.cn/';
+  state._beisenChooseUty = qs.get('uty') || 'id';
+  history.replaceState({}, '', location.pathname || '/');
+  await openBeisenChooseModal();
+}
+// AI-GEN-END
 (async function boot(){
   await loadRoleButtons();
   await loadOidcApps();
@@ -5636,8 +5771,16 @@ document.getElementById('username').addEventListener('change', refreshRisk);
     await startOidc(qs.get('client_id'));
   }
   const { data } = await api('/api/me');
-  if (data.ok && state.source==='leuc') await enterHome();
-  else await refreshRisk();
+  if (data.ok && state.source==='leuc') {
+    await enterHome();
+    await maybeOpenBeisenChoose();
+  } else {
+    await refreshRisk();
+    // 未登录但带选择参数：先提示登录
+    if (qs.get('beisen_sso_choose') === '1') {
+      toast('请先登录 LEUC，登录后将选择北森账号');
+    }
+  }
 })();
 // AI-GEN-END
 </script>

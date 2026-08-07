@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>业务系统导航 · LEUC 演示</title>
+<style>
+/* AI-GEN-BEGIN */
+:root{--navy:#0F1B2D;--ink:#163028;--line:#D7E6DE;--muted:#6B857A;--green:#1FA97A;--blue:#2E9BFF}
+*{box-sizing:border-box;margin:0;padding:0;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+body{background:linear-gradient(160deg,#0B1524,#132338 45%,#0F1B2D);min-height:100vh;color:var(--ink)}
+.top{display:flex;align-items:center;gap:12px;padding:14px 22px;color:#E8F0FF;border-bottom:1px solid rgba(255,255,255,.08);flex-wrap:wrap}
+.logo{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#2E9BFF,#7CDBB0);display:flex;align-items:center;justify-content:center;font-weight:700;color:#041018}
+.tag{font-size:11px;border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:2px 10px;color:#A8C4E8}
+.wrap{max-width:980px;margin:36px auto;padding:0 16px}
+.card{background:#fff;border-radius:16px;padding:28px;box-shadow:0 24px 60px rgba(0,0,0,.35);margin-bottom:16px}
+h1{font-size:24px;margin-bottom:8px}
+.sub{color:var(--muted);font-size:13.5px;line-height:1.8;margin-bottom:18px}
+.callout{background:#FFF8E8;border:1px dashed #F0D9A0;color:#7A5608;border-radius:10px;padding:12px;font-size:12.5px;line-height:1.7;margin-bottom:18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+.app{border:1px solid #DDE7F7;border-radius:14px;padding:18px;cursor:pointer;transition:.15s;background:linear-gradient(180deg,#fff,#F7FAFF);text-align:left}
+.app:hover{border-color:#2E9BFF;box-shadow:0 8px 24px rgba(46,155,255,.18);transform:translateY(-2px)}
+.app .ico{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;margin-bottom:12px;font-size:15px}
+.app b{display:block;font-size:16px;margin-bottom:6px}
+.app .meta{font-size:12px;color:var(--muted);line-height:1.5}
+.pill{display:inline-block;font-size:11px;border-radius:20px;padding:2px 8px;margin-top:8px}
+.p-green{background:#E7F7EE;color:#1D8A4E}
+.p-orange{background:#FFF0E0;color:#C56A12}
+.p-blue{background:#E8F3FF;color:#1677E0}
+.p-gray{background:#EEF1F6;color:#667}
+.btn{border:0;border-radius:10px;padding:10px 16px;font-size:13.5px;cursor:pointer}
+.btn-pri{background:linear-gradient(90deg,#1677E0,#2E9BFF);color:#fff}
+.btn-line{background:#fff;border:1px solid #DDE7F7;color:var(--ink)}
+.ok{background:#E7F7EE;border:1px solid #B8E6C8;color:#1D8A4E;padding:12px;border-radius:10px;font-size:13px;line-height:1.7;margin-bottom:12px}
+.warn{background:#FCE9E9;border:1px solid #F0C3C3;color:#A33;padding:12px;border-radius:10px;font-size:13px;line-height:1.7}
+pre{background:#0F1630;color:#7CE7A8;padding:12px;border-radius:10px;overflow:auto;font-size:12px;line-height:1.6;margin-top:10px}
+.links{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.links a{font-size:12.5px;color:#1677E0}
+.kv{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed #E5EEE9;font-size:13px}
+.hidden{display:none}
+.sess-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;background:#ccc}
+.sess-dot.on{background:#27AE60}
+/* AI-GEN-END */
+</style>
+</head>
+<body>
+<!-- AI-GEN-BEGIN -->
+<div class="top">
+  <div class="logo">O</div>
+  <b>业务系统导航</b>
+  <span class="tag">模拟 O 系统门户（经 LEUC 登录）</span>
+  <span style="margin-left:auto;font-size:12px;color:#A8C4E8" id="top-hint">选择系统进入</span>
+</div>
+<div class="wrap">
+  <div class="card" id="portal">
+    <h1>选择业务系统</h1>
+    <div class="sub">点击系统后跳转 LEUC 完成认证；按<strong>账号绑定关系</strong>校验是否可登录（全员登录系统可自动开通）。多业务账号时在 LEUC 侧选择。</div>
+    <div class="callout">
+      建议：<code>zhangsan</code> 来酷×1 自动回跳；<code>lisi</code> 来酷×3 需选账号；BIP 为全员登录；OA/北森/科技需账号绑定。
+      <strong>北森</strong>真实 SSO：须先申请开通并绑定账号池中的北森用户ID（通讯录里的北森ID不可直接登录），成功后进入 <a href="https://www.italent.cn/" target="_blank" rel="noopener">iTalent 门户</a>。
+    </div>
+    <div class="grid" id="app-grid"><div class="meta">加载中…</div></div>
+    <div class="links">
+      <a href="/">打开 LEUC 用户中心</a>
+      <button class="btn btn-line" onclick="logoutAll()">清除本页全部系统会话</button>
+    </div>
+  </div>
+
+  <div class="card hidden" id="home">
+    <h1 id="home-title">系统工作台</h1>
+    <div class="ok" id="welcome">登录成功</div>
+    <div class="kv"><span>统一身份</span><b id="u-name">-</b></div>
+    <div class="kv"><span>业务账号</span><b id="u-acct">-</b></div>
+    <div class="kv"><span>权限摘要</span><b id="u-perm">-</b></div>
+    <div class="kv"><span>邮箱</span><b id="u-email">-</b></div>
+    <pre id="token-box"></pre>
+    <div class="links" style="margin-top:16px">
+      <button class="btn btn-line" onclick="logoutCurrent()">退出当前系统</button>
+      <button class="btn btn-pri" onclick="backPortal()">返回导航</button>
+      <a href="/">去 LEUC</a>
+    </div>
+  </div>
+</div>
+<script>
+// AI-GEN-BEGIN
+const STORE_KEY = 'demo_app_sessions';
+const COLORS = { oa:'#3B82F6', bip:'#8B5CF6', laiku_erp:'#1FA97A', keji_erp:'#0EA5E9', beisen:'#F59E0B' };
+let SYSTEMS = [];
+let currentApp = null;
+
+function b64url(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function sha256(str) {
+  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+}
+function rand(){ const a=new Uint8Array(32); crypto.getRandomValues(a); return b64url(a); }
+
+function loadSessions() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch(e) { return {}; }
+}
+function saveSessions(s) { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
+
+function findSys(code){ return SYSTEMS.find(s => s.code === code); }
+
+async function loadSystems() {
+  const res = await fetch('/api/demo/portal-systems');
+  const data = await res.json();
+  SYSTEMS = data.systems || [];
+  renderPortal();
+}
+
+function renderPortal() {
+  document.getElementById('portal').classList.remove('hidden');
+  document.getElementById('home').classList.add('hidden');
+  currentApp = null;
+  const sessions = loadSessions();
+  const n = Object.keys(sessions).length;
+  document.getElementById('top-hint').textContent = n ? `已登录 ${n} 个系统` : '选择系统进入';
+  const grid = document.getElementById('app-grid');
+  if (!SYSTEMS.length) {
+    grid.innerHTML = '<div class="warn">暂无系统</div>';
+    return;
+  }
+  grid.innerHTML = SYSTEMS.map(s => {
+    const sess = sessions[s.code];
+    const letter = (s.name || s.code).slice(0,1);
+    const color = COLORS[s.code] || '#64748B';
+    return `<button type="button" class="app" onclick="enterApp('${s.code}')">
+      <div class="ico" style="background:${color}">${letter}</div>
+      <b>${s.name}</b>
+      <div class="meta">${s.mode_label || ''} · ${s.code}</div>
+      <span class="pill ${s.access_mode==='open'?'p-green':'p-orange'}">${s.access_mode==='open'?'全员登录':'需账号绑定'}</span>
+      ${sess ? `<div class="meta" style="margin-top:8px"><span class="sess-dot on"></span>已登录 · ${sess.userinfo?.account_name || sess.userinfo?.name || ''}</div>`
+             : `<div class="meta" style="margin-top:8px"><span class="sess-dot"></span>${
+                 s.code==='beisen' && s.beisen_sso_enabled
+                   ? '未登录 · 点击真实 SSO 进入北森'
+                   : '未登录 · 点击经 LEUC 进入'
+               }</div>`}
+    </button>`;
+  }).join('');
+}
+
+async function enterApp(code) {
+  // AI-GEN-BEGIN
+  const s = findSys(code);
+  if (!s) return alert('系统不存在');
+  // 北森：始终走真实 SSO → AuthCenter → https://www.italent.cn/（不再进本页演示工作台）
+  if (code === 'beisen') {
+    if (!s.beisen_sso_enabled) {
+      alert('北森真实 SSO 未就绪：' + (s.beisen_sso_error || '请用 leuc-proto/.venv 启动，并确认 .env 中 BEISEN_SSO_*'));
+      return;
+    }
+    // 清掉历史演示 OIDC 会话，避免误以为已登录停在本页
+    const sessions = loadSessions();
+    if (sessions.beisen) {
+      delete sessions.beisen;
+      saveSessions(sessions);
+    }
+    const go = s.beisen_sso_go || ('/beisen/sso/go?return_url=' + encodeURIComponent(s.beisen_portal_url || 'https://www.italent.cn/'));
+    location.href = go;
+    return;
+  }
+  // AI-GEN-END
+  const sessions = loadSessions();
+  if (sessions[code]) {
+    showHome(code, sessions[code].token, sessions[code].userinfo);
+    return;
+  }
+  const verifier = rand();
+  const challenge = b64url(await sha256(verifier));
+  const state = rand().slice(0, 16);
+  const nonce = rand().slice(0, 16);
+  sessionStorage.setItem('erp_pkce_verifier', verifier);
+  sessionStorage.setItem('erp_oauth_state', state);
+  sessionStorage.setItem('erp_oauth_app', code);
+  const redirect_uri = s.portal_redirect || (`http://127.0.0.1:5055/demo/home/callback?app=${code}`);
+  sessionStorage.setItem('erp_oauth_redirect', redirect_uri);
+  const q = new URLSearchParams({
+    client_id: s.client_id,
+    redirect_uri,
+    response_type: 'code',
+    scope: 'openid profile',
+    state, nonce,
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+  });
+  location.href = '/oauth/authorize?' + q.toString();
+}
+
+async function handleCallback() {
+  const params = new URLSearchParams(location.search);
+  const code = params.get('code');
+  const state = params.get('state');
+  const appCode = params.get('app') || sessionStorage.getItem('erp_oauth_app') || '';
+  if (!code) return false;
+  if (state && sessionStorage.getItem('erp_oauth_state') && state !== sessionStorage.getItem('erp_oauth_state')) {
+    alert('state 校验失败');
+    return true;
+  }
+  if (!SYSTEMS.length) await loadSystems();
+  const s = findSys(appCode);
+  if (!s) {
+    document.getElementById('portal').innerHTML = `<div class="warn">未知系统回调 app=${appCode}</div>
+      <button class="btn btn-pri" style="margin-top:12px" onclick="location.href='/demo/home'">返回导航</button>`;
+    return true;
+  }
+  const verifier = sessionStorage.getItem('erp_pkce_verifier') || '';
+  const redirect_uri = sessionStorage.getItem('erp_oauth_redirect') || s.portal_redirect;
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri,
+    client_id: s.client_id,
+    client_secret: s.client_secret,
+    code_verifier: verifier,
+  });
+  const res = await fetch('/oauth/token', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body });
+  const token = await res.json();
+  if (!token.access_token) {
+    document.getElementById('portal').innerHTML = `<div class="warn">换票失败：${token.error_description||token.error||JSON.stringify(token)}</div>
+      <button class="btn btn-pri" style="margin-top:12px" onclick="location.href='/demo/home'">返回导航</button>`;
+    return true;
+  }
+  const ui = await fetch('/oauth/userinfo', { headers:{ Authorization:'Bearer '+token.access_token } }).then(r=>r.json());
+  const sessions = loadSessions();
+  sessions[appCode] = { token, userinfo: ui, at: Date.now() };
+  saveSessions(sessions);
+  history.replaceState({}, '', '/demo/home');
+  showHome(appCode, token, ui);
+  return true;
+}
+
+function showHome(appCode, token, ui) {
+  const s = findSys(appCode) || { name: appCode, code: appCode };
+  currentApp = appCode;
+  document.getElementById('portal').classList.add('hidden');
+  document.getElementById('home').classList.remove('hidden');
+  document.getElementById('top-hint').textContent = `${s.name} · 已登录`;
+  document.getElementById('home-title').textContent = `${s.name} · 工作台`;
+  document.getElementById('welcome').innerHTML =
+    `已通过 <b>LEUC</b> 登录 <b>${s.name}</b>` +
+    (ui.account_name ? ` · 业务账号 <b>${ui.account_name}</b>` : '') +
+    (ui.account_label ? `（${ui.account_label}）` : '');
+  document.getElementById('u-name').textContent = `${ui.name||'-'}（${ui.preferred_username||'-'}）`;
+  document.getElementById('u-acct').textContent = ui.account_name || '-';
+  document.getElementById('u-perm').textContent = ui.perm_summary || ui.account_label || '—';
+  document.getElementById('u-email').textContent = ui.email || '-';
+  document.getElementById('token-box').textContent = JSON.stringify({
+    system: s.code,
+    access_token: (token.access_token||'').slice(0,24)+'…',
+    userinfo: ui,
+  }, null, 2);
+}
+
+function logoutCurrent() {
+  if (!currentApp) return backPortal();
+  const sessions = loadSessions();
+  delete sessions[currentApp];
+  saveSessions(sessions);
+  backPortal();
+}
+function logoutAll() {
+  localStorage.removeItem(STORE_KEY);
+  renderPortal();
+}
+function backPortal() {
+  history.replaceState({}, '', '/demo/home');
+  renderPortal();
+}
+
+(async function boot(){
+  await loadSystems();
+  if (await handleCallback()) return;
+  const q = new URLSearchParams(location.search);
+  if (q.get('open')) {
+    enterApp(q.get('open'));
+    return;
+  }
+  renderPortal();
+})();
+// AI-GEN-END
+</script>
+<!-- AI-GEN-END -->
+</body>
+</html>

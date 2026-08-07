@@ -1,0 +1,70 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Debug (Launch) - Current File",
+            "request": "launch",
+            "mainClass": "${file}"
+        },
+        {
+            "type": "java",
+            "name": "Debug (Launch)-Main<Beisen.OIDC.SDK>",
+            "request": "launch",
+            "mainClass": "com.beisen.Main",
+            "projectName": "Beisen.OIDC.SDK"
+        },
+        {
+            "type": "java",
+            "name": "Debug (Launch)-LICENSE<Beisen.OIDC.SDK>",
+            "request": "launch",
+            "mainClass": "org.bouncycastle.LICENSE",
+            "projectName": "Beisen.OIDC.SDK"
+        },
+        {
+            "type": "java",
+            "name": "Debug (Launch)-Dump<Beisen.OIDC.SDK>",
+            "request": "launch",
+            "mainClass": "org.bouncycastle.asn1.util.Dump",
+            "projectName": "Beisen.OIDC.SDK"
+        },
+        {
+            "type": "java",
+            "name": "Debug (Launch)-DESExample<Beisen.OIDC.SDK>",
+            "request": "launch",
+            "mainClass": "org.bouncycastle.crypto.examples.DESExample",
+            "projectName": "Beisen.OIDC.SDK"
+        },
+        {
+            "type": "java",
+            "name": "Debug (Launch)-PKCS12Example<Beisen.OIDC.SDK>",
+            "request": "launch",
+            "mainClass": "org.bouncycastle.jce.examples.PKCS12Example",
+            "projectName": "Beisen.OIDC.SDK"
+        },
+        {
+            "type": "java",
+            "name": "Debug (Launch)-AllTests<Beisen.OIDC.SDK>",
+            "request": "launch",
+            "mainClass": "org.bouncycastle.util.AllTests",
+            "projectName": "Beisen.OIDC.SDK"
+        },
+        {
+            "type": "java",
+            "name": "Debug (Launch)-AllTests<Beisen.OIDC.SDK>(1)",
+            "request": "launch",
+            "mainClass": "org.bouncycastle.util.io.pem.AllTests",
+            "projectName": "Beisen.OIDC.SDK"
+        },
+        {
+            "type": "java",
+            "name": "Debug (Launch)-AttrCertExample<Beisen.OIDC.SDK>",
+            "request": "launch",
+            "mainClass": "org.bouncycastle.x509.examples.AttrCertExample",
+            "projectName": "Beisen.OIDC.SDK"
+        }
+    ]
+}

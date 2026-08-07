@@ -454,6 +454,16 @@ def ensure_db():
                 VALUES (?, 'org_set_owner')""",
                 (role,),
             )
+        # AI-GEN-BEGIN
+        # 按钮：添加/删除部门（已有库软补，不覆盖角色其它按钮配置）
+        for role in ("super_admin", "hr_specialist", "dept_owner"):
+            for cap in ("org_dept_add", "org_dept_delete"):
+                conn.execute(
+                    """INSERT OR IGNORE INTO role_caps (role, cap_id)
+                    VALUES (?, ?)""",
+                    (role, cap),
+                )
+        # AI-GEN-END
         # 北森消息菜单（oa_forms）
         ensure_roles_seeded(conn)
         # AI-GEN-BEGIN
@@ -3696,6 +3706,111 @@ def org_update_department(user, dept_id):
     db.execute("UPDATE departments SET name = ? WHERE id = ?", (name, dept_id))
     db.commit()
     return jsonify({"ok": True, "message": f"已改名为「{name}」", "id": dept_id, "name": name})
+
+
+# AI-GEN-BEGIN
+@app.post("/api/org/departments")
+@login_required
+def org_create_department(user):
+    """添加部门：挂到指定上级（须可管该上级）；无上级时仅 HR/超管可建根级。"""
+    # AI-GEN-BEGIN
+    if not user_has_cap(user, "org_dept_add"):
+        return jsonify({"ok": False, "error": "无「添加部门」按钮权限"}), 403
+    # AI-GEN-END
+    data = request.get_json(force=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "部门名称必填"}), 400
+    parent_id = data.get("parent_id")
+    if parent_id in ("", None):
+        parent_id = None
+    else:
+        try:
+            parent_id = int(parent_id)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "上级部门无效"}), 400
+
+    db = get_db()
+    migrate_schema(db)
+    if parent_id is None:
+        if not (
+            user_has_cap(user, "manage_all_org")
+            or user["role"] in ("super_admin", "hr_specialist")
+        ):
+            return jsonify(
+                {"ok": False, "error": "创建根级部门需人事/超管权限；请选择上级部门"}
+            ), 403
+    else:
+        if not can_manage_dept(user, parent_id):
+            return jsonify({"ok": False, "error": "无权在该上级下创建部门"}), 403
+        parent = db.execute(
+            "SELECT id FROM departments WHERE id = ?", (parent_id,)
+        ).fetchone()
+        if not parent:
+            return jsonify({"ok": False, "error": "上级部门不存在"}), 404
+
+    max_sort = db.execute(
+        """SELECT COALESCE(MAX(sort_order), 0) AS s FROM departments
+        WHERE IFNULL(parent_id, -1) = IFNULL(?, -1)""",
+        (parent_id,),
+    ).fetchone()["s"]
+    cur = db.execute(
+        """INSERT INTO departments
+        (name, parent_id, owner_user_id, leorg_id, sort_order)
+        VALUES (?,?,NULL,NULL,?)""",
+        (name, parent_id, int(max_sort) + 10),
+    )
+    new_id = int(cur.lastrowid)
+    db.commit()
+    return jsonify(
+        {
+            "ok": True,
+            "message": f"已添加部门「{name}」",
+            "id": new_id,
+            "name": name,
+            "parent_id": parent_id,
+        }
+    )
+
+
+@app.delete("/api/org/departments/<int:dept_id>")
+@login_required
+def org_delete_department(user, dept_id):
+    """删除部门：无子部门、无人员；不可删唯一根部门。"""
+    # AI-GEN-BEGIN
+    if not user_has_cap(user, "org_dept_delete"):
+        return jsonify({"ok": False, "error": "无「删除部门」按钮权限"}), 403
+    # AI-GEN-END
+    if not can_manage_dept(user, dept_id):
+        return jsonify({"ok": False, "error": "无权删除该部门"}), 403
+    db = get_db()
+    migrate_schema(db)
+    row = db.execute("SELECT * FROM departments WHERE id = ?", (dept_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "部门不存在"}), 404
+    child = db.execute(
+        "SELECT id FROM departments WHERE parent_id = ? LIMIT 1", (dept_id,)
+    ).fetchone()
+    if child:
+        return jsonify({"ok": False, "error": "请先删除或移走子部门"}), 400
+    member = db.execute(
+        "SELECT id FROM users WHERE dept_id = ? LIMIT 1", (dept_id,)
+    ).fetchone()
+    if member:
+        return jsonify({"ok": False, "error": "部门下仍有人员，请先调离或删除人员"}), 400
+    total = db.execute("SELECT COUNT(*) AS c FROM departments").fetchone()["c"]
+    if total <= 1:
+        return jsonify({"ok": False, "error": "不能删除唯一根部门"}), 400
+    db.execute("DELETE FROM dept_extra_owners WHERE dept_id = ?", (dept_id,))
+    db.execute(
+        "DELETE FROM approval_chain_dept_overrides WHERE dept_id = ?", (dept_id,)
+    )
+    db.execute("DELETE FROM departments WHERE id = ?", (dept_id,))
+    db.commit()
+    return jsonify(
+        {"ok": True, "message": f"已删除部门「{row['name']}」", "id": dept_id}
+    )
+# AI-GEN-END
 
 
 @app.post("/api/org/departments/<int:dept_id>/move")
@@ -8160,6 +8275,24 @@ def sys_accounts_catalog(user):
                 continue
         accounts.append(item)
 
+    # AI-GEN-BEGIN
+    try:
+        page = max(1, int(request.args.get("page") or 1))
+    except ValueError:
+        page = 1
+    try:
+        page_size = int(request.args.get("page_size") or 50)
+    except ValueError:
+        page_size = 50
+    page_size = min(100, max(10, page_size))
+    filtered_total = len(accounts)
+    total_pages = max(1, (filtered_total + page_size - 1) // page_size)
+    if page > total_pages:
+        page = total_pages
+    start = (page - 1) * page_size
+    page_accounts = accounts[start : start + page_size]
+    # AI-GEN-END
+
     # 统计基于负责范围内全部账号（不受 unbound/q 过滤影响总数口径：按 filter_ids 全量）
     all_rows = [dict(r) for r in rows]
     bound_n = sum(1 for a in all_rows if a.get("leuc_user_id"))
@@ -8190,12 +8323,18 @@ def sys_accounts_catalog(user):
         {
             "ok": True,
             "systems": systems_out,
-            "accounts": accounts,
+            "accounts": page_accounts,
             "stats": {
                 "total": len(all_rows),
                 "bound": bound_n,
                 "unbound": unbound_n,
-                "filtered": len(accounts),
+                "filtered": filtered_total,
+            },
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total": filtered_total,
+                "total_pages": total_pages,
             },
             "by_system": by_system,
             "filters": {
