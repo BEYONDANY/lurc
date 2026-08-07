@@ -65,6 +65,7 @@ from db import (
     DEFAULT_ROLE_CAPS,
     DEFAULT_ROLE_MENUS,
     EMPLOYEE_ROLE_CODES,
+    EXTERNAL_MENUS,
     LEUC_SYSTEM_CODE,
     ROLE_LABELS,
     ROLE_MENUS,
@@ -83,6 +84,26 @@ from db import (
     sync_primary_role,
     user_roles_of,
 )
+
+# AI-GEN-BEGIN
+from leuc_approval_ext import (
+    append_applicant_confirm,
+    collect_cc_for_system_owners,
+    group_bind_items_by_owner,
+    reject_to_specified_step,
+    spawn_cc_todos,
+    user_permission_snapshot,
+)
+from leuc_ops import (
+    extract_leorg_phone,
+    gen_account_password,
+    get_external_dept_id,
+    list_scheduled_tasks,
+    record_credential_notify,
+    start_task_scheduler,
+    update_scheduled_task,
+)
+# AI-GEN-END
 
 # AI-GEN-BEGIN
 try:
@@ -586,6 +607,13 @@ def row_user(row):
     if (row["username"] or "") == SYSTEM_ADMIN_USERNAME or "super_admin" in role_codes:
         menus = [m["id"] for m in ALL_MENUS]
         caps = [b["id"] for b in ALL_BUTTONS]
+    # AI-GEN-BEGIN
+    # 外部人员：仅个人中心 + 密码管理（安全管理）
+    ptype = row["person_type"] if "person_type" in keys else "internal"
+    if ptype == "external" and (row["username"] or "") != SYSTEM_ADMIN_USERNAME:
+        menus = list(EXTERNAL_MENUS)
+        caps = []
+    # AI-GEN-END
     if ("can_proxy_apply" in keys and row["can_proxy_apply"]) and "proxy_apply" not in caps:
         caps.append("proxy_apply")
     if (
@@ -1009,6 +1037,16 @@ def append_system_owner_step(db, system_id, steps, *, purpose="open"):
     # AI-GEN-END
 
 
+def prepare_flow_steps(db, steps, applicant_id, system_id=None):
+    """主链追加申请人确认，并收集系统管理员知会对象。"""
+    # AI-GEN-BEGIN
+    steps = list(steps or [])
+    ccs = collect_cc_for_system_owners(db, find_approver, steps, applicant_id)
+    steps = append_applicant_confirm(steps, applicant_id)
+    return steps, ccs
+    # AI-GEN-END
+
+
 def provision_account_apply(
     db, application, with_sensitive=False, account_name=None, remark=None, account_id=None
 ):
@@ -1222,6 +1260,26 @@ def serialize_todo(db, row):
         meta.get("with_sensitive")
         or (flow_code in ("account_apply_sensitive", "sensitive") if flow_code else False)
     )
+    # AI-GEN-BEGIN
+    d["is_cc"] = bool(meta.get("cc") or d.get("todo_type") == "知会确认")
+    d["is_confirm"] = step_key == "applicant_confirm"
+    d["rejectable_steps"] = []
+    if app_id and d.get("bucket") == "pending" and not d["is_cc"]:
+        prior = db.execute(
+            """SELECT step_order, step_label, step_key FROM application_steps
+            WHERE application_id = ? AND step_order < ? ORDER BY step_order""",
+            (app_id, d.get("step_order") or 1),
+        ).fetchall()
+        d["rejectable_steps"] = [
+            {"order": r["step_order"], "label": r["step_label"], "key": r["step_key"]}
+            for r in prior
+        ]
+    # 延期：展示用户权限详情（突出敏感）
+    if flow_code in ("account_extend", "account_extend_sensitive") or meta.get("days"):
+        uid = meta.get("leuc_user_id") or (applicant or {}).get("id")
+        if uid:
+            d["user_permissions"] = user_permission_snapshot(db, int(uid))
+    # AI-GEN-END
     if applicant and system:
         d["suggest_account"] = f"{applicant['username']}_{system['code']}"
     else:
@@ -1308,6 +1366,7 @@ def build_application_flow(db, app_id):
                 "todo_id": s["todo_id"],
                 "decided_at": s["decided_at"],
                 "remark": (s["remark"] if "remark" in s.keys() else None) or None,
+                "step_kind": (s["step_kind"] if "step_kind" in s.keys() else "approve"),
             }
         )
     forecast = [t for t in timeline if t["phase"] == "forecast"]
@@ -1547,25 +1606,38 @@ def preview_apply_flow(
 
 def start_multi_step_apply(
     db, *, flow_code, todo_type, title, init_title, subject_id, initiator_id,
-    system_id, steps, meta_extra=None, perm_id=None,
+    system_id, steps, meta_extra=None, perm_id=None, cc_list=None,
 ):
     """创建多级审批申请单，返回 (app_id, first_todo, first_assignee, step_preview)。"""
+    # AI-GEN-BEGIN
     now = datetime.now().strftime("%Y-%m-%d")
     meta_extra = meta_extra or {}
     if not steps:
         return None, None, None, []
+    # 标准化步骤并落 step_kind
+    norm_steps = []
+    for s in steps:
+        if len(s) >= 5:
+            norm_steps.append((s[0], s[1], s[2], s[3] or "approve", s[4]))
+        elif len(s) == 4:
+            norm_steps.append((s[0], s[1], s[2], s[3] or "approve", None))
+        else:
+            norm_steps.append((s[0], s[1], s[2], "approve", None))
     cur = db.execute(
         """INSERT INTO applications
         (flow_code, applicant_id, perm_def_id, system_id, title, status,
          current_step, total_steps, created_at, updated_at, provisioned)
         VALUES (?,?,?,?,?, 'pending', 1, ?, ?, ?, 0)""",
-        (flow_code, subject_id, perm_id, system_id, title, len(steps), now, now),
+        (flow_code, subject_id, perm_id, system_id, title, len(norm_steps), now, now),
     )
     app_id = cur.lastrowid
     first_assignee = None
     first_todo = None
     step_preview = []
-    for i, (step_key, step_label, assignee) in enumerate(steps, start=1):
+    first_is_system_owner = False
+    for i, (step_key, step_label, assignee, step_kind, parallel_group) in enumerate(
+        norm_steps, start=1
+    ):
         status = "pending" if i == 1 else "waiting"
         todo_id = None
         if i == 1:
@@ -1588,12 +1660,25 @@ def start_multi_step_apply(
             todo_id = tcur.lastrowid
             first_assignee = assignee
             first_todo = todo_id
-        db.execute(
-            """INSERT INTO application_steps
-            (application_id, step_order, step_key, step_label, assignee_id, status, todo_id)
-            VALUES (?,?,?,?,?,?,?)""",
-            (app_id, i, step_key, step_label, assignee, status, todo_id),
-        )
+            first_is_system_owner = step_key == "system_owner"
+        try:
+            db.execute(
+                """INSERT INTO application_steps
+                (application_id, step_order, step_key, step_label, assignee_id, status, todo_id,
+                 step_kind, parallel_group)
+                VALUES (?,?,?,?,?,?,?,?,?)""",
+                (
+                    app_id, i, step_key, step_label, assignee, status, todo_id,
+                    step_kind, parallel_group,
+                ),
+            )
+        except Exception:
+            db.execute(
+                """INSERT INTO application_steps
+                (application_id, step_order, step_key, step_label, assignee_id, status, todo_id)
+                VALUES (?,?,?,?,?,?,?)""",
+                (app_id, i, step_key, step_label, assignee, status, todo_id),
+            )
         au = db.execute(
             "SELECT display_name FROM users WHERE id = ?", (assignee,)
         ).fetchone()
@@ -1602,8 +1687,24 @@ def start_multi_step_apply(
                 "order": i,
                 "label": step_label,
                 "assignee": au["display_name"] if au else assignee,
+                "step_key": step_key,
+                "step_kind": step_kind,
             }
         )
+    # 首节点即系统管理员时同步知会
+    if first_is_system_owner and cc_list:
+        spawn_cc_todos(
+            db,
+            app_id=app_id,
+            initiator_id=initiator_id,
+            todo_type=todo_type,
+            title=title,
+            meta=meta_extra,
+            ccs=cc_list,
+            now=now,
+        )
+    elif cc_list:
+        meta_extra = {**meta_extra, "pending_ccs": cc_list}
     db.execute(
         """INSERT INTO todos
         (assignee_id, initiator_id, title, todo_type, bucket, status, created_at, application_id, meta)
@@ -1619,7 +1720,7 @@ def start_multi_step_apply(
         ),
     )
     return app_id, first_todo, first_assignee, step_preview
-# AI-GEN-END
+    # AI-GEN-END
 
 
 def auto_provision_sensitive(db, application):
@@ -3832,6 +3933,12 @@ def org_delete_department(user, dept_id):
     row = db.execute("SELECT * FROM departments WHERE id = ?", (dept_id,)).fetchone()
     if not row:
         return jsonify({"ok": False, "error": "部门不存在"}), 404
+    # AI-GEN-BEGIN
+    if ("is_builtin" in row.keys() and row["is_builtin"]) or (
+        "dept_code" in row.keys() and row["dept_code"] == "external"
+    ):
+        return jsonify({"ok": False, "error": "内置部门「外部人员」不可删除"}), 400
+    # AI-GEN-END
     child = db.execute(
         "SELECT id FROM departments WHERE parent_id = ? LIMIT 1", (dept_id,)
     ).fetchone()
@@ -4707,6 +4814,10 @@ def apply_submit(user):
                 return jsonify({"ok": False, "error": "未找到直属审批人"}), 400
             steps = [("direct_leader", "直属领导", int(approver_id))]
             flow_code = "account_extend"
+        # AI-GEN-BEGIN
+        steps, cc_list = prepare_flow_steps(db, steps, subject["id"])
+        meta_extra["user_permissions"] = user_permission_snapshot(db, subject["id"])
+        # AI-GEN-END
         app_id, first_todo, first_assignee, step_preview = start_multi_step_apply(
             db,
             flow_code=flow_code,
@@ -4718,6 +4829,7 @@ def apply_submit(user):
             system_id=None,
             steps=steps,
             meta_extra=meta_extra,
+            cc_list=cc_list,
         )
         db.commit()
         au = db.execute(
@@ -4934,6 +5046,7 @@ def apply_submit(user):
         # AI-GEN-BEGIN
         if flow_code == "sensitive" and system_id:
             steps = append_system_owner_step(db, system_id, steps)
+        steps, cc_list = prepare_flow_steps(db, steps, subject["id"], system_id)
         # AI-GEN-END
         if not steps:
             cur = db.execute(
@@ -4966,69 +5079,19 @@ def apply_submit(user):
                 {"ok": True, "application_id": app_id, "auto_approved": True, "message": msg + "已通过"}
             )
 
-        cur = db.execute(
-            """INSERT INTO applications
-            (flow_code, applicant_id, perm_def_id, system_id, title, status,
-             current_step, total_steps, created_at, updated_at, provisioned)
-            VALUES (?,?,?,?,?, 'pending', 1, ?, ?, ?, 0)""",
-            (flow_code, subject["id"], perm_id, system_id, title, len(steps), now, now),
-        )
-        app_id = cur.lastrowid
-        first_assignee = None
-        first_todo = None
-        step_preview = []
-        for i, (step_key, step_label, assignee) in enumerate(steps, start=1):
-            status = "pending" if i == 1 else "waiting"
-            todo_id = None
-            if i == 1:
-                tcur = db.execute(
-                    """INSERT INTO todos
-                    (assignee_id, initiator_id, title, todo_type, bucket, status, created_at,
-                     application_id, step_order, meta)
-                    VALUES (?,?,?,?, 'pending', 'open', ?, ?, ?, ?)""",
-                    (
-                        assignee,
-                        user["id"],
-                        f"{title} · {step_label}",
-                        todo_type,
-                        now,
-                        app_id,
-                        i,
-                        json.dumps({**meta_extra, "step_label": step_label}, ensure_ascii=False),
-                    ),
-                )
-                todo_id = tcur.lastrowid
-                first_assignee = assignee
-                first_todo = todo_id
-            db.execute(
-                """INSERT INTO application_steps
-                (application_id, step_order, step_key, step_label, assignee_id, status, todo_id)
-                VALUES (?,?,?,?,?,?,?)""",
-                (app_id, i, step_key, step_label, assignee, status, todo_id),
-            )
-            au = db.execute(
-                "SELECT display_name FROM users WHERE id = ?", (assignee,)
-            ).fetchone()
-            step_preview.append(
-                {
-                    "order": i,
-                    "label": step_label,
-                    "assignee": au["display_name"] if au else assignee,
-                }
-            )
-        db.execute(
-            """INSERT INTO todos
-            (assignee_id, initiator_id, title, todo_type, bucket, status, created_at, application_id, meta)
-            VALUES (?,?,?,?, 'initiated', 'open', ?, ?, ?)""",
-            (
-                first_assignee,
-                user["id"],
-                init_title,
-                todo_type,
-                now,
-                app_id,
-                json.dumps({"steps": step_preview}, ensure_ascii=False),
-            ),
+        app_id, first_todo, first_assignee, step_preview = start_multi_step_apply(
+            db,
+            flow_code=flow_code,
+            todo_type=todo_type,
+            title=title,
+            init_title=init_title,
+            subject_id=subject["id"],
+            initiator_id=user["id"],
+            system_id=system_id,
+            steps=steps,
+            meta_extra=meta_extra,
+            perm_id=perm_id,
+            cc_list=cc_list,
         )
         db.commit()
         au = db.execute(
@@ -5386,6 +5449,22 @@ def todo_decide(user, tid):
             }
         )
 
+    # AI-GEN-BEGIN
+    # 知会确认：只阅读确认，不推进主审批链
+    try:
+        _meta_cc = json.loads(row["meta"] or "{}")
+    except Exception:
+        _meta_cc = {}
+    if row["todo_type"] == "知会确认" or _meta_cc.get("cc"):
+        db.execute(
+            "UPDATE todos SET bucket = 'done', status = ? WHERE id = ?",
+            ("approved" if decision == "approved" else "rejected", tid),
+        )
+        _persist_decide_remark(db, tid, remark)
+        db.commit()
+        return jsonify({"ok": True, "message": "已阅知会", "cc": True})
+    # AI-GEN-END
+
     # 敏感权限开通 / 关闭 / 外部人员 / 账号申请 / 账号权限关闭 / 账号延期：多级审批
     if app_id and row["todo_type"] in (
         "敏感权限",
@@ -5412,7 +5491,7 @@ def todo_decide(user, tid):
                 (app_id, step_order),
             ).fetchone()
             nxt_chk = db.execute(
-                """SELECT id FROM application_steps
+                """SELECT id, step_key FROM application_steps
                 WHERE application_id = ? AND step_order = ?""",
                 (app_id, step_order + 1),
             ).fetchone()
@@ -5420,10 +5499,11 @@ def todo_decide(user, tid):
                 meta_pre = json.loads(row["meta"] or "{}")
             except Exception:
                 meta_pre = {}
+            at_owner_effect = cur_step and cur_step["step_key"] == "system_owner" and (
+                not nxt_chk or nxt_chk["step_key"] == "applicant_confirm"
+            )
             if (
-                cur_step
-                and cur_step["step_key"] == "system_owner"
-                and not nxt_chk
+                at_owner_effect
                 and meta_pre.get("create_new")
                 and not (
                     data.get("account_id")
@@ -5452,6 +5532,23 @@ def todo_decide(user, tid):
             (decision, now, app_id, step_order),
         )
         if decision == "rejected":
+            # AI-GEN-BEGIN
+            reject_to = data.get("reject_to_step")
+            if reject_to not in (None, "", 0, "0"):
+                result = reject_to_specified_step(
+                    db,
+                    app_id=app_id,
+                    current_step_order=int(step_order),
+                    reject_to_step=int(reject_to),
+                    todo_row=row,
+                    remark=remark,
+                    now=now,
+                )
+                if not result.get("ok"):
+                    return jsonify(result), 400
+                db.commit()
+                return jsonify(result)
+            # AI-GEN-END
             db.execute(
                 "UPDATE applications SET status = 'rejected', updated_at = ? WHERE id = ?",
                 (now, app_id),
@@ -5472,6 +5569,68 @@ def todo_decide(user, tid):
             WHERE application_id = ? AND step_order = ?""",
             (app_id, step_order + 1),
         ).fetchone()
+        # AI-GEN-BEGIN
+        # 下一步是申请人确认：先执行业务开通/延期，再流转确认
+        if (
+            decision == "approved"
+            and nxt
+            and nxt["step_key"] == "applicant_confirm"
+        ):
+            try:
+                meta_fx = json.loads(row["meta"] or "{}")
+            except Exception:
+                meta_fx = {}
+            fx_msg = None
+            if app_row["flow_code"] in ("account_extend", "account_extend_sensitive"):
+                uid = meta_fx.get("leuc_user_id") or app_row["applicant_id"]
+                days = int(meta_fx.get("days") or 90)
+                result = apply_account_expire_extend(db, int(uid), days)
+                if not result.get("ok"):
+                    return jsonify({"ok": False, "error": result.get("error") or "延期失败"}), 400
+                push_system_message(
+                    db,
+                    int(uid),
+                    "账号延期已生效",
+                    f"已延期 {result['days']} 天，新有效期 {result['new_expire']}（待申请人确认关闭）",
+                )
+                fx_msg = f"已延期至 {result['new_expire']}"
+                meta_fx["effect_done"] = True
+                meta_fx["new_expire"] = result["new_expire"]
+            elif app_row["flow_code"] in (
+                "sensitive",
+                "account_apply",
+                "account_apply_sensitive",
+            ):
+                with_sens = app_row["flow_code"] in (
+                    "sensitive",
+                    "account_apply_sensitive",
+                ) or bool(meta_fx.get("with_sensitive"))
+                create_new = bool(meta_fx.get("create_new"))
+                if create_new or app_row["flow_code"].startswith("account_apply"):
+                    result = provision_account_apply(
+                        db,
+                        app_row,
+                        with_sensitive=with_sens,
+                        account_name=(data.get("account_name") or "").strip() or None,
+                        remark=(data.get("remark") or remark or "").strip() or None,
+                        account_id=data.get("account_id"),
+                    )
+                    if not result.get("ok"):
+                        return jsonify({"ok": False, "error": result.get("error")}), 400
+                    fx_msg = f"已开通 {result.get('system')} / {result.get('account')}"
+                    meta_fx["effect_done"] = True
+                else:
+                    result = auto_provision_sensitive(db, app_row)
+                    if not result.get("ok"):
+                        return jsonify({"ok": False, "error": result.get("error")}), 400
+                    fx_msg = "敏感权限已开通"
+                    meta_fx["effect_done"] = True
+            # 把 effect 标记写回待办 meta，供确认节点使用
+            new_meta = json.dumps(meta_fx, ensure_ascii=False)
+            db.execute("UPDATE todos SET meta = ? WHERE id = ?", (new_meta, tid))
+            row = dict(row)
+            row["meta"] = new_meta
+        # AI-GEN-END
         if nxt:
             db.execute(
                 "UPDATE applications SET current_step = ?, updated_at = ? WHERE id = ?",
@@ -5498,6 +5657,31 @@ def todo_decide(user, tid):
                 WHERE id = ?""",
                 (tcur.lastrowid, nxt["id"]),
             )
+            # AI-GEN-BEGIN
+            # 到达系统管理员节点时同步知会其直接领导
+            if nxt["step_key"] == "system_owner":
+                try:
+                    meta_n = json.loads(row["meta"] or "{}")
+                except Exception:
+                    meta_n = {}
+                ccs = meta_n.get("pending_ccs") or collect_cc_for_system_owners(
+                    db,
+                    find_approver,
+                    [("system_owner", nxt["step_label"], nxt["assignee_id"])],
+                    app_row["applicant_id"],
+                )
+                if ccs:
+                    spawn_cc_todos(
+                        db,
+                        app_id=app_id,
+                        initiator_id=app_row["applicant_id"],
+                        todo_type=flow_todo_type,
+                        title=app_row["title"],
+                        meta=meta_n,
+                        ccs=ccs,
+                        now=now,
+                    )
+            # AI-GEN-END
             db.execute(
                 """UPDATE todos SET title = ?
                 WHERE application_id = ? AND bucket = 'initiated'""",
@@ -5521,15 +5705,31 @@ def todo_decide(user, tid):
                 }
             )
 
+        # AI-GEN-BEGIN
+        # 无下一步：申请人确认后关闭；或最终生效
+        cur_fin = db.execute(
+            """SELECT step_key FROM application_steps
+            WHERE application_id = ? AND step_order = ?""",
+            (app_id, step_order),
+        ).fetchone()
+        final_status = "done" if (cur_fin and cur_fin["step_key"] == "applicant_confirm") else "approved"
+        # AI-GEN-END
         db.execute(
-            "UPDATE applications SET status = 'approved', updated_at = ? WHERE id = ?",
-            (now, app_id),
+            "UPDATE applications SET status = ?, updated_at = ? WHERE id = ?",
+            (final_status, now, app_id),
         )
         db.execute(
             """UPDATE todos SET status = 'approved'
             WHERE application_id = ? AND bucket = 'initiated'""",
             (app_id,),
         )
+        # AI-GEN-BEGIN
+        # 申请人确认关闭：业务已在上一步生效
+        if cur_fin and cur_fin["step_key"] == "applicant_confirm":
+            _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+            db.commit()
+            return jsonify({"ok": True, "message": "已确认，申请单关闭", "closed": True})
+        # AI-GEN-END
         # AI-GEN-BEGIN
         if app_row["flow_code"] in ("account_extend", "account_extend_sensitive"):
             try:
@@ -5669,9 +5869,26 @@ def todo_decide(user, tid):
             # 若最后一步是系统负责人开通，由当前审批人开通
             last = db.execute(
                 """SELECT step_key FROM application_steps
-                WHERE application_id = ? ORDER BY step_order DESC LIMIT 1""",
+                WHERE application_id = ? AND step_key != 'applicant_confirm'
+                ORDER BY step_order DESC LIMIT 1""",
                 (app_id,),
             ).fetchone()
+            cur_last = db.execute(
+                """SELECT step_key FROM application_steps
+                WHERE application_id = ? AND step_order = ?""",
+                (app_id, step_order),
+            ).fetchone()
+            # 若当前已是确认节点或 effect 已做过，跳过重复开通
+            try:
+                meta_skip = json.loads(row["meta"] or "{}")
+            except Exception:
+                meta_skip = {}
+            if meta_skip.get("effect_done") or (
+                cur_last and cur_last["step_key"] == "applicant_confirm"
+            ):
+                _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+                db.commit()
+                return jsonify({"ok": True, "message": "审批完成"})
             with_sens = app_row["flow_code"] in ("sensitive", "account_apply_sensitive")
             try:
                 meta = json.loads(row["meta"] or "{}")
@@ -5799,7 +6016,7 @@ def todo_decide(user, tid):
 @app.post("/api/dept/members")
 @login_required
 def add_member(user):
-    """手动添加：先建人并确认登录用户名；区分内部/外部。"""
+    """手动添加：仅支持新建外部人员（落到内置「外部人员」部门）。"""
     # AI-GEN-BEGIN
     if not require_dept_manage(user):
         return jsonify({"ok": False, "error": "无权限"}), 403
@@ -5807,18 +6024,15 @@ def add_member(user):
     display_name = (data.get("display_name") or "").strip()
     phone = (data.get("phone") or "").strip()
     email = (data.get("email") or "").strip()
-    role = data.get("role") or "employee_a"
-    person_type = (data.get("person_type") or "internal").strip()
-    if person_type not in ("internal", "external"):
-        person_type = "internal"
-    dept_id = int(data.get("dept_id") or user["dept_id"])
-    if not can_manage_dept(user, dept_id):
-        return jsonify({"ok": False, "error": "仅可管理下级部门"}), 403
+    role = "employee_a"
+    person_type = "external"
+    db = get_db()
+    migrate_schema(db)
+    dept_id = get_external_dept_id(db)
+    if not dept_id:
+        return jsonify({"ok": False, "error": "外部人员部门未初始化"}), 500
     if not display_name:
         return jsonify({"ok": False, "error": "姓名必填"}), 400
-    if role not in ROLE_MENUS:
-        role = "employee_a"
-    db = get_db()
     want = (data.get("username") or "").strip() or alloc_username(db, display_name)
     if normalize_username(want) == SYSTEM_ADMIN_USERNAME:
         return jsonify({"ok": False, "error": "用户名 admin 为系统保留"}), 400
@@ -5828,6 +6042,7 @@ def add_member(user):
     username = uname_or_err
     preview_base = name_to_pinyin(display_name)
     beisen_user_id = (data.get("beisen_user_id") or "").strip() or None
+    password = gen_account_password()
     acct_expire = default_account_expire(90)
     cur = db.execute(
         """INSERT INTO users
@@ -5836,7 +6051,7 @@ def add_member(user):
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             username,
-            "123456",
+            password,
             display_name,
             role,
             dept_id,
@@ -5849,19 +6064,45 @@ def add_member(user):
             beisen_user_id,
         ),
     )
+    uid = int(cur.lastrowid)
+    try:
+        db.execute(
+            "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)",
+            (uid, role),
+        )
+    except Exception:
+        pass
+    notify = record_credential_notify(
+        db,
+        user_id=uid,
+        username=username,
+        password=password,
+        phone=phone or None,
+        email=email or None,
+        reason="external_create",
+    )
     db.commit()
-    type_label = "外部人员" if person_type == "external" else "内部人员"
     return jsonify(
         {
             "ok": True,
             "user": {
-                "id": cur.lastrowid,
+                "id": uid,
                 "username": username,
                 "display_name": display_name,
                 "pinyin_base": preview_base,
                 "person_type": person_type,
+                "dept_id": dept_id,
             },
-            "message": f"已创建{type_label}账号 {username}（初始密码 123456）；后续再绑定系统",
+            "notify": {
+                "channel": notify.get("channel"),
+                "target": notify.get("target"),
+                "status": notify.get("status"),
+            },
+            "message": (
+                f"已创建外部人员 {username}；初始密码已按"
+                f"{'手机' if notify.get('channel')=='phone' else ('邮箱' if notify.get('channel')=='email' else '无联系方式')}"
+                f"写入发送记录（未真实发送）"
+            ),
         }
     )
     # AI-GEN-END
@@ -7091,9 +7332,7 @@ def _diff_leorg_employees(db, emps, leorg_to_local=None):
         emp_no = (e.get("emp_no") or "").strip()
         name = (e.get("name") or "").strip()
         email = (e.get("email") or "").strip() or None
-        phone = (e.get("mobile") or "").strip() or None
-        if phone and "*" in phone:
-            phone = None
+        phone = extract_leorg_phone(e)
         leorg_emp_id = e.get("id")
         beisen_user_id = _beisen_id_of(e)
         org_leorg = e.get("org_id")
@@ -7251,16 +7490,17 @@ def _diff_leorg_employees(db, emps, leorg_to_local=None):
 
         changes.append(
             {
-                "key": f"roster:new:{leorg_emp_id or emp_no or name}",
-                "kind": "roster",
+                "key": f"user:new:{leorg_emp_id or emp_no or name}",
+                "kind": "user",
                 "action": "insert",
-                "title": f"新增待初始化：{name}",
-                "detail": f"部门#{dept_id}",
+                "title": f"新增人员：{name}",
+                "detail": f"自动生成登录名 · 部门#{dept_id}",
                 "fields": [
                     {"field": "display_name", "old": None, "new": name},
                     {"field": "dept_id", "old": None, "new": dept_id},
+                    {"field": "phone", "old": None, "new": phone},
                 ],
-                "payload": {**payload_base, "mode": "roster_insert"},
+                "payload": {**payload_base, "mode": "user_create"},
             }
         )
     return changes
@@ -7358,7 +7598,56 @@ def _apply_leorg_sync_changes(db, selected):
                     f"UPDATE users SET {', '.join(sets)} WHERE id = ?", params
                 )
                 counts["user"] += 1
+        elif mode == "user_create":
+            # AI-GEN-BEGIN
+            display_name = (p.get("display_name") or "").strip()
+            if not display_name:
+                continue
+            username = alloc_username(db, display_name)
+            password = gen_account_password()
+            acct_expire = default_account_expire(90)
+            cur = db.execute(
+                """INSERT INTO users
+                (username, password, display_name, role, dept_id, phone, email, itcode,
+                 password_expire, account_expire, person_type, leorg_emp_id, beisen_user_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?, 'internal', ?, ?)""",
+                (
+                    username,
+                    password,
+                    display_name,
+                    "employee_a",
+                    p.get("dept_id"),
+                    p.get("phone"),
+                    p.get("email"),
+                    p.get("emp_no") or username,
+                    "2099-12-31",
+                    acct_expire,
+                    p.get("leorg_emp_id"),
+                    p.get("beisen_user_id"),
+                ),
+            )
+            uid = int(cur.lastrowid)
+            try:
+                ensure_user_roles_migrated(db)
+                db.execute(
+                    "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)",
+                    (uid, "employee_a"),
+                )
+            except Exception:
+                pass
+            record_credential_notify(
+                db,
+                user_id=uid,
+                username=username,
+                password=password,
+                phone=p.get("phone"),
+                email=p.get("email"),
+                reason="leorg_sync_create",
+            )
+            counts["user"] = counts.get("user", 0) + 1
+            # AI-GEN-END
         elif mode == "roster_insert":
+            # 兼容旧草稿：仍写入花名册
             db.execute(
                 """INSERT INTO hr_sync_roster
                 (display_name, dept_id, phone, email, emp_no, leorg_emp_id, beisen_user_id, source, status, synced_at)
@@ -7614,9 +7903,7 @@ def _sync_leorg_employees(db, emps):
         emp_no = (e.get("emp_no") or "").strip()
         name = (e.get("name") or "").strip()
         email = (e.get("email") or "").strip() or None
-        phone = (e.get("mobile") or "").strip() or None
-        if phone and "*" in phone:
-            phone = None
+        phone = extract_leorg_phone(e)
         leorg_emp_id = e.get("id")
         beisen_user_id = _beisen_id_of(e)
         org_leorg = e.get("org_id")
@@ -7750,26 +8037,54 @@ def _sync_leorg_employees(db, emps):
                 skipped += 1
                 continue
 
-        db.execute(
-            """INSERT INTO hr_sync_roster
-            (display_name, dept_id, phone, email, emp_no, leorg_emp_id, beisen_user_id, source, status, synced_at)
-            VALUES (?,?,?,?,?,?,?, 'leorg', 'pending', ?)""",
+        # AI-GEN-BEGIN
+        # 新用户：直接生成登录名并创建，写发送记录
+        username = alloc_username(db, name)
+        password = gen_account_password()
+        acct_expire = default_account_expire(90)
+        cur = db.execute(
+            """INSERT INTO users
+            (username, password, display_name, role, dept_id, phone, email, itcode,
+             password_expire, account_expire, person_type, leorg_emp_id, beisen_user_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?, 'internal', ?, ?)""",
             (
+                username,
+                password,
                 name,
+                "employee_a",
                 dept_id,
                 phone,
                 email,
-                emp_no or None,
+                emp_no or username,
+                "2099-12-31",
+                acct_expire,
                 int(leorg_emp_id) if leorg_emp_id is not None else None,
                 beisen_user_id,
-                now,
             ),
         )
-        roster_added += 1
+        uid = int(cur.lastrowid)
+        try:
+            db.execute(
+                "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)",
+                (uid, "employee_a"),
+            )
+        except Exception:
+            pass
+        record_credential_notify(
+            db,
+            user_id=uid,
+            username=username,
+            password=password,
+            phone=phone,
+            email=email,
+            reason="leorg_sync_create",
+        )
+        roster_added += 1  # 复用计数表示新增人员
         # AI-GEN-END
 
     return {
         "roster_added": roster_added,
+        "users_created": roster_added,
         "roster_updated": roster_updated,
         "users_updated": users_updated,
         "beisen_filled": beisen_filled,
@@ -7967,7 +8282,7 @@ def bind_systems(user):
     db = get_db()
     rows = db.execute(
         """SELECT id, code, name, access_mode, forbid_external, has_sensitive
-        FROM systems WHERE status='enabled' AND code != ? ORDER BY id""",
+        FROM systems WHERE status='enabled' ORDER BY CASE WHEN code = ? THEN 0 ELSE 1 END, id""",
         (LEUC_SYSTEM_CODE,),
     ).fetchall()
     perms_by_sys = {}
@@ -8249,11 +8564,9 @@ def bind_apply(user):
 
     # AI-GEN-BEGIN
     if items:
-        for it in items:
-            uid = int(it.get("leuc_user_id") or 0)
-            sid = int(it.get("system_id") or 0)
-            if not uid or not sid:
-                continue
+        groups = group_bind_items_by_owner(db, items, list_system_owner_ids)
+        for g in groups:
+            uid = g["leuc_user_id"]
             urow = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
             if not urow:
                 continue
@@ -8261,15 +8574,20 @@ def bind_apply(user):
                 return jsonify(
                     {"ok": False, "error": f"无权为 {urow['display_name']} 申请账号"}
                 ), 403
-            sys_row = db.execute("SELECT * FROM systems WHERE id = ?", (sid,)).fetchone()
-            if not sys_row:
+            sys_rows = []
+            with_sensitive = False
+            for sid in g["system_ids"]:
+                sys_row = db.execute("SELECT * FROM systems WHERE id = ?", (sid,)).fetchone()
+                if not sys_row:
+                    continue
+                ok, err = user_may_access_system(db, urow, sys_row)
+                if not ok:
+                    return jsonify({"ok": False, "error": f"{urow['display_name']}：{err}"}), 400
+                sys_rows.append(sys_row)
+                if g["with_sensitive"] and int(sys_row["has_sensitive"] or 0):
+                    with_sensitive = True
+            if not sys_rows:
                 continue
-            ok, err = user_may_access_system(db, urow, sys_row)
-            if not ok:
-                return jsonify({"ok": False, "error": f"{urow['display_name']}：{err}"}), 400
-            with_sensitive = bool(it.get("with_sensitive")) and int(
-                sys_row["has_sensitive"] or 0
-            )
             if with_sensitive:
                 steps = materialize_approval_chain(db, "sensitive", uid)
                 flow_code = "account_apply_sensitive"
@@ -8281,14 +8599,18 @@ def bind_apply(user):
                     ), 400
                 steps = [("direct_leader", "直属领导", direct)]
                 flow_code = "account_apply"
-            steps = append_system_owner_step(db, sid, steps)
+            for sys_row in sys_rows:
+                steps = append_system_owner_step(db, int(sys_row["id"]), steps)
+            steps, cc_list = prepare_flow_steps(db, steps, uid)
             if not steps:
                 return jsonify({"ok": False, "error": "审批链为空"}), 400
+            names = "、".join(s["name"] for s in sys_rows)
             title = (
-                f"{urow['display_name']} · 账号申请 · {sys_row['name']}"
+                f"{urow['display_name']} · 账号申请 · {names}"
                 + (" · 含敏感" if with_sensitive else "")
             )
-            init_title = f"账号申请 · {sys_row['name']}（审批中）"
+            init_title = f"账号申请 · {names}（审批中）"
+            primary_sid = int(sys_rows[0]["id"])
             app_id, first_todo, first_assignee, preview = start_multi_step_apply(
                 db,
                 flow_code=flow_code,
@@ -8297,14 +8619,16 @@ def bind_apply(user):
                 init_title=init_title,
                 subject_id=uid,
                 initiator_id=user["id"],
-                system_id=sid,
+                system_id=primary_sid,
                 steps=steps,
                 meta_extra={
-                    "system_id": sid,
+                    "system_id": primary_sid,
+                    "system_ids": [int(s["id"]) for s in sys_rows],
                     "leuc_user_id": uid,
                     "with_sensitive": with_sensitive,
                     "create_new": True,
                 },
+                cc_list=cc_list,
             )
             au = db.execute(
                 "SELECT display_name FROM users WHERE id = ?", (first_assignee,)
@@ -8314,7 +8638,8 @@ def bind_apply(user):
                     "application_id": app_id,
                     "todo_id": first_todo,
                     "user": urow["display_name"],
-                    "system": sys_row["name"],
+                    "system": names,
+                    "systems": [s["name"] for s in sys_rows],
                     "with_sensitive": with_sensitive,
                     "chain": preview,
                     "approver": au["display_name"] if au else first_assignee,
@@ -11440,6 +11765,132 @@ def risk_set():
     return jsonify({"ok": True, "risk": get_risk(data.get("username") or "")})
 
 
+# AI-GEN-BEGIN
+def _run_scheduled_leorg_sync(conn) -> str:
+    """定时任务：自动增量/全量拉取并应用（无预览）。"""
+    from leorg_client import LeorgClient, load_config, status_dict
+
+    st = status_dict()
+    if not st.get("enabled"):
+        return "LeOrg 未配置，跳过"
+    client = LeorgClient(load_config())
+    migrate_schema(conn)
+    state = _leorg_sync_state(conn)
+    mode = "full" if not state.get("last_full_at") else "incr"
+    orgs = client.list_organizations(status=1)
+    org_stats = _sync_leorg_organizations(conn, orgs)
+    if mode == "full":
+        emps = client.list_employees(emp_status=1) + client.list_employees(emp_status=2)
+        max_cid = client.latest_change_id(days=1)
+    else:
+        after = int(state.get("last_change_id") or 0)
+        changes = client.list_employee_changes(days=7, after_id=after)
+        emps = []
+        max_cid = after
+        for ch in changes:
+            max_cid = max(max_cid, int(ch.get("id") or 0))
+            eid = ch.get("emp_id") or ch.get("employee_id")
+            if eid is None:
+                continue
+            detail = client.get_employee(int(eid))
+            if detail:
+                emps.append(detail)
+    emp_stats = _sync_leorg_employees(conn, emps)
+    _resolve_dept_owners_from_leorg(conn)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    _save_leorg_sync_state(
+        conn,
+        mode=mode,
+        last_change_id=int(max_cid or 0),
+        org_mapped=int(org_stats.get("inserted", 0) + org_stats.get("updated", 0)),
+        emp_touched=int(emp_stats.get("users_updated", 0) + emp_stats.get("roster_added", 0)),
+        now=now,
+        is_full=(mode == "full"),
+    )
+    conn.commit()
+    return (
+        f"{mode} ok org={org_stats} emp={emp_stats}"
+    )
+
+
+@app.get("/api/admin/tasks")
+@login_required
+def admin_tasks_list(user):
+    if not user_has_role(user, "super_admin", "hr_specialist"):
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    db = get_db()
+    migrate_schema(db)
+    return jsonify({"ok": True, "tasks": list_scheduled_tasks(db)})
+
+
+@app.patch("/api/admin/tasks/<code>")
+@login_required
+def admin_tasks_update(user, code):
+    if not user_has_role(user, "super_admin", "hr_specialist"):
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    data = request.get_json(force=True) or {}
+    db = get_db()
+    migrate_schema(db)
+    row = update_scheduled_task(
+        db,
+        code,
+        interval_hours=data.get("interval_hours"),
+        enabled=data.get("enabled"),
+    )
+    if not row:
+        return jsonify({"ok": False, "error": "任务不存在"}), 404
+    db.commit()
+    return jsonify({"ok": True, "task": row})
+
+
+@app.post("/api/admin/tasks/<code>/run")
+@login_required
+def admin_tasks_run(user, code):
+    if not user_has_role(user, "super_admin", "hr_specialist"):
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    if code != "leorg_sync":
+        return jsonify({"ok": False, "error": "暂不支持该任务手动执行"}), 400
+    db = get_db()
+    migrate_schema(db)
+    try:
+        msg = _run_scheduled_leorg_sync(db)
+        status = "ok"
+    except Exception as e:  # noqa: BLE001
+        msg = str(e)
+        status = "error"
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    task = db.execute("SELECT * FROM scheduled_tasks WHERE code = ?", (code,)).fetchone()
+    iv = float(task["interval_hours"] or 6) if task else 6
+    next_at = (datetime.now() + timedelta(hours=iv)).strftime("%Y-%m-%d %H:%M:%S")
+    db.execute(
+        """UPDATE scheduled_tasks
+        SET last_run_at=?, next_run_at=?, last_status=?, last_message=?, updated_at=?
+        WHERE code=?""",
+        (now, next_at, status, (msg or "")[:500], now, code),
+    )
+    db.commit()
+    return jsonify({"ok": status == "ok", "message": msg, "status": status})
+
+
+@app.get("/api/admin/notify-records")
+@login_required
+def admin_notify_records(user):
+    if not user_has_role(user, "super_admin", "hr_specialist"):
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    db = get_db()
+    migrate_schema(db)
+    rows = db.execute(
+        """SELECT r.*, u.display_name, u.username
+        FROM notify_send_records r
+        LEFT JOIN users u ON u.id = r.user_id
+        ORDER BY r.id DESC LIMIT 200"""
+    ).fetchall()
+    return jsonify({"ok": True, "records": [dict(r) for r in rows]})
+
+
+# AI-GEN-END
+
+
 @app.post("/api/switch-role")
 def switch_role():
     data = request.get_json(force=True) or {}
@@ -11462,12 +11913,13 @@ def main():
     # 默认不强制重建，避免每次启动清空 LeOrg 同步数据；需要重建时：
     #   python -c "from db import init_db; init_db(force=True)"
     init_db(force=False)
-    # AI-GEN-END
-    print("LEUC 原型: http://127.0.0.1:5055")
+    start_task_scheduler(app, _run_scheduled_leorg_sync)
+    host = _os.environ.get("LEUC_HOST", "0.0.0.0")
+    port = int(_os.environ.get("LEUC_PORT", "5055"))
+    print(f"LEUC 原型: http://127.0.0.1:{port}  （监听 {host}:{port}）")
     print("管理账号: admin / sunli / zhangcai / zhaomin / liufang / huangwei  密码 123456")
-    # AI-GEN-BEGIN
     # debug 热重载易把后台进程弄挂（Connection refused）；本地联调默认关 reloader
-    app.run(host="127.0.0.1", port=5055, debug=True, use_reloader=False, threaded=True)
+    app.run(host=host, port=port, debug=True, use_reloader=False, threaded=True)
     # AI-GEN-END
 
 

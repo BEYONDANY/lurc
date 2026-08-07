@@ -647,11 +647,70 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
         )"""
     )
     # AI-GEN-END
+    # AI-GEN-BEGIN
+    from leuc_ops import ensure_ops_tables
+
+    ensure_ops_tables(conn)
+    ensure_leuc_apply_perms(conn)
+    # 存量库补齐任务管理 / 发信记录菜单
+    for role, mid in (
+        ("super_admin", "admin_tasks"),
+        ("super_admin", "admin_notify"),
+        ("hr_specialist", "admin_tasks"),
+        ("hr_specialist", "admin_notify"),
+    ):
+        conn.execute(
+            "INSERT OR IGNORE INTO role_menus (role, menu_id) VALUES (?, ?)",
+            (role, mid),
+        )
+    # AI-GEN-END
     # AI-GEN-END
 
 
 # AI-GEN-BEGIN
 LEUC_SYSTEM_CODE = "leuc"
+
+
+# AI-GEN-BEGIN
+def ensure_leuc_apply_perms(conn: sqlite3.Connection) -> None:
+    """本系统（LEUC）可申请权限目录：菜单能力作为申请项。"""
+    ensure_leuc_system(conn)
+    leuc = conn.execute(
+        "SELECT id FROM systems WHERE code = ?", (LEUC_SYSTEM_CODE,)
+    ).fetchone()
+    if not leuc:
+        return
+    sid = int(leuc["id"])
+    # 开启可申请 + 标记有敏感（部分权限）
+    conn.execute(
+        """UPDATE systems SET access_mode = 'apply', has_sensitive = 1
+        WHERE id = ? AND is_builtin = 1""",
+        (sid,),
+    )
+    defs = [
+        ("leuc_menu_home", "个人中心", 0, None),
+        ("leuc_menu_security", "安全管理/密码管理", 0, None),
+        ("leuc_menu_todo", "我的待办", 0, None),
+        ("leuc_menu_apply", "自助申请", 0, None),
+        ("leuc_menu_org", "部门和人员", 0, None),
+        ("leuc_cap_org_sync", "同步部门和人员", 1, None),
+        ("leuc_cap_manage_systems", "维护业务系统", 1, None),
+        ("leuc_cap_config_roles", "配置角色权限", 1, None),
+    ]
+    for code, name, sens, parent in defs:
+        exists = conn.execute(
+            "SELECT id FROM sensitive_perm_defs WHERE system_id = ? AND perm_code = ?",
+            (sid, code),
+        ).fetchone()
+        if exists:
+            continue
+        conn.execute(
+            """INSERT INTO sensitive_perm_defs
+            (system_id, perm_code, perm_name, description, parent_id, is_sensitive, enabled)
+            VALUES (?,?,?,?,?,?,1)""",
+            (sid, code, name, f"本系统权限：{name}", parent, sens),
+        )
+# AI-GEN-END
 
 
 def ensure_todo_notify_trigger(conn: sqlite3.Connection) -> None:
@@ -1089,9 +1148,14 @@ ALL_MENUS = [
     {"id": "my_systems", "label": "业务系统管理", "group": "业务系统"},
     {"id": "sys_accounts", "label": "系统账号管理", "group": "业务系统"},
     {"id": "oa_forms", "label": "北森消息", "group": "业务系统"},
+    {"id": "admin_tasks", "label": "任务管理", "group": "系统设置"},
+    {"id": "admin_notify", "label": "发信记录", "group": "系统设置"},
     {"id": "admin_sensitive", "label": "敏感审批链", "group": "系统设置"},
     {"id": "admin_roles", "label": "角色与权限", "group": "系统设置"},
 ]
+
+# 外部人员仅个人中心 + 密码管理（安全管理）
+EXTERNAL_MENUS = ["home", "security"]
 
 # 按钮权限（挂在菜单下；写入 role_caps）
 ALL_BUTTONS = [
@@ -1119,11 +1183,15 @@ ALL_CAPS = ALL_BUTTONS  # 兼容旧名
 DEFAULT_ROLE_MENUS = {
     "employee": ["home", "security", "todo", "apply", "my_org"],
     "finance": ["home", "security", "todo", "apply", "my_org"],
-    "hr_specialist": ["home", "security", "todo", "apply", "my_org", "oa_forms"],
+    "hr_specialist": [
+        "home", "security", "todo", "apply", "my_org", "oa_forms",
+        "admin_tasks", "admin_notify",
+    ],
     "system_owner": ["home", "security", "todo", "apply", "my_org", "my_systems", "sys_accounts", "oa_forms"],
     "super_admin": [
         "home", "security", "todo", "apply", "my_org",
         "my_systems", "sys_accounts", "oa_forms",
+        "admin_tasks", "admin_notify",
         "admin_sensitive", "admin_roles",
     ],
     "employee_a": ["home", "security", "todo", "apply", "my_org"],

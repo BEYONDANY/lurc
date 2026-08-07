@@ -483,27 +483,14 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 
 <div class="mask" id="m-add"><div class="modal">
   <!-- AI-GEN-BEGIN -->
-  <h3>手动添加人员</h3>
-  <div class="callout">先建人并确认登录用户名；再建绑定。外部人员不可绑定「禁止外部登录」的系统（如北森/飞书）。</div>
-  <div class="field"><label>人员类型</label>
-    <div class="stepup" id="add-ptype">
-      <div class="on" data-t="internal" onclick="pickPersonType(this)"><b>内部</b>正式员工</div>
-      <div data-t="external" onclick="pickPersonType(this)"><b>外部</b>外包/协作</div>
-    </div>
-  </div>
-  <div class="field"><label>姓名</label><input id="add-name" oninput="previewUser()" placeholder="如：周九"></div>
+  <h3>新建外部人员</h3>
+  <div class="callout">外部人员统一归属内置部门「外部人员」（与公司平级、不可删除）。创建后账号密码写入发信记录（优先手机，不真实发送）。登录后仅可查看个人中心与密码管理。</div>
+  <div class="field"><label>姓名</label><input id="add-name" oninput="previewUser()" placeholder="如：外包协作人"></div>
   <div class="field"><label>登录用户名（可编辑确认）</label><input id="add-username" placeholder="默认姓名拼音，可改"></div>
   <div class="note" id="add-user-hint" style="margin-top:-6px;margin-bottom:10px"></div>
-  <div class="field"><label>手机</label><input id="add-phone"></div>
-  <div class="field"><label>邮箱</label><input id="add-email"></div>
-  <div class="field"><label>角色</label>
-    <select id="add-role">
-      <option value="employee_a">普通员工</option>
-      <option value="dept_owner">部门负责人</option>
-      <option value="hr_specialist">人事专员</option>
-    </select>
-  </div>
-  <div class="field" id="add-dept-wrap" style="display:none"><label>部门</label><select id="add-dept"></select></div>
+  <div class="field"><label>手机（优先接收账号密码）</label><input id="add-phone"></div>
+  <div class="field"><label>邮箱（无手机时）</label><input id="add-email"></div>
+  <input type="hidden" id="add-role" value="employee_a">
   <div class="foot">
     <button class="btn btn-line" onclick="closeModal('m-add')">取消</button>
     <button class="btn btn-pri" style="width:auto" onclick="submitAdd()">确认创建</button>
@@ -1151,6 +1138,8 @@ function renderSide() {
     {
       name: '系统设置',
       items: [
+        { id: 'admin_tasks', label: '任务管理' },
+        { id: 'admin_notify', label: '发信记录' },
         { id: 'admin_sensitive', label: '敏感审批链' },
         { id: 'admin_roles', label: '角色与权限' },
       ],
@@ -1409,11 +1398,86 @@ async function renderMain() {
   if (state.view === 'admin_sensitive') {
     await renderSensitiveConfig(el); return;
   }
+  // AI-GEN-BEGIN
+  if (state.view === 'admin_tasks') {
+    await renderAdminTasks(el); return;
+  }
+  if (state.view === 'admin_notify') {
+    await renderAdminNotify(el); return;
+  }
+  // AI-GEN-END
   if (state.view === 'admin_roles' || state.view === 'admin_perms') {
     await renderAdminRoles(el); return;
   }
 }
 
+
+// AI-GEN-BEGIN
+async function renderAdminTasks(el){
+  el.innerHTML = `<div class="ptitle">任务管理</div><div class="note">加载中…</div>`;
+  const { data } = await api('/api/admin/tasks');
+  if (!data.ok) { el.innerHTML = `<div class="ptitle">任务管理</div><div class="warn">${data.error||'无权'}</div>`; return; }
+  const rows = (data.tasks||[]).map(t => `
+    <tr>
+      <td><b>${t.name}</b><div class="note">${t.code}</div></td>
+      <td>${t.enabled? '<span class="pill p-green">启用</span>':'<span class="pill p-gray">停用</span>'}</td>
+      <td>
+        <input id="task-iv-${t.code}" type="number" min="0.25" step="0.25" value="${t.interval_hours}"
+          style="width:88px;padding:6px 8px;border:1px solid var(--line);border-radius:8px"> 小时
+      </td>
+      <td class="note">${t.last_run_at||'—'}<br>${t.last_status||''} ${t.last_message?('· '+t.last_message):''}</td>
+      <td class="note">${t.next_run_at||'—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm btn-line" onclick="saveTask('${t.code}')">保存</button>
+        <button class="btn btn-sm btn-line" onclick="toggleTask('${t.code}', ${t.enabled?0:1})">${t.enabled?'停用':'启用'}</button>
+        <button class="btn btn-sm btn-pri" style="width:auto" onclick="runTask('${t.code}')">立即执行</button>
+      </td>
+    </tr>`).join('');
+  el.innerHTML = `
+    <div class="ptitle">任务管理</div>
+    <div class="callout">统一管理后台定时任务。当前支持「同步部门和人员」：默认 6 小时自动拉取；新用户直接生成登录名，存量按唯一标识更新。</div>
+    <table class="tbl"><thead><tr>
+      <th>任务</th><th>状态</th><th>频次</th><th>上次执行</th><th>下次执行</th><th>操作</th>
+    </tr></thead><tbody>${rows||'<tr><td colspan="6">暂无任务</td></tr>'}</tbody></table>`;
+}
+async function saveTask(code){
+  const iv = Number(document.getElementById('task-iv-'+code)?.value || 6);
+  const { data } = await api('/api/admin/tasks/'+code, { method:'PATCH', body: JSON.stringify({ interval_hours: iv }) });
+  if (!data.ok) return toast(data.error);
+  toast('已保存频次'); renderMain();
+}
+async function toggleTask(code, enabled){
+  const { data } = await api('/api/admin/tasks/'+code, { method:'PATCH', body: JSON.stringify({ enabled: !!enabled }) });
+  if (!data.ok) return toast(data.error);
+  toast(enabled?'已启用':'已停用'); renderMain();
+}
+async function runTask(code){
+  toast('执行中…');
+  const { data } = await api('/api/admin/tasks/'+code+'/run', { method:'POST', body: '{}' });
+  toast(data.message || (data.ok?'完成':'失败')); renderMain();
+}
+async function renderAdminNotify(el){
+  el.innerHTML = `<div class="ptitle">发信记录</div><div class="note">加载中…</div>`;
+  const { data } = await api('/api/admin/notify-records');
+  if (!data.ok) { el.innerHTML = `<div class="ptitle">发信记录</div><div class="warn">${data.error||'无权'}</div>`; return; }
+  const rows = (data.records||[]).map(r => `
+    <tr>
+      <td>${r.created_at||''}</td>
+      <td>${r.display_name||'-'}<div class="note">${r.username||''}</div></td>
+      <td>${r.channel==='phone'?'手机':(r.channel==='email'?'邮箱':r.channel)}</td>
+      <td>${r.target||'—'}</td>
+      <td>${r.title||''}<div class="note" style="max-width:360px;white-space:pre-wrap">${(r.body||'').slice(0,180)}</div></td>
+      <td><span class="pill ${r.status==='recorded'?'p-blue':'p-gray'}">${r.status}</span>
+        <div class="note">${r.reason||''}</div></td>
+    </tr>`).join('');
+  el.innerHTML = `
+    <div class="ptitle">发信记录</div>
+    <div class="callout">账号创建后的短信/邮件通知先落库，不真实发送；后续可接发送接口。优先手机，其次邮箱。</div>
+    <table class="tbl"><thead><tr>
+      <th>时间</th><th>用户</th><th>渠道</th><th>目标</th><th>内容</th><th>状态</th>
+    </tr></thead><tbody>${rows||'<tr><td colspan="6">暂无记录</td></tr>'}</tbody></table>`;
+}
+// AI-GEN-END
 
 // AI-GEN-BEGIN
 function hasBtn(id){
@@ -2196,7 +2260,7 @@ async function renderOrg(el) {
       <button class="btn btn-sm btn-line" onclick="openInbox()">即时消息</button>
       <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('apply')">账号、权限申请</button>
       ${canApplyForOthers()?`<button class="btn btn-sm btn-line" onclick="openAccountBind('apply_for')">代人申请账号/权限</button>`:''}
-      ${canManage && showAdd?`<button class="btn btn-sm btn-line" onclick="openAdd()">添加人员</button>`:''}
+      ${canManage && showAdd?`<button class="btn btn-sm btn-line" onclick="openAdd()">新建外部人员</button>`:''}
       ${canManage && showDeptAdd?`<button class="btn btn-sm btn-line" onclick="openAddDept()">添加部门</button>`:''}
       ${canManage && showImport?`<button class="btn btn-sm btn-line" onclick="openImport()">导入</button>`:''}
       ${canManage && canSetAccountExpire()?`<button class="btn btn-sm btn-line" onclick="openSetExpire()">设置有效期</button>`:''}
@@ -2640,7 +2704,19 @@ async function openTodoFlow(tid, opts){
       <div class="kv"><span class="lab">更新时间</span><b>${app.updated_at || '—'}</b></div>
       <div class="kv"><span class="lab">申请状态</span><b>${app.status || todo.status || '—'}</b></div>
     </div>
-    <h4 style="font-size:13px;margin:0 0 8px">流程时间线</h4>
+    ${(() => {
+      const up = todo.user_permissions;
+      if (!up) return '';
+      const sens = up.sensitive_accounts || [];
+      const all = up.accounts || [];
+      return `<div class="callout" style="margin-bottom:12px">
+        <strong>申请人权限详情</strong>（延期审批重点核对敏感权限）
+        <div class="note" style="margin-top:6px">共 ${up.account_count||0} 个账号，敏感 ${up.sensitive_count||0} 个</div>
+        ${sens.length ? `<div style="margin-top:8px"><b>敏感权限</b>${sens.map(a=>`<div>· <span class="pill p-red">敏感</span> ${a.system_name} / ${a.account_name} · ${a.perm_summary||''}</div>`).join('')}</div>` : '<div class="note">无敏感权限账号</div>'}
+        ${all.length ? `<details style="margin-top:8px"><summary>全部账号</summary>${all.map(a=>`<div>· ${a.has_sensitive?'<span class="pill p-red">敏感</span> ':''}${a.system_name} / ${a.account_name} · ${a.perm_summary||''}</div>`).join('')}</details>` : ''}
+      </div>`;
+    })()}
+    <h4 style="font-size:13px;margin:0 0 8px">流程时间线（各节点明细）</h4>
     ${renderFlowTimelineHtml(data.timeline)}
     <div class="flow-preview" style="margin-top:14px">
       <h5>流程预测（尚未到达）</h5>
@@ -2653,10 +2729,21 @@ async function openTodoFlow(tid, opts){
       <label>本次操作备注（可选）</label>
       <textarea id="flow-decide-remark" rows="2" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit"
         placeholder="通过或驳回时可填写，详情中可见"></textarea>
-    </div>` : ''}`;
+    </div>
+    ${(!todo.is_cc && (todo.rejectable_steps||[]).length) ? `
+    <div class="field">
+      <label>驳回到指定节点（可选，不选则直接结束）</label>
+      <select id="flow-reject-to" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
+        <option value="">直接结束申请</option>
+        ${(todo.rejectable_steps||[]).map(s=>`<option value="${s.order}">${s.order}. ${s.label}</option>`).join('')}
+      </select>
+      <div class="note">驳回后目标节点可修改并再次提交，将直接回到当前驳回人。</div>
+    </div>` : ''}
+    ` : ''}`;
   const foot = document.querySelector('#m-flow .foot');
   if (foot) {
     if (showRemark) {
+      const passLabel = todo.is_cc ? '已阅' : (todo.is_confirm ? '确认关闭' : '通过');
       if (todo.need_provision_form) {
         foot.innerHTML = `
           <button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>
@@ -2665,8 +2752,8 @@ async function openTodoFlow(tid, opts){
       } else {
         foot.innerHTML = `
           <button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>
-          <button class="btn btn-line" onclick="decideTodoFromFlow(${tid},'rejected')">驳回</button>
-          <button class="btn btn-pri" style="width:auto" onclick="decideTodoFromFlow(${tid},'approved')">通过</button>`;
+          ${todo.is_cc ? '' : `<button class="btn btn-line" onclick="decideTodoFromFlow(${tid},'rejected')">驳回</button>`}
+          <button class="btn btn-pri" style="width:auto" onclick="decideTodoFromFlow(${tid},'approved')">${passLabel}</button>`;
       }
     } else {
       foot.innerHTML = `<button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>`;
@@ -2678,8 +2765,13 @@ async function openTodoFlow(tid, opts){
 function decideTodoFromFlow(tid, decision){
   // AI-GEN-BEGIN
   const remark = (document.getElementById('flow-decide-remark')?.value || '').trim();
+  const rejectTo = document.getElementById('flow-reject-to')?.value || '';
   closeModal('m-flow');
-  return decideTodo(tid, decision, { remark, skipRemarkPrompt: true });
+  return decideTodo(tid, decision, {
+    remark,
+    skipRemarkPrompt: true,
+    reject_to_step: decision === 'rejected' && rejectTo ? Number(rejectTo) : null,
+  });
   // AI-GEN-END
 }
 async function refreshBindFlowPreview(){
@@ -4608,44 +4700,15 @@ async function showPerm(uid) {
 }
 
 async function openAdd(){
-  state.addPersonType = 'internal';
-  document.querySelectorAll('#add-ptype div').forEach(d => d.classList.toggle('on', d.dataset.t==='internal'));
+  // AI-GEN-BEGIN
+  state.addPersonType = 'external';
   document.getElementById('add-name').value='';
   document.getElementById('add-username').value='';
   document.getElementById('add-user-hint').textContent='';
   document.getElementById('add-phone').value='';
   document.getElementById('add-email').value='';
-  const bidEl = document.getElementById('add-beisen-uid');
-  if (bidEl) bidEl.value='';
-  if (!state.deptData?.departments?.length) {
-    const { data } = await api('/api/org/overview?scope=manage');
-    if (data.ok) state.deptData = data;
-  }
-  const manageIds = state.deptData?.manage_dept_ids || [];
-  const depts = (state.deptData?.departments||[]).filter(d => manageIds.includes(d.id));
-  if (depts.length) {
-    document.getElementById('add-dept-wrap').style.display='block';
-    document.getElementById('add-dept').innerHTML = depts.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
-  } else document.getElementById('add-dept-wrap').style.display='none';
-  // AI-GEN-BEGIN
-  const roleSel = document.getElementById('add-role');
-  if (roleSel) {
-    let roles = (state.roleAdmin?.roles || []).filter(r => !['employee_a','employee_b'].includes(r.role));
-    if (!roles.length) {
-      const { data: rd } = await api('/api/admin/roles');
-      if (rd.ok) {
-        state.roleAdmin = rd;
-        roles = (rd.roles || []).filter(r => !['employee_a','employee_b'].includes(r.role));
-      }
-    }
-    if (roles.length) {
-      roleSel.innerHTML = roles.map(r =>
-        `<option value="${r.role}" ${r.role==='employee'?'selected':''}>${r.label}</option>`
-      ).join('');
-    }
-  }
-  // AI-GEN-END
   openModal('m-add');
+  // AI-GEN-END
 }
 // AI-GEN-BEGIN
 async function openEditMember(uid){
@@ -4844,9 +4907,9 @@ async function submitSyncDiff(){
 }
 // AI-GEN-END
 function pickPersonType(el){
-  document.querySelectorAll('#add-ptype div').forEach(d => d.classList.remove('on'));
-  el.classList.add('on');
-  state.addPersonType = el.dataset.t;
+  // AI-GEN-BEGIN
+  state.addPersonType = 'external';
+  // AI-GEN-END
 }
 async function previewUser(){
   const name = document.getElementById('add-name').value.trim();
@@ -4859,18 +4922,19 @@ async function previewUser(){
   }
 }
 async function submitAdd(){
+  // AI-GEN-BEGIN
   const body = {
     display_name: document.getElementById('add-name').value.trim(),
     username: document.getElementById('add-username').value.trim(),
     phone: document.getElementById('add-phone').value.trim(),
     email: document.getElementById('add-email').value.trim(),
-    role: document.getElementById('add-role').value,
-    dept_id: document.getElementById('add-dept')?.value,
-    person_type: state.addPersonType || 'internal',
+    role: 'employee_a',
+    person_type: 'external',
   };
   const { data } = await api('/api/dept/members', { method:'POST', body: JSON.stringify(body) });
   if (!data.ok) return toast(data.error);
   toast(data.message); closeModal('m-add'); renderMain();
+  // AI-GEN-END
 }
 function openImport(){
   document.getElementById('import-csv').value = '周九,13900000009,zhoujiu@lecoo.com\n吴十,13900000010,wushi@lecoo.com';
