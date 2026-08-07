@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 from datetime import datetime
@@ -469,16 +470,22 @@ def _remove_db_files() -> None:
 
 
 def connect() -> sqlite3.Connection:
+    # AI-GEN-BEGIN
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=30)
+    # Flask threaded + 多请求共用：允许跨线程持有连接对象（每请求仍各自 connect）
+    conn = sqlite3.connect(DB_PATH, timeout=60, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    # AI-GEN-BEGIN
-    try:
-        conn.execute("PRAGMA journal_mode = WAL")
-    except sqlite3.OperationalError:
-        # 绑定挂载偶发不支持 WAL，回退 DELETE 保证可读写
+    conn.execute("PRAGMA busy_timeout = 60000")
+    # Docker Desktop 绑定卷上 WAL 易 disk I/O error；可用 LEUC_SQLITE_JOURNAL=DELETE 强制
+    prefer = (os.environ.get("LEUC_SQLITE_JOURNAL") or "WAL").strip().upper()
+    if prefer == "DELETE":
         conn.execute("PRAGMA journal_mode = DELETE")
+    else:
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+        except sqlite3.OperationalError:
+            conn.execute("PRAGMA journal_mode = DELETE")
     # AI-GEN-END
     return conn
 

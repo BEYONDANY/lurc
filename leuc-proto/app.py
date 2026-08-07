@@ -49,6 +49,7 @@ import base64
 import hashlib
 import json
 import secrets
+import threading
 import uuid
 from datetime import datetime, timedelta
 from functools import wraps
@@ -218,8 +219,26 @@ def ensure_system_admin(conn) -> None:
 # AI-GEN-END
 
 
-def ensure_db():
-    """无种子或旧结构时强制重建（演示库）。"""
+# AI-GEN-BEGIN
+_DB_ENSURE_LOCK = threading.Lock()
+_DB_ENSURED = False
+
+
+def ensure_db(force: bool = False):
+    """无种子或旧结构时强制重建（演示库）。启动后默认只跑一次，避免 poll 并发打爆 SQLite。"""
+    global _DB_ENSURED
+    if _DB_ENSURED and not force:
+        return
+    with _DB_ENSURE_LOCK:
+        if _DB_ENSURED and not force:
+            return
+        _ensure_db_locked()
+        _DB_ENSURED = True
+
+
+def _ensure_db_locked():
+    """ensure_db 持锁后的实际逻辑。"""
+    # AI-GEN-END
     init_db(force=False)
     conn = connect()
     try:
@@ -535,10 +554,14 @@ ensure_db()  # 启动/热更新：多级部门 + 准入模式
 
 
 def get_db():
+    # AI-GEN-BEGIN
     if "db" not in g:
-        ensure_db()
+        # 初始化已在启动时完成；请求路径不再反复 executescript
+        if not _DB_ENSURED:
+            ensure_db()
         g.db = connect()
     return g.db
+    # AI-GEN-END
 
 
 @app.teardown_appcontext

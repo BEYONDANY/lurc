@@ -10,6 +10,8 @@ services:
       LEUC_HOST: "0.0.0.0"
       LEUC_PORT: "5055"
       LEUC_FORCE_INIT: "${LEUC_FORCE_INIT:-0}"
+      # Windows 绑定卷上 WAL 不稳定，Docker 默认 DELETE
+      LEUC_SQLITE_JOURNAL: "${LEUC_SQLITE_JOURNAL:-DELETE}"
     # 有 .env 时加载 LeOrg / 北森配置；没有也不阻塞启动
     env_file:
       - path: .env
