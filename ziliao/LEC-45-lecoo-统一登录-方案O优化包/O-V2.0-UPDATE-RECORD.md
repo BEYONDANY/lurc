@@ -166,6 +166,11 @@
 1. 系统账号管理北森同步改为拉 LeOrg `/v1/employees` 的 `beisen_id` 写入账号池。
 2. LeOrg 失败时降级用本系统组织人员的 `beisen_user_id`。
 
+## 2026-08-07 账号池分页与宽屏（leuc-proto）
+
+1. 子系统账号池服务端分页（page/page_size）。
+2. 舞台最大宽 1680px，参考 Linear/Intercom 轻表面风格。
+
 ## 2026-08-07 业务系统管理可编辑（leuc-proto）
 
 1. 状态卡增加「编辑」，复用添加系统弹窗；`code` / `client_id` 只读不可改。

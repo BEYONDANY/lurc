@@ -259,10 +259,28 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 .chat-input input{flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px}
 .chat-input button{padding:8px 12px;border:0;border-radius:8px;background:var(--pri);color:#fff;cursor:pointer;font-size:12px}
 /* AI-GEN-END */
-.toast{position:fixed;right:24px;bottom:24px;background:#101838;color:#fff;padding:12px 16px;border-radius:10px;font-size:12.5px;z-index:300;display:none;max-width:360px}
+.toast{position:fixed;right:24px;bottom:24px;background:#0F172A;color:#fff;padding:12px 16px;border-radius:10px;font-size:12.5px;z-index:300;display:none;max-width:360px}
 .toast.show{display:block;bottom:90px}
-.footer-tip{max-width:1280px;margin:0 auto 32px;color:#5F6FA0;font-size:11.5px;text-align:center;line-height:1.8}
-@media(max-width:900px){.login-wrap,.app,.g2,.g3{flex-direction:column;grid-template-columns:1fr}.side{width:100%}}
+.footer-tip{max-width:var(--stage-max);margin:0 auto 28px;color:#94A3B8;font-size:11.5px;text-align:center;line-height:1.8;padding:0 12px}
+@media(max-width:900px){.login-wrap,.app,.g2,.g3{flex-direction:column;grid-template-columns:1fr}.side{width:100%}.stage{width:calc(100% - 12px)}}
+/* AI-GEN-BEGIN */
+.sa-pool-card{padding:0;overflow:hidden;border:1px solid var(--hairline);box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.sa-pool-card .sa-pool-hd{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 16px;border-bottom:1px solid var(--line);background:#FAFBFC}
+.sa-pool-card .sa-pool-hd h4{margin:0;font-size:14px;font-weight:600}
+.sa-table-wrap{overflow:auto;max-height:min(62vh,720px)}
+.sa-accounts-table{min-width:1120px;table-layout:auto}
+.sa-accounts-table th{position:sticky;top:0;z-index:1;background:#F8FAFC}
+.pager{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--line);background:#FAFBFC}
+.pager .pager-meta{font-size:12.5px;color:var(--muted)}
+.pager .pager-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pager select{padding:5px 8px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;background:#fff}
+.pager .btn[disabled]{opacity:.45;cursor:not-allowed}
+.by-sys-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+@media(min-width:1400px){
+  .main{padding:28px 36px 40px}
+  .org-layout{grid-template-columns:260px 1fr}
+}
+/* AI-GEN-END */
 /* AI-GEN-END */
 </style>
 </head>
