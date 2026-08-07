@@ -456,12 +456,30 @@ def preview_unique_usernames(
     return out
 
 
+def _remove_db_files() -> None:
+    # AI-GEN-BEGIN
+    # Docker Desktop(Windows 绑定卷) 上只删 .db 会留下 -wal/-shm，易触发 disk I/O error
+    for p in (DB_PATH, Path(str(DB_PATH) + "-wal"), Path(str(DB_PATH) + "-shm")):
+        try:
+            if p.exists():
+                p.unlink()
+        except OSError:
+            pass
+    # AI-GEN-END
+
+
 def connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
+    # AI-GEN-BEGIN
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+    except sqlite3.OperationalError:
+        # 绑定挂载偶发不支持 WAL，回退 DELETE 保证可读写
+        conn.execute("PRAGMA journal_mode = DELETE")
+    # AI-GEN-END
     return conn
 
 
@@ -942,8 +960,10 @@ def backfill_demo_beisen_user_ids(conn: sqlite3.Connection) -> None:
 
 
 def init_db(force: bool = False) -> None:
-    if force and DB_PATH.exists():
-        DB_PATH.unlink()
+    # AI-GEN-BEGIN
+    if force:
+        _remove_db_files()
+    # AI-GEN-END
     conn = connect()
     conn.executescript(SCHEMA)
     migrate_schema(conn)
