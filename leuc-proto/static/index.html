@@ -470,7 +470,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 <div class="toast" id="toast"></div>
 
 <!-- AI-GEN-BEGIN -->
-<div class="mask" id="m-sec"><div class="modal" style="max-width:420px">
+<div class="mask" id="m-sec"><div class="modal modal-md">
   <h3 id="sec-modal-title">安全管理</h3>
   <div class="note" id="sec-modal-hint" style="margin-bottom:12px"></div>
   <div id="sec-modal-body"></div>
@@ -512,7 +512,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 </div></div>
 
 <!-- AI-GEN-BEGIN -->
-<div class="mask" id="m-edit-member"><div class="modal" style="max-width:480px">
+<div class="mask" id="m-edit-member"><div class="modal modal-md">
   <h3>编辑人员</h3>
   <div class="callout" id="edit-member-hint">可改姓名、部门、手机、邮箱与状态；关闭后可再打开。</div>
   <input type="hidden" id="edit-member-id">
@@ -533,7 +533,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   </div>
 </div></div>
 
-<div class="mask" id="m-sync-diff"><div class="modal" style="max-width:720px">
+<div class="mask" id="m-sync-diff"><div class="modal modal-lg" style="max-width:720px">
   <h3 id="sync-diff-title">同步变更确认</h3>
   <div class="callout" id="sync-diff-hint">以下为与 LeOrg 的差异，勾选后接受才会写入本地。</div>
   <div class="toolbar" style="margin-bottom:8px">
@@ -569,7 +569,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 </div></div>
 
 <!-- AI-GEN-BEGIN -->
-<div class="mask" id="m-add-sys"><div class="modal" style="max-width:560px">
+<div class="mask" id="m-add-sys"><div class="modal modal-md">
   <h3 id="sys-form-title">添加登录系统</h3>
   <div class="callout" id="sys-form-hint">添加到「可登录系统」目录；账号申请读取此列表。仅<strong>超级管理员</strong>可添加并指定多名<strong>系统管理员</strong>。</div>
   <div class="field"><label>系统名称</label><input id="sys-name" placeholder="如：客服系统"></div>
@@ -607,7 +607,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 <!-- AI-GEN-END -->
 
 <!-- AI-GEN-BEGIN -->
-<div class="mask" id="m-set-expire"><div class="modal" style="max-width:440px">
+<div class="mask" id="m-set-expire"><div class="modal modal-md">
   <h3>设置账号有效期</h3>
   <div class="callout" id="expire-hint">为已选人员设置有效期，或勾选永不过期。</div>
   <div class="field"><label>快捷选项</label>
@@ -734,7 +734,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   </div>
 </div></div>
 <!-- AI-GEN-BEGIN -->
-<div class="mask" id="m-sa-add"><div class="modal" style="max-width:480px">
+<div class="mask" id="m-sa-add"><div class="modal modal-md">
   <h3 id="sa-add-title">添加子系统账号</h3>
   <div class="callout" id="sa-add-hint">须填写 SSO 登录字段对应的唯一标识。</div>
   <div class="field"><label id="sa-add-uid-lab">唯一标识 <span class="pill p-orange">必填</span></label>
@@ -750,7 +750,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
     <button class="btn btn-pri" style="width:auto" onclick="submitSaAdd()">保存</button>
   </div>
 </div></div>
-<div class="mask" id="m-sa-newbind"><div class="modal" style="max-width:440px">
+<div class="mask" id="m-sa-newbind"><div class="modal modal-md">
   <h3>新建并绑定</h3>
   <div class="callout" id="sa-newbind-hint">须填写唯一标识（SSO）与账号名。</div>
   <div class="field"><label id="sa-newbind-uid-lab">唯一标识 <span class="pill p-orange">必填</span></label>
@@ -764,7 +764,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 </div></div>
 <!-- AI-GEN-END -->
 <!-- AI-GEN-BEGIN -->
-<div class="mask" id="m-dept-owner"><div class="modal" style="max-width:560px">
+<div class="mask" id="m-dept-owner"><div class="modal modal-md">
   <h3>设置部门负责人</h3>
   <div class="callout" id="dept-owner-hint">指定主负责人与额外负责人；主负责人参与直属审批解析。</div>
   <div class="note" id="dept-owner-ids" style="margin-bottom:8px;font-family:ui-monospace,monospace;font-size:12px"></div>
@@ -787,7 +787,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 </div></div>
 <!-- AI-GEN-END -->
 <!-- AI-GEN-BEGIN -->
-<div class="mask" id="m-provision"><div class="modal" style="max-width:560px">
+<div class="mask" id="m-provision"><div class="modal modal-md">
   <h3>系统负责人 · 开通账号</h3>
   <div class="callout" id="prov-hint">从「业务系统管理 · 全部账户」选择账号并关联申请人。</div>
   <div class="note" id="prov-ids" style="margin-bottom:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.65;white-space:pre-wrap"></div>
@@ -831,7 +831,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 </div></div>
 <!-- AI-GEN-END -->
 <!-- AI-GEN-BEGIN -->
-<div class="mask" id="m-flow"><div class="modal" style="max-width:560px">
+<div class="mask" id="m-flow"><div class="modal modal-md">
   <h3 id="flow-title">流程详情</h3>
   <div class="note" id="flow-hint" style="margin-bottom:10px"></div>
   <div id="flow-body"></div>
@@ -847,7 +847,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 </div></div>
 
 <!-- AI-GEN-BEGIN -->
-<div class="mask" id="m-beisen-choose"><div class="modal" style="max-width:520px">
+<div class="mask" id="m-beisen-choose"><div class="modal modal-md">
   <h3>选择北森账号</h3>
   <div class="callout" id="beisen-choose-hint">您绑定了多个北森账号，请选择本次 SSO 使用哪一个。仅<strong>正整数北森用户ID</strong>可登录 italent。</div>
   <div id="beisen-choose-list" style="display:flex;flex-direction:column;gap:8px;margin:12px 0;max-height:320px;overflow:auto"></div>
@@ -859,7 +859,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 <!-- AI-GEN-END -->
 
 <!-- AI-GEN-BEGIN -->
-<div class="mask" id="m-add-dept"><div class="modal" style="max-width:440px">
+<div class="mask" id="m-add-dept"><div class="modal modal-md">
   <h3>添加部门</h3>
   <div class="callout">在可管范围内新增部门；默认挂在当前选中部门下。</div>
   <div class="field"><label>部门名称</label><input id="add-dept-name" placeholder="如：华北大区"></div>
@@ -3320,22 +3320,84 @@ async function sendChatLine(){
 }
 
 async function demoSysNotify(){
+  unlockNotifyAudio();
   const { data } = await api('/api/chat/system-notify', {
     method:'POST',
     body: JSON.stringify({ to_user_id: state.user.id, title:'系统通知', body:'这是一条演示系统即时提醒：审批/授权结果会以同样方式右下角弹出并播放提示音。' })
   });
   if (!data.ok) return toast(data.error || '无权限发系统消息（可用人事/超管演示）');
-  // 自己给自己发：poll 会拉到
+  // SSE 会推送；若尚未连上则主动拉一次
   await pollChat(true);
 }
 
+function handleIncomingChatMessages(msgs, forcePopup){
+  // AI-GEN-BEGIN
+  if (!msgs || !msgs.length) return;
+  const onApp = !!document.getElementById('sc-home')?.classList.contains('show')
+    || !!document.getElementById('chat-fab-wrap');
+  for (const m of msgs) {
+    if (forcePopup || onApp) pushNotifyCard(m);
+  }
+  refreshChatPeers();
+  if (state.chatPeerId != null && document.getElementById('chat-panel')?.classList.contains('show')) {
+    const cur = msgs.find(m =>
+      (m.msg_type==='system' && state.chatPeerId===0) ||
+      (m.from_user_id === state.chatPeerId)
+    );
+    if (cur) openChatPeer(state.chatPeerId, document.getElementById('chat-title').textContent);
+  }
+  // AI-GEN-END
+}
+
 async function startChatPoll(){
+  // AI-GEN-BEGIN
   if (state._chatPollTimer) clearInterval(state._chatPollTimer);
+  if (state._chatEs) {
+    try { state._chatEs.close(); } catch (e) {}
+    state._chatEs = null;
+  }
   state.chatSinceId = state.chatSinceId || 0;
-  // 对齐游标
+  // 对齐游标（不弹历史）
   const { data } = await api('/api/chat/poll?since_id=' + state.chatSinceId);
   if (data.ok) state.chatSinceId = data.max_id || state.chatSinceId;
+
+  // 优先 SSE 实时推送；失败则回退 2.5s 轮询
+  if (typeof EventSource !== 'undefined') {
+    try {
+      const es = new EventSource('/api/chat/stream?since_id=' + (state.chatSinceId || 0));
+      state._chatEs = es;
+      es.addEventListener('ready', (ev) => {
+        try {
+          const d = JSON.parse(ev.data || '{}');
+          if (d.max_id) state.chatSinceId = Math.max(state.chatSinceId || 0, d.max_id);
+        } catch (e) {}
+      });
+      es.addEventListener('message', (ev) => {
+        try {
+          const d = JSON.parse(ev.data || '{}');
+          if (!d.ok) return;
+          if (d.max_id) state.chatSinceId = Math.max(state.chatSinceId || 0, d.max_id);
+          handleIncomingChatMessages(d.messages || [], false);
+        } catch (e) {}
+      });
+      es.addEventListener('ping', (ev) => {
+        try {
+          const d = JSON.parse(ev.data || '{}');
+          if (d.max_id) state.chatSinceId = Math.max(state.chatSinceId || 0, d.max_id);
+        } catch (e) {}
+      });
+      es.onerror = () => {
+        try { es.close(); } catch (e) {}
+        if (state._chatEs === es) state._chatEs = null;
+        if (!state._chatPollTimer) {
+          state._chatPollTimer = setInterval(() => pollChat(false), 2500);
+        }
+      };
+      return;
+    } catch (e) { /* fallback below */ }
+  }
   state._chatPollTimer = setInterval(() => pollChat(false), 2500);
+  // AI-GEN-END
 }
 
 async function pollChat(forcePopup){
@@ -3345,23 +3407,12 @@ async function pollChat(forcePopup){
   const msgs = data.messages || [];
   if (msgs.length) {
     state.chatSinceId = data.max_id;
-    for (const m of msgs) {
-      if (forcePopup || document.getElementById('sc-home')?.classList.contains('show')) {
-        pushNotifyCard(m);
-      }
-    }
-    refreshChatPeers();
-    if (state.chatPeerId != null && document.getElementById('chat-panel')?.classList.contains('show')) {
-      const cur = msgs.find(m =>
-        (m.msg_type==='system' && state.chatPeerId===0) ||
-        (m.from_user_id === state.chatPeerId)
-      );
-      if (cur) openChatPeer(state.chatPeerId, document.getElementById('chat-title').textContent);
-    }
+    handleIncomingChatMessages(msgs, forcePopup);
   } else if (data.max_id) {
     state.chatSinceId = Math.max(state.chatSinceId || 0, data.max_id);
   }
 }
+
 
 async function renderDept(el) { return renderOrg(el); }
 
@@ -5126,7 +5177,7 @@ async function openEditSysOwners(sid){
   renderOwnerChecks(sys.owner_user_ids || [], 'edit-owners-box');
   secModalMode = 'sys_owners';
   const modal = document.querySelector('#m-sec .modal');
-  if (modal) modal.style.maxWidth = '480px';
+  if (modal) { modal.classList.add('modal-md'); modal.style.maxWidth = ''; }
   openModal('m-sec');
 }
 async function toggleHasSensitive(id, flag){
