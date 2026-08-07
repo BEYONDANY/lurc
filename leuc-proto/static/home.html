@@ -174,7 +174,9 @@ async function enterApp(code) {
   sessionStorage.setItem('erp_pkce_verifier', verifier);
   sessionStorage.setItem('erp_oauth_state', state);
   sessionStorage.setItem('erp_oauth_app', code);
-  const redirect_uri = s.portal_redirect || (`http://127.0.0.1:5055/demo/home/callback?app=${code}`);
+  // AI-GEN-BEGIN
+  const redirect_uri = s.portal_redirect || (`${location.origin}/demo/home/callback?app=${code}`);
+  // AI-GEN-END
   sessionStorage.setItem('erp_oauth_redirect', redirect_uri);
   const q = new URLSearchParams({
     client_id: s.client_id,

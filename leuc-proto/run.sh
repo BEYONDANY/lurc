@@ -27,6 +27,6 @@ if ! arch -arm64 .venv/bin/python -c "import platform,cryptography; assert platf
   arch -arm64 .venv/bin/python -c "import platform,cryptography; assert platform.machine()=='arm64'; from beisen_sso import status_dict; assert status_dict()['enabled']"
 fi
 
-echo "[leuc] 使用 arm64 .venv 启动 http://127.0.0.1:5055"
+echo "[leuc] 使用 arm64 .venv 启动 http://0.0.0.0:5055 （本机 127.0.0.1 / 手机用局域网 IP）"
 exec arch -arm64 .venv/bin/python app.py
 # AI-GEN-END

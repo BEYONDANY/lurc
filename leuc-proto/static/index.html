@@ -577,7 +577,9 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
     <input id="sys-code" placeholder="cs"></div>
   <div class="field"><label>client_id <span class="note" id="sys-client-lock" style="display:none">不可变</span></label>
     <input id="sys-client" placeholder="client_cs"></div>
-  <div class="field"><label>回调地址 redirect_uri</label><input id="sys-cb" value="http://127.0.0.1:5055/oidc/callback?app=cs"></div>
+  <!-- AI-GEN-BEGIN -->
+  <div class="field"><label>回调地址 redirect_uri</label><input id="sys-cb" value=""></div>
+  <!-- AI-GEN-END -->
   <div class="field"><label>准入方式</label>
     <div class="stepup" id="sys-mode">
       <div data-m="open" onclick="pickSysMode(this)"><b>全员登录</b>无需开通</div>
@@ -5711,7 +5713,9 @@ function openAddSys(){
   document.getElementById('sys-name').value = '';
   codeEl.value = '';
   clientEl.value = '';
-  document.getElementById('sys-cb').value = 'http://127.0.0.1:5055/oidc/callback?app=';
+  // AI-GEN-BEGIN
+  document.getElementById('sys-cb').value = `${location.origin}/oidc/callback?app=`;
+  // AI-GEN-END
   document.getElementById('sys-sso-field').value = 'account_name';
   document.getElementById('sys-owners-field').style.display = '';
   renderOwnerChecks([], 'sys-owners-box');

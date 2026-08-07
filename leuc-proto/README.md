@@ -10,7 +10,10 @@ pip install -r requirements.txt
 python app.py
 ```
 
-浏览器打开：http://127.0.0.1:5055
+浏览器打开：http://127.0.0.1:5055  
+同网手机：用电脑局域网 IP，如 `http://192.168.x.x:5055`（服务默认监听 `0.0.0.0:5055`）
+
+可用环境变量覆盖：`LEUC_HOST` / `LEUC_PORT`。
 
 重建种子数据（会删除库）：
 
