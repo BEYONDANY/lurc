@@ -12,6 +12,30 @@ python app.py
 
 浏览器打开：http://127.0.0.1:5055
 
+### Docker 本地部署（推荐）
+
+```bash
+cd leuc-proto
+
+# 可选：配置 LeOrg / 北森
+cp -n .env.example .env
+
+# 构建并启动（前台看日志用 up；后台加 -d）
+docker compose up --build -d
+
+# 查看日志 / 停止
+docker compose logs -f
+docker compose down
+```
+
+打开：http://127.0.0.1:5055  
+手机同网访问：`http://<电脑局域网IP>:5055`
+
+说明：
+- 数据持久化在 `./data`（SQLite）
+- 端口可用环境变量覆盖：`LEUC_PORT=5055 docker compose up --build -d`
+- 首次强制重建种子库（会清空）：`LEUC_FORCE_INIT=1 docker compose up --build -d`
+
 重建种子数据（会删除库）：
 
 ```bash

@@ -1,0 +1,17 @@
+# AI-GEN-BEGIN
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.git/
+.gitignore
+.DS_Store
+.env
+data/*.db
+data/*.db-*
+*.md
+!README.md
+scripts/
+docs/
+# AI-GEN-END
