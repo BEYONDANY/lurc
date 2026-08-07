@@ -679,6 +679,15 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 </div></div>
 <!-- AI-GEN-END -->
 
+<!-- AI-GEN-BEGIN -->
+<div class="mask" id="m-task-run-changes"><div class="modal" style="max-width:920px;width:92vw">
+  <h3 id="task-run-changes-title">同步变化明细</h3>
+  <div id="task-run-changes-body" style="max-height:70vh;overflow:auto"></div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-task-run-changes')">关闭</button>
+  </div>
+</div></div>
+<!-- AI-GEN-END -->
 <div class="mask" id="m-msg"><div class="modal">
   <h3>发即时消息</h3>
   <div class="note" id="msg-to">收件人：-</div>
@@ -1142,6 +1151,7 @@ function renderSide() {
       items: [
         { id: 'admin_tasks', label: '任务管理' },
         { id: 'admin_notify', label: '发信记录' },
+        { id: 'admin_audit', label: '审计日志' },
         { id: 'admin_sensitive', label: '敏感审批链' },
         { id: 'admin_roles', label: '角色与权限' },
       ],
@@ -1407,6 +1417,9 @@ async function renderMain() {
   if (state.view === 'admin_notify') {
     await renderAdminNotify(el); return;
   }
+  if (state.view === 'admin_audit') {
+    await renderAdminAudit(el); return;
+  }
   // AI-GEN-END
   if (state.view === 'admin_roles' || state.view === 'admin_perms') {
     await renderAdminRoles(el); return;
@@ -1419,6 +1432,9 @@ async function renderAdminTasks(el){
   el.innerHTML = `<div class="ptitle">任务管理</div><div class="note">加载中…</div>`;
   const { data } = await api('/api/admin/tasks');
   if (!data.ok) { el.innerHTML = `<div class="ptitle">任务管理</div><div class="warn">${data.error||'无权'}</div>`; return; }
+  const code = (data.tasks||[])[0]?.code || 'leorg_sync';
+  const { data: runData } = await api('/api/admin/tasks/'+encodeURIComponent(code)+'/runs?limit=30');
+  const runs = (runData && runData.ok ? runData.runs : []) || [];
   const rows = (data.tasks||[]).map(t => `
     <tr>
       <td><b>${t.name}</b><div class="note">${t.code}</div></td>
@@ -1435,12 +1451,33 @@ async function renderAdminTasks(el){
         <button class="btn btn-sm btn-pri" style="width:auto" onclick="runTask('${t.code}')">立即执行</button>
       </td>
     </tr>`).join('');
+  const runRows = runs.map(r => {
+    const st = r.status || '';
+    const pill = st==='ok'?'p-green':(st==='error'?'p-red':(st==='skipped'?'p-gray':'p-blue'));
+    const trig = r.trigger_type==='manual'?'手动':(r.trigger_type==='schedule'?'定时':r.trigger_type);
+    const sum = r.summary || {};
+    const cc = (sum.change_count!=null? sum.change_count : '—');
+    return `<tr>
+      <td>#${r.id}</td>
+      <td>${r.started_at||'—'}</td>
+      <td>${r.finished_at||'—'}</td>
+      <td>${trig}</td>
+      <td><span class="pill ${pill}">${st}</span></td>
+      <td class="note" style="max-width:280px">${(r.message||'').slice(0,120)}</td>
+      <td>${cc}</td>
+      <td><button class="btn btn-sm btn-line" onclick="viewTaskRunChanges(${r.id})">变化明细</button></td>
+    </tr>`;
+  }).join('');
   el.innerHTML = `
     <div class="ptitle">任务管理</div>
-    <div class="callout">统一管理后台定时任务。当前支持「同步部门和人员」：默认 6 小时自动拉取；新用户直接生成登录名，存量按唯一标识更新。</div>
+    <div class="callout">统一管理后台定时任务。当前支持「同步部门和人员」：默认 6 小时自动拉取；点击「立即执行」会写入执行记录与人员/部门变化明细。</div>
     <table class="tbl"><thead><tr>
       <th>任务</th><th>状态</th><th>频次</th><th>上次执行</th><th>下次执行</th><th>操作</th>
-    </tr></thead><tbody>${rows||'<tr><td colspan="6">暂无任务</td></tr>'}</tbody></table>`;
+    </tr></thead><tbody>${rows||'<tr><td colspan="6">暂无任务</td></tr>'}</tbody></table>
+    <div class="ptitle" style="margin-top:22px">执行记录</div>
+    <table class="tbl"><thead><tr>
+      <th>ID</th><th>开始</th><th>结束</th><th>触发</th><th>状态</th><th>摘要</th><th>变化数</th><th>明细</th>
+    </tr></thead><tbody>${runRows||'<tr><td colspan="8">暂无执行记录</td></tr>'}</tbody></table>`;
 }
 async function saveTask(code){
   const iv = Number(document.getElementById('task-iv-'+code)?.value || 6);
@@ -1456,7 +1493,44 @@ async function toggleTask(code, enabled){
 async function runTask(code){
   toast('执行中…');
   const { data } = await api('/api/admin/tasks/'+code+'/run', { method:'POST', body: '{}' });
-  toast(data.message || (data.ok?'完成':'失败')); renderMain();
+  const extra = data.change_count!=null ? `（变化 ${data.change_count}）` : '';
+  toast((data.message || (data.ok?'完成':'失败')) + extra); renderMain();
+}
+async function viewTaskRunChanges(runId){
+  const box = document.getElementById('task-run-changes-body');
+  const title = document.getElementById('task-run-changes-title');
+  if (title) title.textContent = '同步变化明细 · 执行 #'+runId;
+  if (box) box.innerHTML = '<div class="note">加载中…</div>';
+  openModal('m-task-run-changes');
+  const { data } = await api('/api/admin/task-runs/'+runId+'/changes?limit=300');
+  if (!data.ok) { box.innerHTML = `<div class="warn">${data.error||'加载失败'}</div>`; return; }
+  const typeLabel = { org:'部门', user:'人员', roster:'花名册' };
+  const chLabel = { insert:'新增', update:'更新', bind:'绑定', delete:'删除', soft_delete:'停用' };
+  const rows = (data.changes||[]).map(c => {
+    let detail = '';
+    try {
+      const d = c.detail || (c.detail_json? JSON.parse(c.detail_json): null);
+      if (d && d.before && d.after) {
+        const keys = Object.keys(d.after||{});
+        const diffs = keys.filter(k => JSON.stringify(d.before[k])!==JSON.stringify(d.after[k]))
+          .map(k => `${k}: ${d.before[k]??'—'} → ${d.after[k]??'—'}`);
+        detail = diffs.join('；') || JSON.stringify(d.after);
+      } else {
+        detail = d ? JSON.stringify(d) : (c.detail_json||'');
+      }
+    } catch(e) { detail = c.detail_json||''; }
+    return `<tr>
+      <td>${typeLabel[c.entity_type]||c.entity_type}</td>
+      <td>${chLabel[c.change_type]||c.change_type}</td>
+      <td>${c.entity_name||'—'}<div class="note">${c.entity_key||''}</div></td>
+      <td class="note" style="max-width:420px;white-space:pre-wrap;word-break:break-all">${detail}</td>
+    </tr>`;
+  }).join('');
+  box.innerHTML = `
+    <div class="note" style="margin-bottom:8px">共 ${data.total||0} 条变化</div>
+    <table class="tbl"><thead><tr>
+      <th>对象</th><th>类型</th><th>名称</th><th>变化详情</th>
+    </tr></thead><tbody>${rows||'<tr><td colspan="4">本次无明细变化</td></tr>'}</tbody></table>`;
 }
 async function renderAdminNotify(el){
   el.innerHTML = `<div class="ptitle">发信记录</div><div class="note">加载中…</div>`;
@@ -1478,6 +1552,32 @@ async function renderAdminNotify(el){
     <table class="tbl"><thead><tr>
       <th>时间</th><th>用户</th><th>渠道</th><th>目标</th><th>内容</th><th>状态</th>
     </tr></thead><tbody>${rows||'<tr><td colspan="6">暂无记录</td></tr>'}</tbody></table>`;
+}
+async function renderAdminAudit(el){
+  el.innerHTML = `<div class="ptitle">审计日志</div><div class="note">加载中…</div>`;
+  const { data } = await api('/api/admin/audit-logs?limit=150');
+  if (!data.ok) { el.innerHTML = `<div class="ptitle">审计日志</div><div class="warn">${data.error||'无权'}</div>`; return; }
+  const rows = (data.logs||[]).map(r => {
+    let detail = '';
+    try {
+      const d = r.detail!=null ? r.detail : (r.detail_json? JSON.parse(r.detail_json): null);
+      detail = typeof d === 'string' ? d : JSON.stringify(d||{}, null, 0);
+    } catch(e) { detail = r.detail_json||''; }
+    return `<tr>
+      <td class="note">${r.created_at||''}</td>
+      <td>${r.actor_name||'—'}<div class="note">${r.actor_user_id!=null?('#'+r.actor_user_id):''}</div></td>
+      <td><span class="pill p-blue">${r.action||''}</span></td>
+      <td class="note">${r.target_type||''} ${r.target_id||''}</td>
+      <td class="note" style="max-width:420px;white-space:pre-wrap;word-break:break-all">${detail}</td>
+      <td class="note">${r.ip||''}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="ptitle">审计日志</div>
+    <div class="callout">记录任务执行、任务配置变更等关键操作，便于追溯。</div>
+    <table class="tbl"><thead><tr>
+      <th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>详情</th><th>IP</th>
+    </tr></thead><tbody>${rows||'<tr><td colspan="6">暂无日志</td></tr>'}</tbody></table>`;
 }
 // AI-GEN-END
 

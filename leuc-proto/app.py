@@ -96,13 +96,20 @@ from leuc_approval_ext import (
     user_permission_snapshot,
 )
 from leuc_ops import (
+    append_sync_change_logs,
+    begin_task_run,
     extract_leorg_phone,
+    finish_task_run,
     gen_account_password,
     get_external_dept_id,
+    list_audit_logs,
     list_scheduled_tasks,
+    list_sync_changes,
+    list_task_runs,
     record_credential_notify,
     start_task_scheduler,
     update_scheduled_task,
+    write_audit_log,
 )
 # AI-GEN-END
 
@@ -7733,7 +7740,7 @@ def _apply_leorg_sync_changes(db, selected):
 # AI-GEN-END
 
 
-def _sync_leorg_organizations(db, orgs):
+def _sync_leorg_organizations(db, orgs, change_sink: list | None = None):
     """按 leorg_id upsert 部门，两遍设置 parent_id；写入 manager_leorg_emp_id。"""
     # AI-GEN-BEGIN
     inserted = 0
@@ -7768,12 +7775,39 @@ def _sync_leorg_organizations(db, orgs):
             mgr = None
         local_id = leorg_to_local.get(lid)
         if local_id:
+            before = db.execute(
+                "SELECT name, manager_leorg_emp_id FROM departments WHERE id = ?",
+                (local_id,),
+            ).fetchone()
             db.execute(
                 """UPDATE departments SET name = ?, leorg_id = ?,
                    manager_leorg_emp_id = ? WHERE id = ?""",
                 (name, lid, mgr, local_id),
             )
             updated += 1
+            # AI-GEN-BEGIN
+            before_name = before["name"] if before else None
+            before_mgr = before["manager_leorg_emp_id"] if before else None
+            if change_sink is not None and (
+                before_name != name or (before_mgr or None) != (mgr or None)
+            ):
+                change_sink.append(
+                    {
+                        "entity_type": "org",
+                        "change_type": "update",
+                        "entity_key": str(lid),
+                        "entity_name": name,
+                        "detail": {
+                            "local_id": local_id,
+                            "before": {
+                                "name": before_name,
+                                "manager_leorg_emp_id": before_mgr,
+                            },
+                            "after": {"name": name, "manager_leorg_emp_id": mgr},
+                        },
+                    }
+                )
+            # AI-GEN-END
         else:
             # 名称兜底匹配（种子通讯录已有同名部门时复用，避免重复树）
             hit = db.execute(
@@ -7788,6 +7822,16 @@ def _sync_leorg_organizations(db, orgs):
                     (lid, mgr, local_id),
                 )
                 updated += 1
+                if change_sink is not None:
+                    change_sink.append(
+                        {
+                            "entity_type": "org",
+                            "change_type": "bind",
+                            "entity_key": str(lid),
+                            "entity_name": name,
+                            "detail": {"local_id": local_id, "manager_leorg_emp_id": mgr},
+                        }
+                    )
             else:
                 cur = db.execute(
                     """INSERT INTO departments
@@ -7797,6 +7841,16 @@ def _sync_leorg_organizations(db, orgs):
                 )
                 local_id = int(cur.lastrowid)
                 inserted += 1
+                if change_sink is not None:
+                    change_sink.append(
+                        {
+                            "entity_type": "org",
+                            "change_type": "insert",
+                            "entity_key": str(lid),
+                            "entity_name": name,
+                            "detail": {"local_id": local_id, "manager_leorg_emp_id": mgr},
+                        }
+                    )
             leorg_to_local[lid] = local_id
 
     # 第二遍：挂 parent
@@ -7912,7 +7966,7 @@ def _realign_users_dept_from_leorg(db, emps):
 # AI-GEN-END
 
 
-def _sync_leorg_employees(db, emps):
+def _sync_leorg_employees(db, emps, change_sink: list | None = None):
     """幂等写入：已有用户按 leorg_emp_id/工号/邮箱/北森ID更新；否则 upsert 花名册。"""
     # AI-GEN-BEGIN
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -8007,11 +8061,59 @@ def _sync_leorg_employees(db, emps):
                 params.append(beisen_user_id)
                 beisen_filled += 1
             params.append(uid)
+            before_snap = {
+                "dept_id": user["dept_id"] if "dept_id" in user.keys() else None,
+                "display_name": user["display_name"]
+                if "display_name" in user.keys()
+                else None,
+                "email": user["email"] if "email" in user.keys() else None,
+                "phone": user["phone"] if "phone" in user.keys() else None,
+                "leorg_emp_id": user["leorg_emp_id"]
+                if "leorg_emp_id" in user.keys()
+                else None,
+            }
             db.execute(
                 f"UPDATE users SET {', '.join(sets)} WHERE id = ?",
                 params,
             )
             users_updated += 1
+            # AI-GEN-BEGIN
+            after_snap = {
+                "dept_id": dept_id,
+                "display_name": name
+                if role in ("employee", "employee_a", "employee_b") or not role
+                else before_snap.get("display_name"),
+                "email": email or before_snap.get("email"),
+                "phone": phone or before_snap.get("phone"),
+                "leorg_emp_id": int(leorg_emp_id)
+                if leorg_emp_id is not None
+                else before_snap.get("leorg_emp_id"),
+            }
+            dirty = any(
+                (before_snap.get(k) or None) != (after_snap.get(k) or None)
+                for k in ("dept_id", "display_name", "email", "phone", "leorg_emp_id")
+            )
+            if change_sink is not None and dirty:
+                change_sink.append(
+                    {
+                        "entity_type": "user",
+                        "change_type": "update",
+                        "entity_key": str(leorg_emp_id or uid),
+                        "entity_name": name,
+                        "detail": {
+                            "user_id": uid,
+                            "username": user["username"]
+                            if "username" in user.keys()
+                            else None,
+                            "before": before_snap,
+                            "after": {
+                                **after_snap,
+                                "beisen_user_id": beisen_user_id,
+                            },
+                        },
+                    }
+                )
+            # AI-GEN-END
             if leorg_emp_id is not None:
                 db.execute(
                     """UPDATE hr_sync_roster
@@ -8063,6 +8165,16 @@ def _sync_leorg_employees(db, emps):
                 ),
             )
             roster_updated += 1
+            if change_sink is not None:
+                change_sink.append(
+                    {
+                        "entity_type": "roster",
+                        "change_type": "update",
+                        "entity_key": str(leorg_emp_id or exists["id"]),
+                        "entity_name": name,
+                        "detail": {"roster_id": int(exists["id"]), "dept_id": dept_id},
+                    }
+                )
             continue
 
         # 已确认创建过的花名册：纠正部门，不再重复插入
@@ -8126,6 +8238,25 @@ def _sync_leorg_employees(db, emps):
             reason="leorg_sync_create",
         )
         roster_added += 1  # 复用计数表示新增人员
+        if change_sink is not None:
+            change_sink.append(
+                {
+                    "entity_type": "user",
+                    "change_type": "insert",
+                    "entity_key": str(leorg_emp_id or uid),
+                    "entity_name": name,
+                    "detail": {
+                        "user_id": uid,
+                        "username": username,
+                        "dept_id": dept_id,
+                        "phone": phone,
+                        "email": email,
+                        "leorg_emp_id": leorg_emp_id,
+                        "beisen_user_id": beisen_user_id,
+                        "account_expire": acct_expire,
+                    },
+                }
+            )
         # AI-GEN-END
 
     return {
@@ -11814,19 +11945,19 @@ def risk_set():
 
 
 # AI-GEN-BEGIN
-def _run_scheduled_leorg_sync(conn) -> str:
-    """定时任务：自动增量/全量拉取并应用（无预览）。"""
+def _run_scheduled_leorg_sync(conn, change_sink: list | None = None) -> tuple[str, dict]:
+    """定时/手动同步：拉取并应用；change_sink 收集明细变化。"""
     from leorg_client import LeorgClient, load_config, status_dict
 
     st = status_dict()
     if not st.get("enabled"):
-        return "LeOrg 未配置，跳过"
+        return "LeOrg 未配置，跳过", {"skipped": True}
     client = LeorgClient(load_config())
     migrate_schema(conn)
     state = _leorg_sync_state(conn) or {}
     mode = "full" if not state.get("last_full_at") else "incr"
     orgs = [o for o in (client.list_organizations(status=1) or []) if isinstance(o, dict)]
-    org_stats = _sync_leorg_organizations(conn, orgs) or {}
+    org_stats = _sync_leorg_organizations(conn, orgs, change_sink=change_sink) or {}
     if mode == "full":
         emps = (client.list_employees(emp_status=1) or []) + (
             client.list_employees(emp_status=2) or []
@@ -11848,7 +11979,7 @@ def _run_scheduled_leorg_sync(conn) -> str:
             if detail:
                 emps.append(detail)
     emps = [e for e in emps if isinstance(e, dict)]
-    emp_stats = _sync_leorg_employees(conn, emps) or {}
+    emp_stats = _sync_leorg_employees(conn, emps, change_sink=change_sink) or {}
     _resolve_dept_owners_from_leorg(conn)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     _save_leorg_sync_state(
@@ -11860,10 +11991,107 @@ def _run_scheduled_leorg_sync(conn) -> str:
         now=now,
         is_full=(mode == "full"),
     )
-    conn.commit()
-    return (
-        f"{mode} ok org={org_stats} emp={emp_stats}"
+    summary = {
+        "mode": mode,
+        "org": org_stats,
+        "emp": emp_stats,
+        "change_count": len(change_sink or []),
+    }
+    return f"{mode} ok org={org_stats} emp={emp_stats}", summary
+
+
+def _execute_leorg_sync_job(
+    conn,
+    *,
+    trigger_type: str = "schedule",
+    actor_user_id: int | None = None,
+    actor_name: str | None = None,
+    ip: str | None = None,
+) -> dict:
+    """执行同步并写入任务执行记录 / 变化明细 / 审计日志。"""
+    ensure_ops_tables = __import__("leuc_ops", fromlist=["ensure_ops_tables"]).ensure_ops_tables
+    ensure_ops_tables(conn)
+    run_id = begin_task_run(
+        conn,
+        task_code="leorg_sync",
+        trigger_type=trigger_type,
+        actor_user_id=actor_user_id,
     )
+    change_sink: list = []
+    try:
+        msg, summary = _run_scheduled_leorg_sync(conn, change_sink=change_sink)
+        status = "ok" if not summary.get("skipped") else "skipped"
+        append_sync_change_logs(conn, run_id, change_sink)
+        finish_task_run(conn, run_id, status=status, message=msg, summary=summary)
+        write_audit_log(
+            conn,
+            action="task.run",
+            actor_user_id=actor_user_id,
+            actor_name=actor_name,
+            target_type="scheduled_task",
+            target_id="leorg_sync",
+            detail={
+                "run_id": run_id,
+                "trigger": trigger_type,
+                "status": status,
+                "summary": summary,
+                "message": msg,
+            },
+            ip=ip,
+        )
+        conn.commit()
+        return {
+            "ok": status in ("ok", "skipped"),
+            "status": status,
+            "message": msg,
+            "run_id": run_id,
+            "summary": summary,
+            "change_count": len(change_sink),
+        }
+    except Exception as e:  # noqa: BLE001
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        # 回滚后重建执行失败记录（新事务）
+        try:
+            ensure_ops_tables(conn)
+            run_id2 = begin_task_run(
+                conn,
+                task_code="leorg_sync",
+                trigger_type=trigger_type,
+                actor_user_id=actor_user_id,
+            )
+            err = f"{type(e).__name__}: {e}"
+            finish_task_run(conn, run_id2, status="error", message=err, summary={"error": err})
+            write_audit_log(
+                conn,
+                action="task.run",
+                actor_user_id=actor_user_id,
+                actor_name=actor_name,
+                target_type="scheduled_task",
+                target_id="leorg_sync",
+                detail={"run_id": run_id2, "trigger": trigger_type, "status": "error", "error": err},
+                ip=ip,
+            )
+            conn.commit()
+            run_id = run_id2
+            msg = err
+        except Exception:
+            msg = f"{type(e).__name__}: {e}"
+            run_id = None
+        import sys
+        import traceback
+
+        traceback.print_exc(file=sys.stderr)
+        return {
+            "ok": False,
+            "status": "error",
+            "message": msg,
+            "run_id": run_id,
+            "summary": None,
+            "change_count": 0,
+        }
 
 
 @app.get("/api/admin/tasks")
@@ -11892,6 +12120,21 @@ def admin_tasks_update(user, code):
     )
     if not row:
         return jsonify({"ok": False, "error": "任务不存在"}), 404
+    # AI-GEN-BEGIN
+    write_audit_log(
+        db,
+        action="task.update",
+        actor_user_id=user["id"],
+        actor_name=user.get("display_name") or user.get("username"),
+        target_type="scheduled_task",
+        target_id=code,
+        detail={
+            "interval_hours": data.get("interval_hours"),
+            "enabled": data.get("enabled"),
+        },
+        ip=request.headers.get("X-Forwarded-For") or request.remote_addr,
+    )
+    # AI-GEN-END
     db.commit()
     return jsonify({"ok": True, "task": row})
 
@@ -11906,20 +12149,15 @@ def admin_tasks_run(user, code):
     db = get_db()
     migrate_schema(db)
     # AI-GEN-BEGIN
-    try:
-        msg = _run_scheduled_leorg_sync(db)
-        status = "ok"
-    except Exception as e:  # noqa: BLE001
-        msg = f"{type(e).__name__}: {e}"
-        status = "error"
-        try:
-            db.rollback()
-        except Exception:
-            pass
-        import sys
-        import traceback
-
-        traceback.print_exc(file=sys.stderr)
+    result = _execute_leorg_sync_job(
+        db,
+        trigger_type="manual",
+        actor_user_id=user["id"],
+        actor_name=user.get("display_name") or user.get("username"),
+        ip=request.headers.get("X-Forwarded-For") or request.remote_addr,
+    )
+    status = result.get("status") or "error"
+    msg = result.get("message") or ""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     task = db.execute("SELECT * FROM scheduled_tasks WHERE code = ?", (code,)).fetchone()
     iv = float(task["interval_hours"] or 6) if task else 6
@@ -11931,7 +12169,71 @@ def admin_tasks_run(user, code):
         (now, next_at, status, (msg or "")[:500], now, code),
     )
     db.commit()
-    return jsonify({"ok": status == "ok", "message": msg, "status": status})
+    return jsonify(
+        {
+            "ok": bool(result.get("ok")),
+            "message": msg,
+            "status": status,
+            "run_id": result.get("run_id"),
+            "summary": result.get("summary"),
+            "change_count": result.get("change_count") or 0,
+        }
+    )
+    # AI-GEN-END
+
+
+@app.get("/api/admin/tasks/<code>/runs")
+@login_required
+def admin_task_runs(user, code):
+    # AI-GEN-BEGIN
+    if not user_has_role(user, "super_admin", "hr_specialist"):
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    db = get_db()
+    migrate_schema(db)
+    limit = int(request.args.get("limit") or 50)
+    return jsonify({"ok": True, "runs": list_task_runs(db, code, limit=limit)})
+    # AI-GEN-END
+
+
+@app.get("/api/admin/task-runs/<int:run_id>/changes")
+@login_required
+def admin_task_run_changes(user, run_id):
+    # AI-GEN-BEGIN
+    if not user_has_role(user, "super_admin", "hr_specialist"):
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    db = get_db()
+    migrate_schema(db)
+    limit = int(request.args.get("limit") or 200)
+    offset = int(request.args.get("offset") or 0)
+    entity_type = request.args.get("entity_type") or None
+    items, total = list_sync_changes(
+        db, run_id, limit=limit, offset=offset, entity_type=entity_type
+    )
+    run = db.execute("SELECT * FROM task_run_logs WHERE id = ?", (run_id,)).fetchone()
+    return jsonify(
+        {
+            "ok": True,
+            "run": dict(run) if run else None,
+            "changes": items,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+    )
+    # AI-GEN-END
+
+
+@app.get("/api/admin/audit-logs")
+@login_required
+def admin_audit_logs(user):
+    # AI-GEN-BEGIN
+    if not user_has_role(user, "super_admin", "hr_specialist"):
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    db = get_db()
+    migrate_schema(db)
+    limit = int(request.args.get("limit") or 100)
+    action = request.args.get("action") or None
+    return jsonify({"ok": True, "logs": list_audit_logs(db, limit=limit, action=action)})
     # AI-GEN-END
 
 
@@ -11976,7 +12278,7 @@ def main():
     # 默认不强制重建，避免每次启动清空 LeOrg 同步数据；需要重建时：
     #   python -c "from db import init_db; init_db(force=True)"
     init_db(force=False)
-    start_task_scheduler(app, _run_scheduled_leorg_sync)
+    start_task_scheduler(app, _execute_leorg_sync_job)
     # 0.0.0.0：本机 + 同网手机可访问；回调按请求 Host 动态生成
     host = _os.environ.get("LEUC_HOST", "0.0.0.0")
     port = int(_os.environ.get("LEUC_PORT", "5055"))

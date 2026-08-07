@@ -122,6 +122,46 @@ def ensure_ops_tables(conn) -> None:
           sent_at TEXT
         )"""
     )
+    # AI-GEN-BEGIN
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS task_run_logs (
+          id INTEGER PRIMARY KEY,
+          task_code TEXT NOT NULL,
+          trigger_type TEXT NOT NULL,
+          actor_user_id INTEGER,
+          status TEXT NOT NULL,
+          message TEXT,
+          summary_json TEXT,
+          started_at TEXT NOT NULL,
+          finished_at TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS audit_logs (
+          id INTEGER PRIMARY KEY,
+          actor_user_id INTEGER,
+          actor_name TEXT,
+          action TEXT NOT NULL,
+          target_type TEXT,
+          target_id TEXT,
+          detail_json TEXT,
+          ip TEXT,
+          created_at TEXT NOT NULL
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS sync_change_logs (
+          id INTEGER PRIMARY KEY,
+          run_id INTEGER,
+          entity_type TEXT NOT NULL,
+          change_type TEXT NOT NULL,
+          entity_key TEXT,
+          entity_name TEXT,
+          detail_json TEXT,
+          created_at TEXT NOT NULL
+        )"""
+    )
+    # AI-GEN-END
     dept_cols = [r[1] for r in conn.execute("PRAGMA table_info(departments)").fetchall()]
     if dept_cols and "is_builtin" not in dept_cols:
         conn.execute(
@@ -213,12 +253,225 @@ def update_scheduled_task(db, code: str, *, interval_hours=None, enabled=None) -
     )
 
 
+# AI-GEN-BEGIN
+def write_audit_log(
+    db,
+    *,
+    action: str,
+    actor_user_id: int | None = None,
+    actor_name: str | None = None,
+    target_type: str | None = None,
+    target_id: str | None = None,
+    detail: Any = None,
+    ip: str | None = None,
+) -> int | None:
+    """写操作/审计日志。"""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    detail_json = None
+    if detail is not None:
+        detail_json = (
+            detail
+            if isinstance(detail, str)
+            else json.dumps(detail, ensure_ascii=False, default=str)
+        )
+    cur = db.execute(
+        """INSERT INTO audit_logs
+        (actor_user_id, actor_name, action, target_type, target_id, detail_json, ip, created_at)
+        VALUES (?,?,?,?,?,?,?,?)""",
+        (
+            actor_user_id,
+            actor_name,
+            action,
+            target_type,
+            str(target_id) if target_id is not None else None,
+            detail_json,
+            ip,
+            now,
+        ),
+    )
+    return cur.lastrowid
+
+
+def begin_task_run(
+    db,
+    *,
+    task_code: str,
+    trigger_type: str,
+    actor_user_id: int | None = None,
+) -> int:
+    """创建执行中任务记录，返回 run_id。"""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cur = db.execute(
+        """INSERT INTO task_run_logs
+        (task_code, trigger_type, actor_user_id, status, message, summary_json, started_at, finished_at)
+        VALUES (?,?,?, 'running', NULL, NULL, ?, NULL)""",
+        (task_code, trigger_type, actor_user_id, now),
+    )
+    if cur.lastrowid is None:
+        raise RuntimeError("创建任务执行记录失败")
+    return int(cur.lastrowid)
+
+
+def finish_task_run(
+    db,
+    run_id: int,
+    *,
+    status: str,
+    message: str | None = None,
+    summary: Any = None,
+) -> None:
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    summary_json = None
+    if summary is not None:
+        summary_json = (
+            summary
+            if isinstance(summary, str)
+            else json.dumps(summary, ensure_ascii=False, default=str)
+        )
+    db.execute(
+        """UPDATE task_run_logs
+        SET status=?, message=?, summary_json=?, finished_at=?
+        WHERE id=?""",
+        (status, (message or "")[:2000], summary_json, now, run_id),
+    )
+
+
+def append_sync_change_logs(db, run_id: int, changes: list[dict[str, Any]]) -> int:
+    """批量写入同步变化明细。"""
+    if not changes:
+        return 0
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    rows = []
+    for c in changes:
+        detail = c.get("detail")
+        detail_json = (
+            None
+            if detail is None
+            else (
+                detail
+                if isinstance(detail, str)
+                else json.dumps(detail, ensure_ascii=False, default=str)
+            )
+        )
+        rows.append(
+            (
+                run_id,
+                c.get("entity_type") or "unknown",
+                c.get("change_type") or "update",
+                str(c.get("entity_key") or ""),
+                c.get("entity_name"),
+                detail_json,
+                now,
+            )
+        )
+    db.executemany(
+        """INSERT INTO sync_change_logs
+        (run_id, entity_type, change_type, entity_key, entity_name, detail_json, created_at)
+        VALUES (?,?,?,?,?,?,?)""",
+        rows,
+    )
+    return len(rows)
+
+
+def list_task_runs(db, task_code: str | None = None, *, limit: int = 50) -> list[dict]:
+    limit = max(1, min(int(limit or 50), 200))
+    if task_code:
+        rows = db.execute(
+            """SELECT * FROM task_run_logs
+            WHERE task_code = ? ORDER BY id DESC LIMIT ?""",
+            (task_code, limit),
+        ).fetchall()
+    else:
+        rows = db.execute(
+            """SELECT * FROM task_run_logs ORDER BY id DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        if d.get("summary_json"):
+            try:
+                d["summary"] = json.loads(d["summary_json"])
+            except Exception:
+                d["summary"] = None
+        out.append(d)
+    return out
+
+
+def list_sync_changes(
+    db, run_id: int, *, limit: int = 200, offset: int = 0, entity_type: str | None = None
+) -> tuple[list[dict], int]:
+    limit = max(1, min(int(limit or 200), 500))
+    offset = max(0, int(offset or 0))
+    if entity_type:
+        total = db.execute(
+            "SELECT COUNT(*) AS c FROM sync_change_logs WHERE run_id=? AND entity_type=?",
+            (run_id, entity_type),
+        ).fetchone()["c"]
+        rows = db.execute(
+            """SELECT * FROM sync_change_logs
+            WHERE run_id=? AND entity_type=?
+            ORDER BY id ASC LIMIT ? OFFSET ?""",
+            (run_id, entity_type, limit, offset),
+        ).fetchall()
+    else:
+        total = db.execute(
+            "SELECT COUNT(*) AS c FROM sync_change_logs WHERE run_id=?",
+            (run_id,),
+        ).fetchone()["c"]
+        rows = db.execute(
+            """SELECT * FROM sync_change_logs
+            WHERE run_id=? ORDER BY id ASC LIMIT ? OFFSET ?""",
+            (run_id, limit, offset),
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        if d.get("detail_json"):
+            try:
+                d["detail"] = json.loads(d["detail_json"])
+            except Exception:
+                d["detail"] = d["detail_json"]
+        out.append(d)
+    return out, int(total)
+
+
+def list_audit_logs(
+    db, *, limit: int = 100, action: str | None = None
+) -> list[dict]:
+    limit = max(1, min(int(limit or 100), 300))
+    if action:
+        rows = db.execute(
+            """SELECT * FROM audit_logs WHERE action = ?
+            ORDER BY id DESC LIMIT ?""",
+            (action, limit),
+        ).fetchall()
+    else:
+        rows = db.execute(
+            """SELECT * FROM audit_logs ORDER BY id DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        if d.get("detail_json"):
+            try:
+                d["detail"] = json.loads(d["detail_json"])
+            except Exception:
+                d["detail"] = d["detail_json"]
+        out.append(d)
+    return out
+
+
+# AI-GEN-END
+
+
 _scheduler_started = False
 _scheduler_lock = threading.Lock()
 
 
-def start_task_scheduler(app, run_leorg_sync_fn) -> None:
-    """后台线程：按 scheduled_tasks 触发 LeOrg 同步。"""
+def start_task_scheduler(app, run_leorg_sync_job_fn) -> None:
+    """后台线程：按 scheduled_tasks 触发 LeOrg 同步（带执行记录）。"""
     global _scheduler_started
     with _scheduler_lock:
         if _scheduler_started:
@@ -244,18 +497,17 @@ def start_task_scheduler(app, run_leorg_sync_fn) -> None:
                         for t in tasks:
                             if t["code"] != "leorg_sync":
                                 continue
-                            try:
-                                msg = run_leorg_sync_fn(conn)
-                                status = "ok"
-                            except Exception as e:  # noqa: BLE001
-                                # AI-GEN-BEGIN
-                                msg = f"{type(e).__name__}: {e}"
-                                status = "error"
-                                try:
-                                    conn.rollback()
-                                except Exception:
-                                    pass
-                                # AI-GEN-END
+                            # AI-GEN-BEGIN
+                            result = run_leorg_sync_job_fn(
+                                conn,
+                                trigger_type="schedule",
+                                actor_user_id=None,
+                                actor_name="scheduler",
+                                ip=None,
+                            )
+                            status = result.get("status") or "error"
+                            msg = result.get("message") or ""
+                            # AI-GEN-END
                             iv = float(t["interval_hours"] or 6)
                             next_at = (datetime.now() + timedelta(hours=iv)).strftime(
                                 "%Y-%m-%d %H:%M:%S"
