@@ -614,13 +614,43 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 </div>
 <div class="mask" id="m-sa-import"><div class="modal">
   <h3>导入子系统账号</h3>
-  <div class="callout">格式：<b>唯一标识</b>,账号名,姓名,手机,邮箱,itcode（按唯一标识幂等；兼容旧 5 列格式）</div>
+  <div class="callout" id="sa-import-hint">格式：<b>唯一标识(SSO登录字段)</b>,账号名,姓名,手机,邮箱,itcode（按唯一标识幂等；兼容旧 5 列格式）</div>
   <textarea id="sa-import-csv" rows="8" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit"></textarea>
   <div class="foot">
     <button class="btn btn-line" onclick="closeModal('m-sa-import')">取消</button>
     <button class="btn btn-pri" style="width:auto" onclick="submitSaImport()">导入</button>
   </div>
 </div></div>
+<!-- AI-GEN-BEGIN -->
+<div class="mask" id="m-sa-add"><div class="modal" style="max-width:480px">
+  <h3 id="sa-add-title">添加子系统账号</h3>
+  <div class="callout" id="sa-add-hint">须填写 SSO 登录字段对应的唯一标识。</div>
+  <div class="field"><label id="sa-add-uid-lab">唯一标识 <span class="pill p-orange">必填</span></label>
+    <input id="sa-add-uid" placeholder="如北森用户ID / 外部账号ID" autocomplete="off"></div>
+  <div class="field"><label>业务系统账号名 <span class="pill p-orange">必填</span></label>
+    <input id="sa-add-name" placeholder="登录名/账号名" autocomplete="off"></div>
+  <div class="field"><label>姓名</label><input id="sa-add-display"></div>
+  <div class="field"><label>手机</label><input id="sa-add-phone"></div>
+  <div class="field"><label>邮箱</label><input id="sa-add-email"></div>
+  <div class="field"><label>itcode</label><input id="sa-add-itcode"></div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-sa-add')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitSaAdd()">保存</button>
+  </div>
+</div></div>
+<div class="mask" id="m-sa-newbind"><div class="modal" style="max-width:440px">
+  <h3>新建并绑定</h3>
+  <div class="callout" id="sa-newbind-hint">须填写唯一标识（SSO）与账号名。</div>
+  <div class="field"><label id="sa-newbind-uid-lab">唯一标识 <span class="pill p-orange">必填</span></label>
+    <input id="sa-newbind-uid" autocomplete="off"></div>
+  <div class="field"><label>业务系统账号名 <span class="pill p-orange">必填</span></label>
+    <input id="sa-newbind-name" autocomplete="off"></div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-sa-newbind')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitSaNewBind()">确认绑定</button>
+  </div>
+</div></div>
+<!-- AI-GEN-END -->
 <!-- AI-GEN-BEGIN -->
 <div class="mask" id="m-dept-owner"><div class="modal" style="max-width:560px">
   <h3>设置部门负责人</h3>
@@ -947,11 +977,6 @@ function renderSide() {
         { id: 'security', label: '安全管理' },
         { id: 'todo', label: '我的待办' },
         { id: 'apply', label: '自助申请' },
-      ],
-    },
-    {
-      name: '部门',
-      items: [
         { id: 'my_org', label: '我的部门' },
       ],
     },
@@ -988,12 +1013,12 @@ function nav(id){ state.view=id; renderSide(); renderMain(); }
 async function renderMain() {
   const h = state.home, u = state.user, el = document.getElementById('main-views');
   if (state.view === 'home') {
-    const isMgr = ['dept_owner','hr_specialist','super_admin'].includes(u.role);
     // AI-GEN-BEGIN
-    ensureHomeOrgCollapsedInit(h.org_tree || []);
+    // 路径链默认全部展开
+    state.homeOrgCollapsed = {};
     el.innerHTML = `
       <div class="ptitle">个人中心 <span class="pill p-blue">${u.role_label}</span> <span class="pill p-gray">${u.username}</span></div>
-      <div class="cards ${isMgr?'g3':'g2'}">
+      <div class="cards g2">
         <div class="card"><h4>我可登录的系统及账号</h4>
           ${h.systems.length? h.systems.map(s=>`
             <div class="sys-block"><div class="hd"><b>${s.name}</b>
@@ -1014,19 +1039,17 @@ async function renderMain() {
           <div class="note" style="margin-top:6px">点击上方数字进入对应列表</div>
           <!-- AI-GEN-END -->
         </div>
-        ${isMgr?`<div class="card"><h4>我的部门</h4>
-          <p class="note">${u.role==='hr_specialist'?'人事可管全部部门、同步与授权。':'可管理负责范围及下级。'}</p>
-          <button class="btn btn-sm btn-line" onclick="nav('my_org')">进入</button></div>`:''}
-      </div>
-      <div class="card" style="margin-top:14px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
-          <h4 style="margin:0">部门架构</h4>
-          <span class="note">仅部门节点与负责人，不含全员名单 · 可折叠</span>
+        <div class="card"><h4>我的部门</h4>
+          <div class="kv"><span class="lab">所属路径</span>
+            <b>${h.dept_path || '<span class="pill p-gray">未分配部门</span>'}</b></div>
+          <div class="kv"><span class="lab">本人</span>
+            <b>${u.display_name||'-'}（${u.username||'-'}）</b></div>
+          ${h.org_tree && h.org_tree.length ? `
+          <div class="org-tree home-org-tree" style="max-height:180px;border:0;padding:0;background:transparent;margin-top:8px">
+            ${renderHomeOrgTree(h.org_tree)}
+          </div>` : ''}
+          <button class="btn btn-sm btn-line" style="margin-top:10px" onclick="nav('my_org')">进入我的部门</button>
         </div>
-        <div class="org-tree home-org-tree" style="max-height:360px;border:0;padding:0;background:transparent">
-          ${renderHomeOrgTree(h.org_tree||[]) || '<div class="note">暂无部门数据</div>'}
-        </div>
-        <button class="btn btn-sm btn-line" style="margin-top:12px" onclick="nav('my_org')">查看完整部门与人员</button>
       </div>`;
     // AI-GEN-END
     return;
@@ -1411,7 +1434,7 @@ async function searchRoleAssign(){
   const box = document.getElementById('role-assign-box');
   if (!box) return;
   if (!q) { box.innerHTML = '<span class="note">请输入关键字</span>'; return; }
-  const { data } = await api('/api/org/overview?q='+encodeURIComponent(q));
+  const { data } = await api('/api/org/overview?scope=manage&q='+encodeURIComponent(q));
   if (!data.ok) return toast(data.error);
   const roles = (state.roleAdmin?.roles||[]).filter(r => !['employee_a','employee_b'].includes(r.role));
   const members = (data.members||[]).slice(0, 30);
@@ -1580,7 +1603,7 @@ function orgMembersTableHtml(data){
         : '<span class="pill p-blue">永不过期</span>';
       const manageable = (data.manage_dept_ids||[]).includes(m.dept_id);
       const beisenCell = m.beisen_user_id
-        ? `<code title="由 LeOrg 同步写入，不可编辑">${m.beisen_user_id}</code>`
+        ? `<code title="通讯录/LeOrg 同步字段，仅展示；SSO 须用「系统账号管理」已绑定的北森账号唯一标识">${m.beisen_user_id}</code>`
         : '<span class="note">—</span>';
       return `<tr>
         ${data.can_manage?`<td>${manageable?`<input type="checkbox" ${state.selectedIds.has(m.id)?'checked':''} onchange="togSel(${m.id},this.checked)">`:''}</td>`:''}
@@ -1678,7 +1701,7 @@ async function refreshOrgMembers(){
   if (qEl) state.deptQ = qEl.value;
   const q = state.deptQ || '';
   const deptId = state.deptFilter || '';
-  let url = '/api/org/overview?q=' + encodeURIComponent(q);
+  let url = '/api/org/overview?scope=manage&q=' + encodeURIComponent(q);
   if (deptId) url += '&dept_id=' + deptId;
   const { data } = await api(url);
   if (!data.ok) {
@@ -1750,17 +1773,62 @@ function toggleHomeOrgNode(id, ev){
 // AI-GEN-END
 
 async function renderOrg(el) {
-  el.innerHTML = `<div class="ptitle">我的部门</div><div class="note">加载中…</div>`;
-  const q = state.deptQ || '';
-  const deptId = state.deptFilter || '';
   // AI-GEN-BEGIN
+  el.innerHTML = `<div class="ptitle">我的部门</div><div class="note">加载中…</div>`;
   const canAllOrg = hasBtn('manage_all_org') || ['hr_specialist','super_admin'].includes(state.user.role);
   const showSync = hasBtn('org_sync') || canAllOrg;
   const showAdd = hasBtn('org_add');
   const showImport = hasBtn('org_import');
   const showDirect = hasBtn('direct_bind');
-  // AI-GEN-END
-  let url = '/api/org/overview?q=' + encodeURIComponent(q);
+
+  // 先拉个人视图，拿 can_manage 决定页签
+  const { data: mineData } = await api('/api/org/overview?scope=mine');
+  if (!mineData.ok) {
+    el.innerHTML = `<div class="ptitle">我的部门</div><div class="warn">${mineData.error||'加载失败'}</div>`;
+    return;
+  }
+  const canManage = !!mineData.can_manage;
+  if (!canManage) state.orgTab = 'mine';
+  else if (!state.orgTab) state.orgTab = 'mine';
+  const tab = (state.orgTab === 'manage' && canManage) ? 'manage' : 'mine';
+  state.orgTab = tab;
+
+  const tabsHtml = canManage ? `<div class="tabs">
+      <div class="${tab==='mine'?'on':''}" onclick="switchOrgTab('mine')">我的</div>
+      <div class="${tab==='manage'?'on':''}" onclick="switchOrgTab('manage')">部门管理</div>
+    </div>` : '';
+
+  if (tab === 'mine') {
+    state.deptData = { ...mineData, tree: mineData.tree || [] };
+    const path = mineData.dept_path || '';
+    const me = (mineData.members || [])[0];
+    el.innerHTML = `
+      <div class="ptitle">我的部门
+        ${mineData.unread_messages?`<span class="pill p-red">未读 ${mineData.unread_messages}</span>`:''}</div>
+      ${tabsHtml}
+      <div class="callout">仅展示<strong>本人</strong>与<strong>所属部门全路径</strong>；不展示公司全员与其它部门。</div>
+      <div class="card" style="margin-bottom:14px">
+        <h4 style="margin:0 0 8px">所属部门</h4>
+        <div style="font-size:16px;font-weight:600;line-height:1.5;color:var(--ink)">
+          ${path || '<span class="pill p-gray">未分配部门</span>'}
+        </div>
+        ${path ? `<div class="note" style="margin-top:8px">dept#${mineData.my_dept_id??'-'}</div>` : ''}
+      </div>
+      <div class="org-actions" style="margin-bottom:12px">
+        <button class="btn btn-sm btn-line" onclick="openInbox()">即时聊天</button>
+        <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('apply')">账号、权限申请</button>
+      </div>
+      <div class="card" style="padding:0;overflow:auto">
+        ${orgMembersTableHtml(mineData)}
+      </div>
+      ${!me ? '<div class="note" style="margin-top:8px">未找到本人资料</div>' : ''}`;
+    return;
+  }
+
+  // 部门管理页签
+  const q = state.deptQ || '';
+  const deptId = state.deptFilter || '';
+  let url = '/api/org/overview?scope=manage&q=' + encodeURIComponent(q);
   if (deptId) url += '&dept_id=' + deptId;
   const reqs = [api(url)];
   if (showSync) {
@@ -1773,38 +1841,36 @@ async function renderOrg(el) {
   if (showSync && results[2] && results[2].data) {
     state.leorgSync = results[2].data.sync_state || null;
   }
-
-  if (!data.ok) { el.innerHTML = `<div class="ptitle">我的部门</div><div class="warn">${data.error}</div>`; return; }
+  if (!data.ok) {
+    el.innerHTML = `<div class="ptitle">我的部门</div>${tabsHtml}<div class="warn">${data.error||'无权'}</div>`;
+    return;
+  }
   state.deptData = data;
   ensureOrgCollapsedInit(data.tree || []);
   expandOrgAncestors(data.tree || [], deptId);
-  const mode = data.can_manage
-    ? (canAllOrg ? '<span class="pill p-blue">全部可管</span>' : '<span class="pill p-orange">可管理下级</span>')
-    : '<span class="pill p-gray">只读 · 即时聊天</span>';
+  const mode = canAllOrg
+    ? '<span class="pill p-blue">全部可管</span>'
+    : '<span class="pill p-orange">可管理下级</span>';
   const roster = (syncData && syncData.ok) ? (syncData.roster || []) : [];
   el.innerHTML = `
     <div class="ptitle">我的部门 ${mode}
       ${data.unread_messages?`<span class="pill p-red">未读 ${data.unread_messages}</span>`:''}</div>
-    <div class="callout">${data.can_manage
-      ? (canAllOrg
-        ? '<strong>可管全部部门</strong>：按角色按钮权限显示添加/导入/同步/直接绑定/代人申请/有效期。'
-        : '<strong>可管本级及下级</strong>：按角色按钮权限显示操作。' +
-          (canSetAccountExpire() ? ' 已开通<strong>设置账号有效期</strong>。' : ''))
-      : '<strong>全员</strong>：可查看部门、即时聊天；「账号申请」默认为本人。'}</div>
+    ${tabsHtml}
+    <div class="callout">${canAllOrg
+      ? '<strong>可管全部部门</strong>：按角色按钮权限显示添加/导入/同步/直接绑定/代人申请/有效期。'
+      : '<strong>可管本级及下级</strong>：按角色按钮权限显示操作。' +
+        (canSetAccountExpire() ? ' 已开通<strong>设置账号有效期</strong>。' : '')}</div>
     <div class="org-actions">
       <button class="btn btn-sm btn-line" onclick="openInbox()">即时聊天</button>
       <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('apply')">账号、权限申请</button>
       ${canApplyForOthers()?`<button class="btn btn-sm btn-line" onclick="openAccountBind('apply_for')">代人申请账号/权限</button>`:''}
-      ${data.can_manage?`
-        ${showAdd?`<button class="btn btn-sm btn-line" onclick="openAdd()">添加人员</button>`:''}
-        ${showImport?`<button class="btn btn-sm btn-line" onclick="openImport()">导入</button>`:''}
-        ${canSetAccountExpire()?`<button class="btn btn-sm btn-line" onclick="openSetExpire()">设置有效期</button>`:''}
-        ${showDirect?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('direct')">直接绑定</button>`:''}
-      `:''}
+      ${showAdd?`<button class="btn btn-sm btn-line" onclick="openAdd()">添加人员</button>`:''}
+      ${showImport?`<button class="btn btn-sm btn-line" onclick="openImport()">导入</button>`:''}
+      ${canSetAccountExpire()?`<button class="btn btn-sm btn-line" onclick="openSetExpire()">设置有效期</button>`:''}
+      ${showDirect?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('direct')">直接绑定</button>`:''}
     </div>
     ${showSync?`
     <div class="card" style="margin-bottom:14px">
-      <!-- AI-GEN-BEGIN -->
       <h4>部门同步 · 待初始化 <span class="pill p-orange">${roster.length}</span>
         ${state.leorgSync?`<span class="pill p-gray">${state.leorgSync.last_mode||'-'} · ${state.leorgSync.updated_at||'未同步'}</span>`:''}
       </h4>
@@ -1818,7 +1884,6 @@ async function renderOrg(el) {
         <button class="btn btn-sm btn-line" onclick="hrPullFull()">全量同步</button>
         <button class="btn btn-sm btn-pri" style="width:auto" onclick="hrSyncAll()">全部确认创建</button>
         <button class="btn btn-sm btn-line" onclick="hrSyncSelected()">创建已勾选</button>
-        <!-- 测试用：上线前去掉「清空部门」 -->
         <button class="btn btn-sm btn-line" onclick="hrOrgClear()" style="color:#b42318;border-color:#f3b4b0" title="仅原型测试用，上线去除">清空部门（测试）</button>
       </div>
       <div style="overflow:auto;margin-top:8px">
@@ -1840,15 +1905,21 @@ async function renderOrg(el) {
           </tbody>
         </table>
       </div>
-      <!-- AI-GEN-END -->
     </div>`:''}
     <div class="org-layout">
-      <!-- AI-GEN-BEGIN -->
       <div class="org-tree" id="org-tree-panel">${orgTreeInnerHtml()}</div>
       <div id="org-right-panel">${orgRightPanelHtml(data)}</div>
-      <!-- AI-GEN-END -->
     </div>`;
+  // AI-GEN-END
 }
+
+function switchOrgTab(tab){
+  // AI-GEN-BEGIN
+  state.orgTab = tab === 'manage' ? 'manage' : 'mine';
+  renderMain();
+  // AI-GEN-END
+}
+
 
 async function openOrgHrGrant(){ return openAccountBind('direct'); }
 
@@ -1867,7 +1938,7 @@ async function openSetDeptOwner(deptId){
   const d = (state.deptData?.departments||[]).find(x => String(x.id)===String(deptId));
   if (!d) return toast('请先选择部门');
   // 拉全量子树人员作候选人（不带搜索）
-  const { data } = await api('/api/org/overview?dept_id='+deptId);
+  const { data } = await api('/api/org/overview?scope=manage&dept_id='+deptId);
   if (!data.ok) return toast(data.error);
   const members = data.members || [];
   deptOwnerDraft = {
@@ -3020,7 +3091,7 @@ async function openAccountBind(mode){
 
 async function ensureBindPeoplePool(){
   if (state.bindDraft.selfOnly) return;
-  const { data } = await api('/api/org/overview');
+  const { data } = await api('/api/org/overview?scope=manage');
   if (!data.ok) return;
   const manageIds = new Set(data.manage_dept_ids || []);
   const role = state.user?.role;
@@ -3457,7 +3528,7 @@ async function loadPickPeople(){
   // AI-GEN-BEGIN
   const isDemo = state.pickMode === 'demo_switch';
   let url = (isDemo ? '/api/demo/org-pick' : '/api/org/overview')
-    + '?q=' + encodeURIComponent(state.pickQ || '');
+    + (isDemo ? '?q=' : '?scope=manage&q=') + encodeURIComponent(state.pickQ || '');
   if (state.pickDept) url += '&dept_id=' + state.pickDept;
   // AI-GEN-END
   const { data } = await api(url);
@@ -4015,7 +4086,7 @@ async function openAdd(){
   const bidEl = document.getElementById('add-beisen-uid');
   if (bidEl) bidEl.value='';
   if (!state.deptData?.departments?.length) {
-    const { data } = await api('/api/org/overview');
+    const { data } = await api('/api/org/overview?scope=manage');
     if (data.ok) state.deptData = data;
   }
   const manageIds = state.deptData?.manage_dept_ids || [];
@@ -4184,6 +4255,21 @@ async function loadAdminSystems(el, title){
             ${canEdit?`<button class="btn btn-sm btn-line" onclick="toggleSys(${focus.id},'${focus.status==='enabled'?'disabled':'enabled'}')">${focus.status==='enabled'?'禁用系统':'启用系统'}</button>`:''}
           </div>
           <div class="kv"><span class="lab">准入方式</span><b>${focus.access_mode==='open'?'全员登录':'需账号绑定'}</b></div>
+          <!-- AI-GEN-BEGIN -->
+          <div class="kv"><span class="lab">SSO 登录字段</span>
+            <b>${focus.sso_login_field_label||focus.sso_login_field||'—'}</b>
+            ${canEdit?`<select id="sys-sso-field-${focus.id}" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;max-width:200px"
+              onchange="saveSysSsoLoginField(${focus.id}, this.value)">
+              ${(focus.sso_login_field_options||[
+                {value:'account_uid',label:'唯一标识/外部用户ID'},
+                {value:'account_name',label:'业务系统账号名'},
+                {value:'email',label:'邮箱'},
+                {value:'phone',label:'手机号'},
+                {value:'itcode',label:'工号/itcode'},
+              ]).map(o=>`<option value="${o.value}" ${o.value===(focus.sso_login_field||'account_name')?'selected':''}>${o.label}</option>`).join('')}
+            </select>`:''}
+          </div>
+          <!-- AI-GEN-END -->
           <div class="kv"><span class="lab">系统管理员</span>
             <b>${ownersLabel(focus)}</b>
             ${state.isSysSuper?`<button class="btn btn-sm btn-line" onclick="openEditSysOwners(${focus.id})">指定管理员</button>`:''}
@@ -4214,9 +4300,11 @@ async function loadAdminSystems(el, title){
             · 权限 <b>${allPerms.length}</b>
           </div>
         </div>` : '';
+  const uidCol = (focus.code==='beisen' && (focus.sso_login_field||'account_uid')==='account_uid')
+    ? '北森用户ID' : (focus.sso_login_field_label || '唯一标识');
   const accountsCard = focus ? `
         <div class="card" style="margin-bottom:12px">
-          <h4>全部账户 <span class="note">子系统账号池</span>
+          <h4>全部账户 <span class="note">子系统账号池 · SSO:${focus.sso_login_field_label||'-'}</span>
             <span class="pill p-blue">${accounts.length}</span>
             <span class="pill p-green">已绑 ${focus.account_bound_count||0}</span>
             <span class="pill p-orange">无归属 ${focus.account_unbound_count||0}</span>
@@ -4233,7 +4321,7 @@ async function loadAdminSystems(el, title){
           <div style="max-height:42vh;overflow:auto">
             <table>
               <thead><tr>
-                <th>唯一标识</th><th>子系统账号</th><th>姓名</th><th>手机</th><th>邮箱</th><th>itcode</th>
+                <th>${uidCol}</th><th>子系统账号</th><th>姓名</th><th>手机</th><th>邮箱</th><th>itcode</th>
                 <th>来源</th><th>绑定状态</th><th>归属 LEUC</th>
               </tr></thead>
               <tbody>${filteredAccts.length?filteredAccts.map(a=>`<tr>
@@ -4424,7 +4512,13 @@ async function renderSysAccounts(el){
   ]);
   if (!ov.ok) { el.innerHTML = `<div class="ptitle">系统账号管理</div><div class="warn">${ov.error}</div>`; return; }
   if (!cat.ok) { el.innerHTML = `<div class="ptitle">系统账号管理</div><div class="warn">${cat.error}</div>`; return; }
-  state.sysAcctData = ov;
+  // AI-GEN-BEGIN
+  state.sysAcctData = {
+    ...ov,
+    systems: cat.systems || ov.systems || [],
+    catalog: cat,
+  };
+  // AI-GEN-END
   const st = cat.stats || {};
   const sysOpts = (cat.systems||ov.systems||[]).map(s =>
     `<option value="${s.id}" ${String(s.id)===String(f.system_id)?'selected':''}>${s.name}</option>`).join('');
@@ -4445,7 +4539,8 @@ async function renderSysAccounts(el){
       <span class="pill p-green">已绑定 ${st.bound||0}</span>
       <span class="pill p-orange">无归属 ${st.unbound||0}</span>
     </div>
-    <div class="callout">统一管理子系统账号池：同步/导入、确认绑定，并查看全部账号绑定情况。
+    <div class="callout">统一管理子系统账号池：同步/导入/添加、确认绑定。账号须含<strong>唯一标识</strong>（各系统 SSO 登录字段；北森为北森用户ID）。
+      <strong>北森 SSO 只认此处已绑定且可登录的账号</strong>，通讯录里的北森ID不能直接登录。
       匹配字段：${(ov.match_fields||[]).join(' / ')}。</div>
     <div class="toolbar">
       <select id="sa-sys" onchange="state.acctOv.system_id=this.value;state.sysAcctFilter=this.value;renderMain()">
@@ -4455,11 +4550,12 @@ async function renderSysAccounts(el){
           onchange="state.acctOv.unbound_only=this.checked;renderMain()">
         仅看无归属
       </label>
-      <input id="sa-q" value="${(f.q||'').replace(/"/g,'&quot;')}" placeholder="搜索账号/姓名/手机/邮箱/LEUC"
+      <input id="sa-q" value="${(f.q||'').replace(/"/g,'&quot;')}" placeholder="搜索唯一标识/账号/姓名/手机/邮箱/LEUC"
         style="width:200px" onkeydown="if(event.key==='Enter'){state.acctOv.q=this.value.trim();renderMain()}">
       <button class="btn btn-sm btn-line" onclick="state.acctOv.q=document.getElementById('sa-q').value.trim();renderMain()">查询</button>
       <button class="btn btn-sm btn-line" onclick="state.acctOv={system_id:'',unbound_only:false,q:''};state.sysAcctFilter='';renderMain()">重置</button>
-      ${(hasBtn('sys_acct_sync')||state.isSysSuper)?`<button class="btn btn-sm btn-line" onclick="saSync()">模拟同步</button>
+      ${(hasBtn('sys_acct_sync')||state.isSysSuper)?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openSaAdd()">添加账号</button>
+      <button class="btn btn-sm btn-line" onclick="saSync()">模拟同步</button>
       <button class="btn btn-sm btn-line" onclick="openSaImport()">导入账号</button>`:''}
     </div>
     <div class="card" style="margin-bottom:14px">
@@ -4496,12 +4592,12 @@ async function renderSysAccounts(el){
       <h4 style="padding:14px 14px 0">子系统账号池 <span class="note">当前列出 ${st.filtered||0}</span></h4>
       <table>
         <thead><tr>
-          <th>系统</th><th>唯一标识</th><th>子系统账号</th><th>姓名</th><th>手机</th><th>邮箱</th><th>itcode</th>
+          <th>系统</th><th>唯一标识/SSO</th><th>子系统账号</th><th>姓名</th><th>手机</th><th>邮箱</th><th>itcode</th>
           <th>来源</th><th>绑定状态</th><th>归属 LEUC</th>
         </tr></thead>
         <tbody>${(cat.accounts||[]).length ? cat.accounts.map(a => `
           <tr>
-            <td>${a.system_name}<div class="note" style="margin:0">${a.system_code||''}</div></td>
+            <td>${a.system_name}<div class="note" style="margin:0">${a.system_code||''}${a.system_code==='beisen'?' · 北森用户ID':''}</div></td>
             <td><code>${a.account_uid||'-'}</code></td>
             <td><code>${a.account_name}</code></td>
             <td>${a.display_name||'-'}</td>
@@ -4597,17 +4693,43 @@ async function oaSimLeave(who){
 // AI-GEN-END
 
 async function saConfirm(grantId, createNew){
+  // AI-GEN-BEGIN
   const sel = document.querySelector(`input[name="g${grantId}"]:checked`);
-  const body = { grant_id: grantId, create_new: !!createNew };
-  if (!createNew && sel) body.account_id = Number(sel.value);
-  if (createNew) {
-    const name = prompt('新建子系统账号名', 'new_acct');
-    if (!name) return;
-    body.account_name = name;
+  if (!createNew) {
+    const body = { grant_id: grantId, create_new: false };
+    if (sel) body.account_id = Number(sel.value);
+    const { data } = await api('/api/sys-accounts/confirm-bind', { method:'POST', body: JSON.stringify(body) });
+    if (!data.ok) return toast(data.error);
+    toast(data.message); renderMain();
+    return;
   }
-  const { data } = await api('/api/sys-accounts/confirm-bind', { method:'POST', body: JSON.stringify(body) });
+  state._newBindGrantId = grantId;
+  const g = ((state.sysAcctData && state.sysAcctData.grants) || []).find(x => String(x.id)===String(grantId));
+  const sys = ((state.sysAcctData && state.sysAcctData.systems) || []).find(s => String(s.id)===String(g && g.system_id));
+  const uidLab = (sys && sys.code==='beisen') ? '北森用户ID' : ((sys && sys.sso_login_field_label) || '唯一标识');
+  document.getElementById('sa-newbind-hint').textContent =
+    `为 ${g?g.leuc_name:''} 在「${g?g.system_name:''}」新建账号并绑定；${uidLab} 为 SSO 关键字段。`;
+  document.getElementById('sa-newbind-uid-lab').innerHTML =
+    `${uidLab} <span class="pill p-orange">必填</span>`;
+  document.getElementById('sa-newbind-uid').value = '';
+  document.getElementById('sa-newbind-name').value = (g && g.leuc_username) ? `${g.leuc_username}_auto` : '';
+  openModal('m-sa-newbind');
+  // AI-GEN-END
+}
+async function submitSaNewBind(){
+  // AI-GEN-BEGIN
+  const grantId = state._newBindGrantId;
+  if (!grantId) return;
+  const account_uid = (document.getElementById('sa-newbind-uid').value || '').trim();
+  const account_name = (document.getElementById('sa-newbind-name').value || '').trim();
+  if (!account_uid || !account_name) return toast('请填写唯一标识与账号名');
+  const { data } = await api('/api/sys-accounts/confirm-bind', {
+    method:'POST',
+    body: JSON.stringify({ grant_id: grantId, create_new: true, account_uid, account_name }),
+  });
   if (!data.ok) return toast(data.error);
-  toast(data.message); renderMain();
+  toast(data.message); closeModal('m-sa-newbind'); renderMain();
+  // AI-GEN-END
 }
 async function saReject(grantId){
   const { data } = await api('/api/sys-accounts/reject', { method:'POST', body: JSON.stringify({ grant_id: grantId }) });
@@ -4622,12 +4744,23 @@ async function saSync(){
   toast(data.message); renderMain();
 }
 function openSaImport(){
+  // AI-GEN-BEGIN
   const sid = state.sysAcctFilter || state.sysAcctData?.systems?.[0]?.id;
   if (!sid) return toast('请先选择系统');
   state._importSysId = sid;
-  document.getElementById('sa-import-csv').value =
-    '唯一标识,账号名,姓名,手机,邮箱,itcode\nIMP-001,imp_user1,导入用户,13930000001,imp1@lecoo.com,impu1';
+  const sys = ((state.sysAcctData && state.sysAcctData.systems) || (state.acctOv && []) || [])
+    .concat((state.sysAcctData && state.sysAcctData.systems) || [])
+    .find(s => String(s.id)===String(sid))
+    || ((state.adminSystems||[]).find(s => String(s.id)===String(sid)));
+  const isBeisen = sys && sys.code === 'beisen';
+  const uidLab = isBeisen ? '北森用户ID' : ((sys && sys.sso_login_field_label) || '唯一标识(SSO)');
+  document.getElementById('sa-import-hint').innerHTML =
+    `格式：<b>${uidLab}</b>,账号名,姓名,手机,邮箱,itcode（按唯一标识幂等；兼容旧 5 列）`;
+  document.getElementById('sa-import-csv').value = isBeisen
+    ? '唯一标识,账号名,姓名,手机,邮箱,itcode\n630788001,imp_beisen1,导入用户,13930000001,imp1@lecoo.com,impu1'
+    : '唯一标识,账号名,姓名,手机,邮箱,itcode\nIMP-001,imp_user1,导入用户,13930000001,imp1@lecoo.com,impu1';
   openModal('m-sa-import');
+  // AI-GEN-END
 }
 async function submitSaImport(){
   const { data } = await api('/api/sys-accounts/import', {
@@ -4636,6 +4769,59 @@ async function submitSaImport(){
   });
   if (!data.ok) return toast(data.error);
   toast(data.message); closeModal('m-sa-import'); renderMain();
+}
+function openSaAdd(){
+  // AI-GEN-BEGIN
+  const sid = state.sysAcctFilter || state.acctOv?.system_id || state.sysAcctData?.systems?.[0]?.id;
+  if (!sid) return toast('请先选择系统');
+  state._addSysId = sid;
+  const sys = ((state.sysAcctData && state.sysAcctData.systems) || [])
+    .find(s => String(s.id)===String(sid))
+    || ((state.adminSystems||[]).find(s => String(s.id)===String(sid)));
+  const isBeisen = sys && sys.code === 'beisen';
+  const uidLab = isBeisen ? '北森用户ID' : ((sys && sys.sso_login_field_label) || '唯一标识');
+  document.getElementById('sa-add-title').textContent = `添加账号 · ${sys?sys.name:''}`;
+  document.getElementById('sa-add-hint').textContent =
+    `SSO 登录字段：${uidLab}（写入账号池唯一标识）。`;
+  document.getElementById('sa-add-uid-lab').innerHTML =
+    `${uidLab} <span class="pill p-orange">必填</span>`;
+  document.getElementById('sa-add-uid').value = '';
+  document.getElementById('sa-add-name').value = '';
+  document.getElementById('sa-add-display').value = '';
+  document.getElementById('sa-add-phone').value = '';
+  document.getElementById('sa-add-email').value = '';
+  document.getElementById('sa-add-itcode').value = '';
+  openModal('m-sa-add');
+  // AI-GEN-END
+}
+async function submitSaAdd(){
+  // AI-GEN-BEGIN
+  const body = {
+    system_id: Number(state._addSysId),
+    account_uid: (document.getElementById('sa-add-uid').value || '').trim(),
+    account_name: (document.getElementById('sa-add-name').value || '').trim(),
+    display_name: (document.getElementById('sa-add-display').value || '').trim(),
+    phone: (document.getElementById('sa-add-phone').value || '').trim(),
+    email: (document.getElementById('sa-add-email').value || '').trim(),
+    itcode: (document.getElementById('sa-add-itcode').value || '').trim(),
+  };
+  if (!body.account_uid) return toast('请填写唯一标识（SSO登录字段）');
+  if (!body.account_name) body.account_name = body.account_uid;
+  const { data } = await api('/api/sys-accounts', { method:'POST', body: JSON.stringify(body) });
+  if (!data.ok) return toast(data.error);
+  toast(data.message); closeModal('m-sa-add'); renderMain();
+  // AI-GEN-END
+}
+async function saveSysSsoLoginField(sid, field){
+  // AI-GEN-BEGIN
+  const { data } = await api('/api/admin/systems/'+sid+'/sso-login-field', {
+    method:'POST', body: JSON.stringify({ sso_login_field: field }),
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  state.adminSystems = null;
+  renderMain();
+  // AI-GEN-END
 }
 
 async function revealSysSecret(id){

@@ -863,7 +863,7 @@ ALL_MENUS = [
     {"id": "security", "label": "安全管理", "group": "个人"},
     {"id": "todo", "label": "我的待办", "group": "个人"},
     {"id": "apply", "label": "自助申请", "group": "个人"},
-    {"id": "my_org", "label": "我的部门", "group": "部门"},
+    {"id": "my_org", "label": "我的部门", "group": "个人"},
     {"id": "my_systems", "label": "业务系统管理", "group": "业务系统"},
     {"id": "sys_accounts", "label": "系统账号管理", "group": "业务系统"},
     {"id": "admin_sensitive", "label": "敏感审批链", "group": "系统设置"},
