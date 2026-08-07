@@ -103,6 +103,20 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 }
 .org-members-table .row-actions .btn{flex:none;white-space:nowrap}
 /* AI-GEN-END */
+/* AI-GEN-BEGIN */
+.flow-tl{list-style:none;margin:0;padding:0 0 0 4px}
+.flow-tl li{position:relative;padding:0 0 14px 18px;border-left:2px solid var(--line)}
+.flow-tl li:last-child{border-left-color:transparent;padding-bottom:0}
+.flow-tl li::before{content:"";position:absolute;left:-5px;top:4px;width:8px;height:8px;border-radius:50%;background:#C5D0E6;box-shadow:0 0 0 2px #fff}
+.flow-tl li.phase-done::before{background:var(--green)}
+.flow-tl li.phase-current::before{background:var(--orange)}
+.flow-tl li.phase-forecast::before{background:#B8C2D6}
+.flow-tl li.phase-rej::before{background:var(--red)}
+.flow-tl .ft-title{font-size:13px;font-weight:600;color:var(--ink)}
+.flow-tl .ft-meta{font-size:12px;color:var(--gray);margin-top:2px;line-height:1.55}
+.flow-preview{background:#F7FAFF;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:10px}
+.flow-preview h5{font-size:12.5px;margin:0 0 6px;color:var(--ink)}
+/* AI-GEN-END */
 .tabs{display:flex;border-bottom:1px solid var(--line);margin-bottom:12px}
 .tabs div{padding:10px 14px;cursor:pointer;font-size:13px;color:var(--gray);border-bottom:2px solid transparent}
 .tabs div.on{color:var(--blue-d);border-color:var(--blue-d);font-weight:600}
@@ -502,7 +516,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 <div class="mask" id="m-batch-grant"><div class="modal modal-xl">
   <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-shrink:0">
     <div>
-      <h3 id="bg-title" style="margin:0">账号/权限申请</h3>
+      <h3 id="bg-title" style="margin:0">账号、权限申请</h3>
     </div>
     <button type="button" class="btn btn-sm btn-line" style="width:auto" onclick="closeModal('m-batch-grant')" title="关闭">关闭</button>
   </div>
@@ -516,9 +530,15 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
       <div class="note" style="padding:12px">点击「新建一行」开始填写</div>
     </div>
   </div>
+  <!-- AI-GEN-BEGIN -->
+  <div id="bg-flow-preview" class="flow-preview" style="display:none">
+    <h5>预计审批链</h5>
+    <div id="bg-flow-preview-body" class="note" style="margin:0">选系统后自动预览</div>
+  </div>
+  <!-- AI-GEN-END -->
   <div class="foot" id="bg-foot">
     <button class="btn btn-line" onclick="closeModal('m-batch-grant')">取消</button>
-    <button class="btn btn-pri" style="width:auto" onclick="submitAccountBind('apply')">提交账号/权限申请</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitAccountBind('apply')">提交账号、权限申请</button>
   </div>
 </div></div>
 
@@ -624,17 +644,56 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 </div></div>
 <!-- AI-GEN-END -->
 <!-- AI-GEN-BEGIN -->
-<div class="mask" id="m-provision"><div class="modal" style="max-width:520px">
+<div class="mask" id="m-provision"><div class="modal" style="max-width:560px">
   <h3>系统负责人 · 开通账号</h3>
-  <div class="callout" id="prov-hint">申请创建新账号：请录入业务系统账号名并添加备注，确认后与申请人关联。</div>
+  <div class="callout" id="prov-hint">从「业务系统管理 · 全部账户」选择账号并关联申请人。</div>
   <div class="note" id="prov-ids" style="margin-bottom:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.65;white-space:pre-wrap"></div>
-  <div class="field"><label>业务系统账号名 <span class="pill p-orange">必填</span></label>
-    <input id="prov-account" placeholder="如 xuhaohao_erp" autocomplete="off"></div>
+  <div class="field">
+    <label>业务系统账号 <span class="pill p-orange">必选</span>
+      <span class="pill p-orange" id="prov-unbound-pill">无归属 —</span>
+    </label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="prov-account-display" readonly placeholder="请从账号池选择（默认无归属）" style="flex:1;cursor:pointer;background:#f8fafc" onclick="openProvAccountPicker()">
+      <input type="hidden" id="prov-account-id">
+      <input type="hidden" id="prov-account-name">
+      <button type="button" class="btn btn-sm btn-pri" style="width:auto;white-space:nowrap" onclick="openProvAccountPicker()">选择账号</button>
+    </div>
+    <div class="note" style="margin-top:6px">须从账号池选择，不可手填；默认展示无归属，可切换查看全部并支持查询。</div>
+  </div>
   <div class="field"><label>备注</label>
     <textarea id="prov-remark" rows="3" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit" placeholder="开通说明，将通知申请人"></textarea></div>
   <div class="foot">
     <button class="btn btn-line" onclick="closeModal('m-provision')">取消</button>
     <button class="btn btn-pri" style="width:auto" onclick="submitProvision()">确认开通</button>
+  </div>
+</div></div>
+<div class="mask" id="m-prov-pick"><div class="modal modal-lg" style="max-width:720px">
+  <h3>选择业务系统账号 <span class="note" id="prov-pick-sys"></span></h3>
+  <div class="toolbar" style="margin:10px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+      <input type="checkbox" id="prov-pick-unbound" checked onchange="loadProvAccountPicker()">
+      仅看无归属
+    </label>
+    <span class="pill p-orange" id="prov-pick-unbound-n">无归属 0</span>
+    <span class="pill p-blue" id="prov-pick-total-n">全部 0</span>
+    <input id="prov-pick-q" placeholder="搜索账号/姓名/手机/邮箱" style="flex:1;min-width:160px"
+      onkeydown="if(event.key==='Enter')loadProvAccountPicker()">
+    <button type="button" class="btn btn-sm btn-line" onclick="loadProvAccountPicker()">查询</button>
+  </div>
+  <div id="prov-pick-body" style="max-height:48vh;overflow:auto"></div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-prov-pick')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="confirmProvAccountPick()">确定选择</button>
+  </div>
+</div></div>
+<!-- AI-GEN-END -->
+<!-- AI-GEN-BEGIN -->
+<div class="mask" id="m-flow"><div class="modal" style="max-width:560px">
+  <h3 id="flow-title">流程详情</h3>
+  <div class="note" id="flow-hint" style="margin-bottom:10px"></div>
+  <div id="flow-body"></div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>
   </div>
 </div></div>
 <!-- AI-GEN-END -->
@@ -883,7 +942,7 @@ function renderSide() {
     {
       name: '个人',
       items: [
-        { id: 'home', label: '个人中心首页' },
+        { id: 'home', label: '个人中心' },
         { id: 'security', label: '安全管理' },
         { id: 'todo', label: '我的待办' },
         { id: 'apply', label: '自助申请' },
@@ -944,10 +1003,15 @@ async function renderMain() {
             </div>`).join('') : '<div class="note">暂无</div>'}
         </div>
         <div class="card"><h4>我的待办</h4>
-          <div class="kv"><span class="lab">待处理</span><b>${h.todos.pending.length}</b></div>
-          <div class="kv"><span class="lab">已完成</span><b>${h.todos.done.length}</b></div>
-          <div class="kv"><span class="lab">发起</span><b>${h.todos.initiated.length}</b></div>
-          <button class="btn btn-sm btn-line" style="margin-top:8px" onclick="nav('todo')">查看</button>
+          <!-- AI-GEN-BEGIN -->
+          <div class="kv todo-jump" style="cursor:pointer" onclick="state.todoTab='pending';nav('todo')">
+            <span class="lab">待处理</span><b style="color:var(--blue-d)">${h.todos.pending.length}</b></div>
+          <div class="kv todo-jump" style="cursor:pointer" onclick="state.todoTab='done';nav('todo')">
+            <span class="lab">已完成</span><b style="color:var(--blue-d)">${h.todos.done.length}</b></div>
+          <div class="kv todo-jump" style="cursor:pointer" onclick="state.todoTab='initiated';nav('todo')">
+            <span class="lab">发起</span><b style="color:var(--blue-d)">${h.todos.initiated.length}</b></div>
+          <div class="note" style="margin-top:6px">点击上方数字进入对应列表</div>
+          <!-- AI-GEN-END -->
         </div>
         ${isMgr?`<div class="card"><h4>我的组织</h4>
           <p class="note">${u.role==='hr_specialist'?'人事可管全部组织、同步与授权。':'可管理负责范围及下级。'}</p>
@@ -1042,11 +1106,16 @@ async function renderMain() {
     const labels = {pending:'待处理',done:'已完成',initiated:'发起'};
     const list = h.todos[cur]||[];
     // AI-GEN-BEGIN
+    const approverName = (t) => {
+      const a = t.current_approver;
+      if (!a) return '—';
+      return a.display_name || a.username || '—';
+    };
     el.innerHTML = `<div class="ptitle">我的待办</div>
-      <div class="callout">账号延期/账号关闭由上级审批。账号申请：直属（→一级→财务）后由<strong>系统负责人开通</strong>；新建账号须录入账号名与备注。</div>
+      <div class="callout">账号延期、账号/权限关闭由上级审批。账号、权限申请：直属（→一级→财务）后由<strong>系统负责人开通</strong>；关闭与申请均可点<strong>详情</strong>查看流程时间线与预测。</div>
       <div class="tabs">${['pending','done','initiated'].map(t=>`<div class="${t===cur?'on':''}" onclick="state.todoTab='${t}';renderMain()">${labels[t]} (${h.todos[t].length})</div>`).join('')}</div>
       <div class="card" style="padding:0;overflow:hidden"><table>
-        <thead><tr><th>事项</th><th>类型</th><th>状态</th><th>时间</th><th></th></tr></thead>
+        <thead><tr><th>事项</th><th>类型</th><th>当前审核人</th><th>进度</th><th>状态</th><th>时间</th><th></th></tr></thead>
         <tbody>${list.length?list.map(t=>{
           const ids = [
             `todo#${t.id}`,
@@ -1055,13 +1124,20 @@ async function renderMain() {
             t.system_id!=null?`系统#${t.system_id}`:'',
             t.step_key?`step=${t.step_key}`:'',
           ].filter(Boolean).join(' · ');
-          const act = cur!=='pending' ? '' : (
-            t.need_provision_form
-              ? `<button class="btn btn-sm btn-pri" style="width:auto" onclick="openProvision(${t.id})">开通</button>
-                 <button class="btn btn-sm btn-line" onclick="decideTodo(${t.id},'rejected')">驳回</button>`
-              : `<button class="btn btn-sm btn-pri" style="width:auto" onclick="decideTodo(${t.id},'approved')">通过</button>
-                 <button class="btn btn-sm btn-line" onclick="decideTodo(${t.id},'rejected')">驳回</button>`
-          );
+          const prog = t.progress
+            ? `${t.progress}${t.progress_label?` · ${t.progress_label}`:''}`
+            : '—';
+          const actBtns = [];
+          actBtns.push(`<button class="btn btn-sm btn-line" style="width:auto" onclick="openTodoFlow(${t.id})">详情</button>`);
+          if (cur === 'pending') {
+            if (t.need_provision_form) {
+              actBtns.push(`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openProvision(${t.id})">开通</button>`);
+              actBtns.push(`<button class="btn btn-sm btn-line" onclick="decideTodo(${t.id},'rejected')">驳回</button>`);
+            } else {
+              actBtns.push(`<button class="btn btn-sm btn-pri" style="width:auto" onclick="decideTodo(${t.id},'approved')">通过</button>`);
+              actBtns.push(`<button class="btn btn-sm btn-line" onclick="decideTodo(${t.id},'rejected')">驳回</button>`);
+            }
+          }
           return `<tr>
             <td>
               <div>${t.title}${t.step_order?` <span class="pill p-orange">第${t.step_order}步</span>`:''}
@@ -1069,10 +1145,13 @@ async function renderMain() {
                 ${t.with_sensitive?' <span class="pill p-red">敏感</span>':''}</div>
               <div class="note" style="font-family:ui-monospace,monospace;font-size:11px">${ids}</div>
             </td>
-            <td>${t.todo_type}</td><td>${t.status}</td><td>${t.created_at}</td>
-            <td>${act}</td>
+            <td>${t.todo_type}</td>
+            <td>${approverName(t)}</td>
+            <td>${prog}</td>
+            <td>${t.status}</td><td>${t.created_at}</td>
+            <td style="white-space:nowrap">${actBtns.join(' ')}</td>
           </tr>`;
-        }).join(''):'<tr><td colspan="5" class="note">暂无</td></tr>'}
+        }).join(''):'<tr><td colspan="7" class="note">暂无</td></tr>'}
         </tbody></table></div>`;
     // AI-GEN-END
     return;
@@ -1088,12 +1167,14 @@ async function renderMain() {
       </div>
       <div class="cards g3">
         <div class="card"><h4>账号延期</h4><p class="note">延长账号有效期 90 天 · 直属审批</p>
+          <div id="apply-preview-extend" class="flow-preview" style="margin:8px 0 10px"><h5>预计审批链</h5><div class="note" style="margin:0">加载中…</div></div>
           <button class="btn btn-sm btn-pri" style="width:auto" onclick="submitApply('account_extend')">申请</button></div>
         <div class="card"><h4>账号、权限申请</h4><p class="note">选系统与权限；敏感可勾选 · 仅本人</p>
           <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('apply')">去申请</button></div>
-        <div class="card"><h4>账号、权限关闭</h4><p class="note">关闭本人账号或敏感权限</p>
+        <div class="card"><h4>账号、权限关闭</h4><p class="note">选系统账号；关登录/权限 · 审批同申请</p>
           <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountPermClose()">去关闭</button></div>
       </div>`;
+    loadApplyPreviewBox('apply-preview-extend', { type: 'account_extend' });
     // AI-GEN-END
     return;
   }
@@ -1346,7 +1427,7 @@ function renderTreeNodes(nodes, depth=0) {
       ? `负责人：${n.owner_name}`
       : '负责人：未指定';
     return `<div>
-      <div class="node ${on?'on':''}" onclick="state.deptFilter='${n.id}';renderMain()" title="${ownerTip}">
+      <div class="node ${on?'on':''}" data-dept-id="${n.id}" onclick="selectOrgDept('${n.id}')" title="${ownerTip}">
         ${hasKids
           ? `<span class="org-caret" onclick="toggleOrgNode('${n.id}',event)">${isCollapsed?'▸':'▾'}</span>`
           : `<span class="org-caret empty"></span>`}
@@ -1394,7 +1475,7 @@ function toggleOrgNode(id, ev){
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   if (!state.orgCollapsed) state.orgCollapsed = {};
   state.orgCollapsed[id] = !state.orgCollapsed[id];
-  renderMain();
+  paintOrgTree();
 }
 function expandAllOrg(expand){
   const tree = (state.deptData && state.deptData.tree) || [];
@@ -1409,7 +1490,187 @@ function expandAllOrg(expand){
     walk(tree);
   }
   state.orgCollapsed = map;
-  renderMain();
+  paintOrgTree();
+}
+// AI-GEN-BEGIN
+function orgTreeInnerHtml(){
+  const deptId = state.deptFilter || '';
+  const tree = (state.deptData && state.deptData.tree) || [];
+  return `
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+      <span class="note" style="margin:0;flex:1">组织树</span>
+      <button type="button" class="btn btn-sm btn-line" onclick="expandAllOrg(true)">全部展开</button>
+      <button type="button" class="btn btn-sm btn-line" onclick="expandAllOrg(false)">全部收起</button>
+    </div>
+    <div class="node ${!deptId?'on':''}" data-dept-id="" onclick="selectOrgDept('')"><b>全部组织</b></div>
+    ${renderTreeNodes(tree)}`;
+}
+function paintOrgTree(){
+  const box = document.getElementById('org-tree-panel');
+  if (!box) return;
+  const top = box.scrollTop;
+  box.innerHTML = orgTreeInnerHtml();
+  box.scrollTop = top;
+}
+function highlightOrgTreeSelection(){
+  const panel = document.getElementById('org-tree-panel');
+  if (!panel) return;
+  const cur = String(state.deptFilter || '');
+  panel.querySelectorAll('.node[data-dept-id]').forEach(n => {
+    n.classList.toggle('on', String(n.getAttribute('data-dept-id') || '') === cur);
+  });
+}
+function orgMembersTableHtml(data){
+  const canExpire = canSetAccountExpire();
+  return `<table class="org-members-table">
+    <thead><tr>
+      ${data.can_manage?'<th><input type="checkbox" onchange="toggleAll(this.checked)"></th>':''}
+      <th>姓名</th><th>账号</th><th>组织</th><th>北森用户ID</th>
+      <th style="min-width:220px">关联系统账号</th><th>敏感</th>
+      ${canExpire?'<th class="col-expire">有效期</th>':''}
+      <th class="col-actions">操作</th>
+    </tr></thead>
+    <tbody>${(data.members||[]).map(m => {
+      const dname = ((data.departments||[]).find(d=>d.id===m.dept_id)||{}).name || m.dept_id;
+      const acctLines = (m.systems||[]).flatMap(s =>
+        (s.accounts||[]).map(a => {
+          const perm = a.perm_summary || a.account_label || '—';
+          const flags = [
+            a.can_login ? '' : '<span class="pill p-gray">不可登录</span>',
+            a.has_sensitive ? '<span class="pill p-red">敏感</span>' : '',
+          ].filter(Boolean).join(' ');
+          return `<div style="margin:2px 0;line-height:1.45;font-size:12.5px">
+            <b>${s.name}</b> / <code>${a.account_name}</code>
+            <div class="note" style="margin:0">权限：${perm} ${flags}</div>
+          </div>`;
+        })
+      ).join('') || '<span class="note">无关联账号</span>';
+      const expireLabel = m.account_expire
+        ? m.account_expire
+        : '<span class="pill p-blue">永不过期</span>';
+      const manageable = (data.manage_dept_ids||[]).includes(m.dept_id);
+      const beisenCell = m.beisen_user_id
+        ? `<code title="由 LeOrg 同步写入，不可编辑">${m.beisen_user_id}</code>`
+        : '<span class="note">—</span>';
+      return `<tr>
+        ${data.can_manage?`<td>${manageable?`<input type="checkbox" ${state.selectedIds.has(m.id)?'checked':''} onchange="togSel(${m.id},this.checked)">`:''}</td>`:''}
+        <td style="white-space:nowrap">${m.display_name}${m.person_type==='external'?' <span class="pill p-orange">外部</span>':''}</td>
+        <td style="white-space:nowrap"><code>${m.username}</code></td>
+        <td>${dname}</td>
+        <td style="white-space:nowrap">${beisenCell}</td>
+        <td>${acctLines}</td>
+        <td>${m.has_sensitive?'<span class="pill p-red">有</span>':'<span class="pill p-gray">无</span>'}</td>
+        ${canExpire?`<td class="col-expire">${expireLabel}</td>`:''}
+        <td class="col-actions"><div class="row-actions">
+          ${data.can_manage||m.id===state.user.id?`<button class="btn btn-sm btn-line" onclick="showPerm(${m.id})">权限</button>`:''}
+          ${canExpire&&manageable?`<button class="btn btn-sm btn-line" onclick="openSetExpire([${m.id}])">设有效期</button>`:''}
+          ${m.id!==state.user.id?`<button class="btn btn-sm btn-line" onclick="openMsg(${m.id},'${m.display_name}')">聊天</button>`:''}
+        </div></td>
+      </tr>`;
+    }).join('') || (() => {
+      const colSpan = (data.can_manage?7:6) + (canExpire?1:0) + 1;
+      return `<tr><td colspan="${colSpan}" class="note">无人员</td></tr>`;
+    })()}
+    </tbody>
+  </table>`;
+}
+function orgRightPanelHtml(data){
+  const q = state.deptQ || '';
+  const deptId = state.deptFilter || '';
+  const focusName = deptId
+    ? (((data.departments||[]).find(d=>String(d.id)===String(deptId))||{}).name || deptId)
+    : '全部';
+  let ownerCard = '';
+  if (deptId) {
+    const d = (data.departments||[]).find(x => String(x.id)===String(deptId));
+    if (d) {
+      const canSet = canSetDeptOwner(d.id);
+      const extras = (d.extra_owners||[]).map(e => e.display_name).filter(Boolean);
+      ownerCard = `<div class="card" style="margin-bottom:12px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div>
+            <h4 style="margin:0 0 6px">当前组织 · ${d.name}
+              <span class="note">dept#${d.id}</span></h4>
+            <div class="kv"><span class="lab">主负责人</span>
+              <b>${d.owner_name?`${d.owner_name}（${d.owner_username||'-'}）`:'<span class="pill p-gray">未指定</span>'}</b>
+              ${d.owner_user_id!=null?`<span class="note">uid#${d.owner_user_id}</span>`:''}
+            </div>
+            <div class="kv"><span class="lab">额外负责人</span>
+              <b>${extras.length?extras.join('、'):'<span class="note">无</span>'}</b></div>
+          </div>
+          ${canSet?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openSetDeptOwner(${d.id})">设置负责人</button>`:''}
+        </div>
+      </div>`;
+    }
+  }
+  return `
+    ${ownerCard}
+    <div class="toolbar">
+      <input id="dept-q" value="${q}" placeholder="搜索姓名/账号/手机/邮箱" style="width:200px"
+        onkeydown="if(event.key==='Enter')refreshOrgMembers()">
+      <button class="btn btn-sm btn-line" onclick="refreshOrgMembers()">查询</button>
+      <span class="note" id="org-focus-meta">当前：${focusName} · ${(data.members||[]).length} 人</span>
+    </div>
+    <div class="card" style="padding:0;overflow:auto" id="org-members-card">
+      ${orgMembersTableHtml(data)}
+    </div>`;
+}
+function paintOrgRight(data){
+  const box = document.getElementById('org-right-panel');
+  if (!box) return;
+  box.innerHTML = orgRightPanelHtml(data);
+}
+async function selectOrgDept(deptId){
+  // AI-GEN-BEGIN
+  const next = deptId == null ? '' : String(deptId);
+  if (String(state.deptFilter || '') === next && document.getElementById('org-right-panel')) {
+    highlightOrgTreeSelection();
+    return;
+  }
+  state.deptFilter = next;
+  const tree = (state.deptData && state.deptData.tree) || [];
+  const before = JSON.stringify(state.orgCollapsed || {});
+  expandOrgAncestors(tree, next);
+  const after = JSON.stringify(state.orgCollapsed || {});
+  if (before !== after || !document.getElementById('org-tree-panel')) {
+    paintOrgTree();
+  } else {
+    highlightOrgTreeSelection();
+  }
+  const right = document.getElementById('org-right-panel');
+  if (right) right.innerHTML = `<div class="note" style="padding:12px">加载中…</div>`;
+  await refreshOrgMembers();
+  // AI-GEN-END
+}
+async function refreshOrgMembers(){
+  // AI-GEN-BEGIN
+  const qEl = document.getElementById('dept-q');
+  if (qEl) state.deptQ = qEl.value;
+  const q = state.deptQ || '';
+  const deptId = state.deptFilter || '';
+  let url = '/api/org/overview?q=' + encodeURIComponent(q);
+  if (deptId) url += '&dept_id=' + deptId;
+  const { data } = await api(url);
+  if (!data.ok) {
+    toast(data.error || '加载失败');
+    return;
+  }
+  // 保留树与可管范围；成员按筛选更新
+  if (state.deptData) {
+    state.deptData.members = data.members;
+    state.deptData.focus_dept_id = data.focus_dept_id;
+    if (data.departments) state.deptData.departments = data.departments;
+    if (data.manage_dept_ids) state.deptData.manage_dept_ids = data.manage_dept_ids;
+    state.deptData.can_manage = data.can_manage;
+  } else {
+    state.deptData = data;
+  }
+  if (document.getElementById('org-right-panel')) {
+    paintOrgRight(state.deptData);
+  } else {
+    renderMain();
+  }
+  // AI-GEN-END
 }
 // AI-GEN-END
 
@@ -1490,9 +1751,6 @@ async function renderOrg(el) {
   const mode = data.can_manage
     ? (canAllOrg ? '<span class="pill p-blue">全部可管</span>' : '<span class="pill p-orange">可管理下级</span>')
     : '<span class="pill p-gray">只读 · 即时聊天</span>';
-  const focusName = deptId
-    ? ((data.departments.find(d=>String(d.id)===String(deptId))||{}).name || deptId)
-    : '全部';
   const roster = (syncData && syncData.ok) ? (syncData.roster || []) : [];
   el.innerHTML = `
     <div class="ptitle">我的组织 ${mode}
@@ -1555,101 +1813,10 @@ async function renderOrg(el) {
       <!-- AI-GEN-END -->
     </div>`:''}
     <div class="org-layout">
-      <div class="org-tree">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
-          <span class="note" style="margin:0;flex:1">组织树</span>
-          <button type="button" class="btn btn-sm btn-line" onclick="expandAllOrg(true)">全部展开</button>
-          <button type="button" class="btn btn-sm btn-line" onclick="expandAllOrg(false)">全部收起</button>
-        </div>
-        <div class="node ${!deptId?'on':''}" onclick="state.deptFilter='';renderMain()"><b>全部组织</b></div>
-        ${renderTreeNodes(data.tree||[])}
-      </div>
-      <div>
-        ${(() => {
-          // AI-GEN-BEGIN
-          if (!deptId) return '';
-          const d = (data.departments||[]).find(x => String(x.id)===String(deptId));
-          if (!d) return '';
-          const canSet = canSetDeptOwner(d.id);
-          const extras = (d.extra_owners||[]).map(e => e.display_name).filter(Boolean);
-          return `<div class="card" style="margin-bottom:12px">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
-              <div>
-                <h4 style="margin:0 0 6px">当前组织 · ${d.name}
-                  <span class="note">dept#${d.id}</span></h4>
-                <div class="kv"><span class="lab">主负责人</span>
-                  <b>${d.owner_name?`${d.owner_name}（${d.owner_username||'-'}）`:'<span class="pill p-gray">未指定</span>'}</b>
-                  ${d.owner_user_id!=null?`<span class="note">uid#${d.owner_user_id}</span>`:''}
-                </div>
-                <div class="kv"><span class="lab">额外负责人</span>
-                  <b>${extras.length?extras.join('、'):'<span class="note">无</span>'}</b></div>
-              </div>
-              ${canSet?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openSetDeptOwner(${d.id})">设置负责人</button>`:''}
-            </div>
-          </div>`;
-          // AI-GEN-END
-        })()}
-        <div class="toolbar">
-          <input id="dept-q" value="${q}" placeholder="搜索姓名/账号/手机/邮箱" style="width:200px">
-          <button class="btn btn-sm btn-line" onclick="state.deptQ=document.getElementById('dept-q').value;renderMain()">查询</button>
-          <span class="note">当前：${focusName} · ${data.members.length} 人</span>
-        </div>
-        <div class="card" style="padding:0;overflow:auto">
-          <table class="org-members-table">
-            <thead><tr>
-              ${data.can_manage?'<th><input type="checkbox" onchange="toggleAll(this.checked)"></th>':''}
-              <th>姓名</th><th>账号</th><th>组织</th><th>北森用户ID</th>
-              <th style="min-width:220px">关联系统账号</th><th>敏感</th>
-              ${canSetAccountExpire()?'<th class="col-expire">有效期</th>':''}
-              <th class="col-actions">操作</th>
-            </tr></thead>
-            <tbody>${data.members.map(m => {
-              const dname = (data.departments.find(d=>d.id===m.dept_id)||{}).name || m.dept_id;
-              // AI-GEN-BEGIN
-              const acctLines = (m.systems||[]).flatMap(s =>
-                (s.accounts||[]).map(a => {
-                  const perm = a.perm_summary || a.account_label || '—';
-                  const flags = [
-                    a.can_login ? '' : '<span class="pill p-gray">不可登录</span>',
-                    a.has_sensitive ? '<span class="pill p-red">敏感</span>' : '',
-                  ].filter(Boolean).join(' ');
-                  return `<div style="margin:2px 0;line-height:1.45;font-size:12.5px">
-                    <b>${s.name}</b> / <code>${a.account_name}</code>
-                    <div class="note" style="margin:0">权限：${perm} ${flags}</div>
-                  </div>`;
-                })
-              ).join('') || '<span class="note">无关联账号</span>';
-              const expireLabel = m.account_expire
-                ? m.account_expire
-                : '<span class="pill p-blue">永不过期</span>';
-              const manageable = data.manage_dept_ids.includes(m.dept_id);
-              const beisenCell = m.beisen_user_id
-                ? `<code title="由 LeOrg 同步写入，不可编辑">${m.beisen_user_id}</code>`
-                : '<span class="note">—</span>';
-              // AI-GEN-END
-              return `<tr>
-                ${data.can_manage?`<td>${manageable?`<input type="checkbox" ${state.selectedIds.has(m.id)?'checked':''} onchange="togSel(${m.id},this.checked)">`:''}</td>`:''}
-                <td style="white-space:nowrap">${m.display_name}${m.person_type==='external'?' <span class="pill p-orange">外部</span>':''}</td>
-                <td style="white-space:nowrap"><code>${m.username}</code></td>
-                <td>${dname}</td>
-                <td style="white-space:nowrap">${beisenCell}</td>
-                <td>${acctLines}</td>
-                <td>${m.has_sensitive?'<span class="pill p-red">有</span>':'<span class="pill p-gray">无</span>'}</td>
-                ${canSetAccountExpire()?`<td class="col-expire">${expireLabel}</td>`:''}
-                <td class="col-actions"><div class="row-actions">
-                  ${data.can_manage||m.id===state.user.id?`<button class="btn btn-sm btn-line" onclick="showPerm(${m.id})">权限</button>`:''}
-                  ${canSetAccountExpire()&&manageable?`<button class="btn btn-sm btn-line" onclick="openSetExpire([${m.id}])">设有效期</button>`:''}
-                  ${m.id!==state.user.id?`<button class="btn btn-sm btn-line" onclick="openMsg(${m.id},'${m.display_name}')">聊天</button>`:''}
-                </div></td>
-              </tr>`;
-            }).join('') || (() => {
-              const colSpan = (data.can_manage?7:6) + (canSetAccountExpire()?1:0) + 1;
-              return `<tr><td colspan="${colSpan}" class="note">无人员</td></tr>`;
-            })()}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <!-- AI-GEN-BEGIN -->
+      <div class="org-tree" id="org-tree-panel">${orgTreeInnerHtml()}</div>
+      <div id="org-right-panel">${orgRightPanelHtml(data)}</div>
+      <!-- AI-GEN-END -->
     </div>`;
 }
 
@@ -1951,15 +2118,161 @@ async function secSso(provider, action){
 // AI-GEN-END
 
 async function submitApply(type, system_name){
+  // AI-GEN-BEGIN
   const { data } = await api('/api/apply/submit', {
     method:'POST', body: JSON.stringify({ type, days:90, system_name: system_name||'' })
   });
   if (!data.ok) return toast(data.error);
-  toast(data.message);
+  const ap = data.approver || data.current_approver;
+  const extra = ap ? `｜当前审核人 ${ap.display_name||ap.username}` : '';
+  toast((data.message || '已提交') + extra);
   await enterHome();
   state.view = 'todo'; state.todoTab = 'initiated';
   renderSide(); renderMain();
+  // AI-GEN-END
 }
+
+// AI-GEN-BEGIN
+function flowPhaseClass(step){
+  if (step.status === 'rejected') return 'phase-rej';
+  return 'phase-' + (step.phase || 'forecast');
+}
+function flowStatusLabel(step){
+  const st = step.status || '';
+  if (st === 'approved') return '已通过';
+  if (st === 'rejected') return '已驳回';
+  if (st === 'skipped') return '已跳过';
+  if (st === 'pending' || step.phase === 'current') return '审批中';
+  return '等待中';
+}
+function renderFlowTimelineHtml(timeline){
+  const steps = timeline || [];
+  if (!steps.length) return '<div class="note">暂无流程步骤</div>';
+  return `<ul class="flow-tl">${steps.map(s => {
+    const a = s.assignee || {};
+    const name = a.display_name || a.username || '—';
+    const when = s.decided_at
+      ? `处理时间 ${s.decided_at}`
+      : (s.phase === 'current' ? '等待审批' : '尚未到达');
+    return `<li class="${flowPhaseClass(s)}">
+      <div class="ft-title">${s.step_order}. ${s.step_label||s.step_key}
+        <span class="pill ${s.status==='rejected'?'p-red':(s.phase==='done'?'p-green':(s.phase==='current'?'p-orange':'p-gray'))}">${flowStatusLabel(s)}</span>
+      </div>
+      <div class="ft-meta">审核人：${name} · ${when}</div>
+    </li>`;
+  }).join('')}</ul>`;
+}
+function renderFlowPreviewInline(data){
+  if (!data || !data.ok) return `<div class="note">${(data&&data.error)||'暂无法预览'}</div>`;
+  const chain = data.chain_text || (data.timeline||[]).map(s => {
+    const a = s.assignee || {};
+    return `${s.step_label}(${a.display_name||a.username||'?'})`;
+  }).join(' → ');
+  return `<div style="font-size:12.5px;line-height:1.65;color:var(--ink)">${chain||'—'}</div>
+    ${renderFlowTimelineHtml(data.timeline)}`;
+}
+async function loadApplyPreviewBox(elId, payload){
+  const box = document.getElementById(elId);
+  if (!box) return;
+  box.innerHTML = '<h5>预计审批链</h5><div class="note" style="margin:0">加载中…</div>';
+  const { data } = await api('/api/apply/preview-flow', {
+    method:'POST', body: JSON.stringify(payload || {})
+  });
+  box.innerHTML = `<h5>预计审批链</h5>${renderFlowPreviewInline(data)}`;
+}
+async function openTodoFlow(tid){
+  const { data } = await api('/api/todo/' + tid + '/flow');
+  if (!data.ok) return toast(data.error || '加载失败');
+  const app = data.application || {};
+  const todo = data.todo || {};
+  const ap = (app.applicant) || {};
+  const sy = (app.system) || {};
+  document.getElementById('flow-title').textContent = todo.title || app.title || '流程详情';
+  const cur = data.current_approver;
+  document.getElementById('flow-hint').innerHTML = [
+    ap.display_name ? `申请人 <b>${ap.display_name}</b>` : '',
+    sy.name ? `系统 <b>${sy.name}</b>` : '',
+    todo.todo_type ? `类型 <b>${todo.todo_type}</b>` : '',
+    data.progress ? `进度 <b>${data.progress}${data.progress_label?` · ${data.progress_label}`:''}</b>` : '',
+    cur ? `当前审核人 <b>${cur.display_name||cur.username}</b>` : '当前无待审步骤',
+  ].filter(Boolean).join(' · ');
+  const forecast = data.forecast || [];
+  document.getElementById('flow-body').innerHTML = `
+    <div style="margin-bottom:12px">
+      <div class="kv"><span class="lab">创建时间</span><b>${app.created_at || todo.created_at || '—'}</b></div>
+      <div class="kv"><span class="lab">更新时间</span><b>${app.updated_at || '—'}</b></div>
+      <div class="kv"><span class="lab">申请状态</span><b>${app.status || todo.status || '—'}</b></div>
+    </div>
+    <h4 style="font-size:13px;margin:0 0 8px">流程时间线</h4>
+    ${renderFlowTimelineHtml(data.timeline)}
+    <div class="flow-preview" style="margin-top:14px">
+      <h5>流程预测（尚未到达）</h5>
+      ${forecast.length
+        ? renderFlowTimelineHtml(forecast)
+        : '<div class="note" style="margin:0">无后续步骤</div>'}
+    </div>`;
+  openModal('m-flow');
+}
+async function refreshBindFlowPreview(){
+  const wrap = document.getElementById('bg-flow-preview');
+  const body = document.getElementById('bg-flow-preview-body');
+  if (!wrap || !body) return;
+  if (!state.bindDraft || state.bindDraft.mode === 'direct') {
+    wrap.style.display = 'none';
+    return;
+  }
+  const ln = (state.bindDraft.lines || []).find(x => x.system_id) || (state.bindDraft.lines || [])[0];
+  if (!ln || !ln.system_id || !ln.uid) {
+    wrap.style.display = 'block';
+    body.innerHTML = '<div class="note" style="margin:0">选择人员与业务系统后显示预计审批链</div>';
+    return;
+  }
+  wrap.style.display = 'block';
+  body.innerHTML = '<div class="note" style="margin:0">加载中…</div>';
+  const { data } = await api('/api/apply/preview-flow', {
+    method:'POST',
+    body: JSON.stringify({
+      type: 'account_apply',
+      subject_user_id: ln.uid,
+      system_id: ln.system_id,
+      with_sensitive: !!ln.with_sensitive,
+    }),
+  });
+  body.innerHTML = renderFlowPreviewInline(data);
+}
+async function refreshCloseFlowPreview(){
+  // AI-GEN-BEGIN
+  const wrap = document.getElementById('bg-flow-preview');
+  const body = document.getElementById('bg-flow-preview-body');
+  const d = state.closeDraft;
+  if (!wrap || !body || state._bindMode !== 'close') return;
+  wrap.style.display = 'block';
+  if (!d || !d.selectedAcct) {
+    body.innerHTML = '<div class="note" style="margin:0">选择系统账号后预览</div>';
+    return;
+  }
+  const acct = (d.accounts||[]).find(a => a.id === d.selectedAcct);
+  if (!acct) return;
+  const permIds = d.perm_ids || [];
+  const perms = acct.permissions || [];
+  let type = null;
+  if (d.close_login) type = 'account_close';
+  else if (permIds.some(pid => (perms.find(p => p.id === Number(pid))||{}).is_sensitive)) type = 'sensitive_close';
+  else if (permIds.length) type = 'normal_perm';
+  if (!type) {
+    body.innerHTML = '<div class="note" style="margin:0">勾选关闭登录或权限后预览审批链</div>';
+    return;
+  }
+  body.innerHTML = '<div class="note" style="margin:0">加载中…</div>';
+  const { data } = await api('/api/apply/preview-flow', {
+    method:'POST',
+    body: JSON.stringify({ type, subject_user_id: state.user.id }),
+  });
+  body.innerHTML = renderFlowPreviewInline(data);
+  // AI-GEN-END
+}
+// AI-GEN-END
+
 async function loadSensCatalog(){
   const sel = document.getElementById('sens-perm');
   if (!sel) return;
@@ -2146,7 +2459,7 @@ async function decideTodo(id, decision, extra){
   if (!data.ok) {
     if (data.need_account_input) {
       openProvision(id);
-      return toast(data.error || '请录入账号名');
+      return toast(data.error || '请从账号池选择账号');
     }
     if (data.need_manual) {
       toast(data.error);
@@ -2165,39 +2478,170 @@ async function decideTodo(id, decision, extra){
 }
 
 let provisionTodoId = null;
+let provisionSystemId = null;
+let provisionPickSelected = null;
+
+function setProvAccountSelection(acct) {
+  // AI-GEN-BEGIN
+  const idEl = document.getElementById('prov-account-id');
+  const nameEl = document.getElementById('prov-account-name');
+  const disp = document.getElementById('prov-account-display');
+  if (!acct) {
+    idEl.value = '';
+    nameEl.value = '';
+    disp.value = '';
+    return;
+  }
+  idEl.value = acct.id;
+  nameEl.value = acct.account_name || '';
+  const label = acct.display_name ? ` · ${acct.display_name}` : '';
+  const bind = acct.bound ? '已绑定' : '无归属';
+  disp.value = `${acct.account_name || ''}${label}（${bind}）`;
+  // AI-GEN-END
+}
+
+async function refreshProvUnboundCount(systemId) {
+  // AI-GEN-BEGIN
+  const pill = document.getElementById('prov-unbound-pill');
+  if (!systemId) { pill.textContent = '无归属 —'; return; }
+  const qs = new URLSearchParams({ system_id: String(systemId), unbound_only: '1' });
+  const { data } = await api('/api/sys-accounts/catalog?' + qs.toString());
+  if (!data.ok) { pill.textContent = '无归属 —'; return; }
+  const n = (data.stats && data.stats.unbound != null)
+    ? data.stats.unbound
+    : ((data.accounts || []).length);
+  pill.textContent = `无归属 ${n}`;
+  // AI-GEN-END
+}
+
 async function openProvision(todoId){
   // AI-GEN-BEGIN
   provisionTodoId = todoId;
+  provisionPickSelected = null;
   const { data } = await api('/api/todo/'+todoId);
   if (!data.ok) return toast(data.error);
   const t = data.todo || {};
   const ap = t.applicant || {};
   const sy = t.system || {};
+  provisionSystemId = t.system_id || sy.id || null;
   document.getElementById('prov-hint').innerHTML =
     `申请人 <strong>${ap.display_name||'-'}</strong>（${ap.username||'-'}）· 系统 <strong>${sy.name||'-'}</strong>`
-    + (t.with_sensitive ? ' · <span class="pill p-red">含敏感</span>' : '');
+    + (t.with_sensitive ? ' · <span class="pill p-red">含敏感</span>' : '')
+    + `<br><span class="note">请从该系统「全部账户」中选择；默认展示无归属账号。</span>`;
   document.getElementById('prov-ids').textContent = [
     `todo_id=${t.id}`,
     `application_id=${t.application_id??'-'}`,
     `applicant_id=${t.applicant_id??ap.id??'-'}`,
-    `system_id=${t.system_id??sy.id??'-'}`,
+    `system_id=${provisionSystemId??'-'}`,
     `step_key=${t.step_key||'-'}`,
     `flow_code=${t.flow_code||'-'}`,
     `create_new=${!!t.create_new}`,
     `assignee_id=${t.assignee_id??'-'}`,
   ].join('\n');
-  document.getElementById('prov-account').value = t.suggest_account || '';
+  setProvAccountSelection(null);
   document.getElementById('prov-remark').value = '';
+  await refreshProvUnboundCount(provisionSystemId);
   openModal('m-provision');
   // AI-GEN-END
 }
+
+async function openProvAccountPicker(){
+  // AI-GEN-BEGIN
+  if (!provisionSystemId) return toast('缺少系统，无法拉取账号池');
+  document.getElementById('prov-pick-unbound').checked = true;
+  document.getElementById('prov-pick-q').value = '';
+  provisionPickSelected = null;
+  const curId = document.getElementById('prov-account-id').value;
+  if (curId) provisionPickSelected = { id: Number(curId) };
+  openModal('m-prov-pick');
+  await loadProvAccountPicker();
+  // AI-GEN-END
+}
+
+async function loadProvAccountPicker(){
+  // AI-GEN-BEGIN
+  const body = document.getElementById('prov-pick-body');
+  const unboundOnly = !!document.getElementById('prov-pick-unbound').checked;
+  const q = (document.getElementById('prov-pick-q').value || '').trim();
+  body.innerHTML = '<div class="note">加载中…</div>';
+  const qs = new URLSearchParams({ system_id: String(provisionSystemId) });
+  if (unboundOnly) qs.set('unbound_only', '1');
+  if (q) qs.set('q', q);
+  const { data } = await api('/api/sys-accounts/catalog?' + qs.toString());
+  if (!data.ok) {
+    body.innerHTML = `<div class="warn">${data.error||'加载失败'}</div>`;
+    return;
+  }
+  const st = data.stats || {};
+  const sysName = ((data.systems||[]).find(s => String(s.id)===String(provisionSystemId))||{}).name || '';
+  document.getElementById('prov-pick-sys').textContent = sysName ? `· ${sysName}` : '';
+  document.getElementById('prov-pick-unbound-n').textContent = `无归属 ${st.unbound||0}`;
+  document.getElementById('prov-pick-total-n').textContent = `全部 ${st.total||0}`;
+  document.getElementById('prov-unbound-pill').textContent = `无归属 ${st.unbound||0}`;
+  const rows = data.accounts || [];
+  if (!rows.length) {
+    body.innerHTML = `<div class="note">${unboundOnly?'暂无无归属账号，可取消「仅看无归属」查看全部。':'暂无账号'}</div>`;
+    return;
+  }
+  const selId = provisionPickSelected && provisionPickSelected.id;
+  body.innerHTML = `<table class="tbl"><thead><tr>
+    <th style="width:36px"></th><th>账号</th><th>显示名</th><th>状态</th><th>联系方式</th>
+  </tr></thead><tbody>
+  ${rows.map(a => {
+    const checked = String(a.id)===String(selId) ? 'checked' : '';
+    const contact = [a.phone,a.email,a.itcode].filter(Boolean).join(' · ') || '—';
+    return `<tr style="cursor:pointer" onclick="pickProvAccountRow(${a.id})">
+      <td><input type="radio" name="prov-pick" value="${a.id}" ${checked} onclick="event.stopPropagation();pickProvAccountRow(${a.id})"></td>
+      <td><code>${a.account_name||''}</code></td>
+      <td>${a.display_name||'—'}</td>
+      <td><span class="pill ${a.bound?'p-green':'p-orange'}">${a.bind_label||(a.bound?'已绑定':'无归属')}</span></td>
+      <td class="note">${contact}</td>
+    </tr>`;
+  }).join('')}
+  </tbody></table>`;
+  // 缓存当前列表便于确定
+  state._provPickRows = rows;
+  // AI-GEN-END
+}
+
+function pickProvAccountRow(id){
+  // AI-GEN-BEGIN
+  const rows = state._provPickRows || [];
+  const acct = rows.find(a => String(a.id)===String(id));
+  if (!acct) return;
+  provisionPickSelected = acct;
+  const radio = document.querySelector(`input[name="prov-pick"][value="${id}"]`);
+  if (radio) radio.checked = true;
+  // AI-GEN-END
+}
+
+function confirmProvAccountPick(){
+  // AI-GEN-BEGIN
+  if (!provisionPickSelected || !provisionPickSelected.id) {
+    return toast('请先选择一个账号');
+  }
+  const rows = state._provPickRows || [];
+  const acct = rows.find(a => String(a.id)===String(provisionPickSelected.id)) || provisionPickSelected;
+  if (acct.bound && acct.leuc_user_id) {
+    // 已绑他人仍允许选中，提交时后端会拒绝；这里仅提示
+    toast('该账号已绑定，若非当前申请人将无法开通');
+  }
+  setProvAccountSelection(acct);
+  closeModal('m-prov-pick');
+  // AI-GEN-END
+}
+
 async function submitProvision(){
   // AI-GEN-BEGIN
   if (!provisionTodoId) return;
-  const account_name = (document.getElementById('prov-account')?.value || '').trim();
+  const account_id = (document.getElementById('prov-account-id')?.value || '').trim();
+  const account_name = (document.getElementById('prov-account-name')?.value || '').trim();
   const remark = (document.getElementById('prov-remark')?.value || '').trim();
-  if (!account_name) return toast('请输入业务系统账号名');
-  await decideTodo(provisionTodoId, 'approved', { account_name, remark });
+  if (!account_id && !account_name) return toast('请从账号池选择业务系统账号');
+  const payload = { remark };
+  if (account_id) payload.account_id = Number(account_id);
+  if (account_name) payload.account_name = account_name;
+  await decideTodo(provisionTodoId, 'approved', payload);
   // AI-GEN-END
 }
 function openMsg(uid, name){
@@ -2498,8 +2942,9 @@ async function openAccountBind(mode){
       dept_id: state.user.dept_id,
     }];
   }
+  restoreBatchGrantApplyChrome();
   document.getElementById('bg-title').textContent =
-    mode === 'direct' ? '直接绑定' : (forOthers ? '代人申请账号/权限' : '账号/权限申请');
+    mode === 'direct' ? '直接绑定' : (forOthers ? '代人申请账号、权限' : '账号、权限申请');
   document.getElementById('bg-hint').textContent = mode === 'direct'
     ? '点「新建一行」，在行内下拉选择人员与业务系统后直接绑定。同一人可多行、同一系统可重复。'
     : (forOthers
@@ -2536,7 +2981,7 @@ async function openAccountBind(mode){
       <button class="btn btn-pri" style="width:auto" onclick="submitAccountBind('direct')">直接绑定</button>`;
   } else {
     foot.innerHTML = `<button class="btn btn-line" onclick="closeModal('m-batch-grant')">取消</button>
-      <button class="btn btn-pri" style="width:auto" onclick="submitAccountBind('apply')">${forOthers?'提交代人申请':'提交账号/权限申请'}</button>`;
+      <button class="btn btn-pri" style="width:auto" onclick="submitAccountBind('apply')">${forOthers?'提交代人申请':'提交账号、权限申请'}</button>`;
   }
   openModal('m-batch-grant');
 }
@@ -2740,6 +3185,7 @@ function renderBindLines(){
         <td><button class="btn btn-sm btn-line" onclick="removeBindLine(${ln.key})">移除</button></td>
       </tr>`;
     }).join('')}</tbody></table>`;
+  refreshBindFlowPreview();
 }
 
 function addBindLine(rerender=true){
@@ -2944,6 +3390,7 @@ function removeBindLine(key){
 function toggleBindLineSens(key, on){
   const ln = (state.bindDraft.lines||[]).find(x => x.key === key);
   if (ln) ln.with_sensitive = !!on;
+  refreshBindFlowPreview();
 }
 
 async function openPickPeopleForLine(key){
@@ -3217,7 +3664,7 @@ function renderPermCloseBody(){
     <div class="kv" style="margin-top:8px"><span class="lab">关闭登录</span>
       <label style="display:flex;align-items:center;gap:6px;font-size:13px">
         <input type="checkbox" ${d.close_login?'checked':''} ${acct && acct.can_login?'':'disabled'}
-          onchange="state.closeDraft.close_login=this.checked">
+          onchange="state.closeDraft.close_login=this.checked;refreshCloseFlowPreview()">
         ${acct && acct.can_login ? '关闭本账号登录能力' : '当前已不可登录'}
       </label>
     </div>
@@ -3234,7 +3681,9 @@ function renderPermCloseBody(){
           </label>`;
         }).join('') : '<div class="note">该系统暂无权限目录项</div>'}
       </div>
-    </div>`;
+    </div>
+    <div id="close-flow-preview"></div>`;
+  refreshCloseFlowPreview();
 }
 function changeCloseAcct(id){
   state.closeDraft.selectedAcct = Number(id);
@@ -3247,6 +3696,7 @@ function toggleClosePerm(pid, on){
   if (!state.closeDraft.perm_ids) state.closeDraft.perm_ids = [];
   if (on) { if (!state.closeDraft.perm_ids.includes(id)) state.closeDraft.perm_ids.push(id); }
   else state.closeDraft.perm_ids = state.closeDraft.perm_ids.filter(x => x !== id);
+  refreshCloseFlowPreview();
 }
 async function submitPermClose(){
   // AI-GEN-BEGIN

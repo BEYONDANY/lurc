@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS departments (
   parent_id INTEGER,
   owner_user_id INTEGER,
   leorg_id INTEGER UNIQUE,
+  manager_leorg_emp_id INTEGER,
   FOREIGN KEY (parent_id) REFERENCES departments(id)
 );
 
@@ -464,6 +465,12 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
             )
         except sqlite3.OperationalError:
             pass
+    # AI-GEN-BEGIN
+    if dept_cols and "manager_leorg_emp_id" not in dept_cols:
+        conn.execute(
+            "ALTER TABLE departments ADD COLUMN manager_leorg_emp_id INTEGER"
+        )
+    # AI-GEN-END
     roster_cols = _table_cols(conn, "hr_sync_roster")
     if roster_cols and "leorg_emp_id" not in roster_cols:
         conn.execute("ALTER TABLE hr_sync_roster ADD COLUMN leorg_emp_id INTEGER")
@@ -512,7 +519,6 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
         )"""
     )
     ensure_roles_seeded(conn)
-    # AI-GEN-END
     # AI-GEN-END
 
 
@@ -790,7 +796,7 @@ def seed(conn: sqlite3.Connection) -> None:
 # AI-GEN-BEGIN
 # 菜单目录（角色配置页勾选）；实际生效读 role_menus 表
 ALL_MENUS = [
-    {"id": "home", "label": "个人中心首页", "group": "个人"},
+    {"id": "home", "label": "个人中心", "group": "个人"},
     {"id": "security", "label": "安全管理", "group": "个人"},
     {"id": "todo", "label": "我的待办", "group": "个人"},
     {"id": "apply", "label": "自助申请", "group": "个人"},
