@@ -913,6 +913,13 @@ def default_account_expire(days: int = 90) -> str:
     # AI-GEN-END
 
 
+# AI-GEN-BEGIN
+def now_ts() -> str:
+    """业务时间戳：年月日时分秒（待办/申请列表与详情展示）。"""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+# AI-GEN-END
+
+
 def find_approver(db, applicant_id):
     """账号延期等：找上级负责人（本人是负责人则找父级负责人）。"""
     u = db.execute("SELECT * FROM users WHERE id = ?", (applicant_id,)).fetchone()
@@ -1082,12 +1089,82 @@ def prepare_flow_steps(db, steps, applicant_id, system_id=None):
     # AI-GEN-END
 
 
+def get_provision_targets(db, meta: dict | None, application=None) -> list[dict]:
+    """待开通系统列表：优先 meta.items 多行，否则 system_ids / system_id。"""
+    # AI-GEN-BEGIN
+    meta = meta if isinstance(meta, dict) else {}
+    app = dict(application) if application and not isinstance(application, dict) else (application or {})
+    targets: list[dict] = []
+    seen: set[int] = set()
+
+    def _add(sid, *, name=None, with_sensitive=None, create_new=True, item=None):
+        if not sid:
+            return
+        sid = int(sid)
+        if sid in seen:
+            return
+        if create_new is False:
+            return
+        seen.add(sid)
+        if not name:
+            sy = db.execute(
+                "SELECT name, code FROM systems WHERE id = ?", (sid,)
+            ).fetchone()
+            name = sy["name"] if sy else f"系统#{sid}"
+        targets.append(
+            {
+                "system_id": sid,
+                "system_name": name,
+                "with_sensitive": bool(
+                    with_sensitive
+                    if with_sensitive is not None
+                    else meta.get("with_sensitive")
+                ),
+                "create_new": True,
+                "item": item,
+            }
+        )
+
+    items = meta.get("items") or meta.get("lines") or []
+    if isinstance(items, list) and items:
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            _add(
+                it.get("system_id"),
+                name=it.get("system_name"),
+                with_sensitive=it.get("with_sensitive"),
+                create_new=it.get("create_new", meta.get("create_new", True)),
+                item=it,
+            )
+    if not targets:
+        sids = meta.get("system_ids") or []
+        if not isinstance(sids, list):
+            sids = [sids] if sids else []
+        for sid in sids:
+            _add(sid, with_sensitive=meta.get("with_sensitive"), create_new=True)
+    if not targets:
+        sid = meta.get("system_id") or app.get("system_id")
+        _add(sid, with_sensitive=meta.get("with_sensitive"), create_new=bool(meta.get("create_new", True)))
+    return targets
+    # AI-GEN-END
+
+
 def provision_account_apply(
-    db, application, with_sensitive=False, account_name=None, remark=None, account_id=None
+    db,
+    application,
+    with_sensitive=False,
+    account_name=None,
+    remark=None,
+    account_id=None,
+    system_id=None,
+    *,
+    notify=True,
+    mark_app=True,
 ):
     """系统负责人开通：从账号池选择业务账号并关联申请人，可选敏感与备注。"""
     # AI-GEN-BEGIN
-    sid = application["system_id"]
+    sid = int(system_id) if system_id not in (None, "") else application["system_id"]
     uid = application["applicant_id"]
     if not sid or not uid:
         return {"ok": False, "error": "缺少系统或申请人"}
@@ -1104,12 +1181,12 @@ def provision_account_apply(
             (pool_aid, sid),
         ).fetchone()
         if not pool:
-            return {"ok": False, "error": "所选账号不在该系统账号池中"}
+            return {"ok": False, "error": f"所选账号不在「{sys_row['name']}」账号池中"}
         acct_name = (pool["account_name"] or "").strip()
     else:
         acct_name = (account_name or "").strip()
         if not acct_name:
-            return {"ok": False, "error": "请从账号池选择业务系统账号"}
+            return {"ok": False, "error": f"请为「{sys_row['name']}」从账号池选择业务系统账号"}
         pool = db.execute(
             """SELECT * FROM system_accounts
             WHERE system_id = ? AND account_name = ? LIMIT 1""",
@@ -1118,7 +1195,7 @@ def provision_account_apply(
         if not pool:
             return {
                 "ok": False,
-                "error": "账号不在「全部账户」中，请从账号池选择（不可手填新建）",
+                "error": f"「{sys_row['name']}」账号不在全部账户中，请从账号池选择",
             }
 
     if pool["leuc_user_id"] and int(pool["leuc_user_id"]) != int(uid):
@@ -1181,17 +1258,19 @@ def provision_account_apply(
         )
         account_id = cur2.lastrowid
 
-    db.execute(
-        "UPDATE applications SET status = 'provisioned', provisioned = 1, updated_at = ? WHERE id = ?",
-        (now, application["id"]),
-    )
-    msg_body = (
-        f"「{sys_row['name']}」账号 {acct_name} 已开通"
-        + ("（含敏感权限）" if with_sensitive else "")
-        + (f"。备注：{note}" if note else "")
-        + "，可登录使用。"
-    )
-    push_system_message(db, uid, "账号申请已开通", msg_body)
+    if mark_app:
+        db.execute(
+            "UPDATE applications SET status = 'provisioned', provisioned = 1, updated_at = ? WHERE id = ?",
+            (now, application["id"]),
+        )
+    if notify:
+        msg_body = (
+            f"「{sys_row['name']}」账号 {acct_name} 已开通"
+            + ("（含敏感权限）" if with_sensitive else "")
+            + (f"。备注：{note}" if note else "")
+            + "，可登录使用。"
+        )
+        push_system_message(db, uid, "账号申请已开通", msg_body)
     return {
         "ok": True,
         "system": sys_row["name"],
@@ -1203,6 +1282,96 @@ def provision_account_apply(
         "application_id": application["id"],
         "remark": note,
         "with_sensitive": with_sensitive,
+    }
+    # AI-GEN-END
+
+
+def provision_account_apply_multi(
+    db,
+    application,
+    provisions: list | None,
+    *,
+    meta: dict | None = None,
+    with_sensitive=False,
+    remark=None,
+):
+    """按多系统逐个开通；provisions=[{system_id, account_id|account_name}]。"""
+    # AI-GEN-BEGIN
+    meta = meta if isinstance(meta, dict) else {}
+    targets = get_provision_targets(db, meta, application)
+    if not targets:
+        return {"ok": False, "error": "无可开通的业务系统"}
+    prov_list = list(provisions or [])
+    # 兼容旧单账号入参
+    if not prov_list and (meta.get("_single_account_id") or meta.get("_single_account_name")):
+        prov_list = [
+            {
+                "system_id": targets[0]["system_id"],
+                "account_id": meta.get("_single_account_id"),
+                "account_name": meta.get("_single_account_name"),
+            }
+        ]
+    by_sid = {}
+    for p in prov_list:
+        if not isinstance(p, dict):
+            continue
+        sid = p.get("system_id")
+        if sid in (None, ""):
+            continue
+        by_sid[int(sid)] = p
+    missing = [t for t in targets if int(t["system_id"]) not in by_sid]
+    if missing:
+        names = "、".join(t["system_name"] for t in missing)
+        return {
+            "ok": False,
+            "error": f"请为以下系统选择账号：{names}",
+            "need_account_input": True,
+            "provision_targets": targets,
+            "missing_system_ids": [t["system_id"] for t in missing],
+        }
+    results = []
+    parts = []
+    for i, t in enumerate(targets):
+        sid = int(t["system_id"])
+        p = by_sid[sid]
+        sens = bool(t.get("with_sensitive") if t.get("with_sensitive") is not None else with_sensitive)
+        r = provision_account_apply(
+            db,
+            application,
+            with_sensitive=sens,
+            account_name=(p.get("account_name") or "").strip() or None,
+            remark=remark,
+            account_id=p.get("account_id"),
+            system_id=sid,
+            notify=False,
+            mark_app=False,
+        )
+        if not r.get("ok"):
+            return r
+        results.append(r)
+        parts.append(f"{r.get('system')} / {r.get('account')}")
+    now = datetime.now().strftime("%Y-%m-%d")
+    db.execute(
+        "UPDATE applications SET status = 'provisioned', provisioned = 1, updated_at = ? WHERE id = ?",
+        (now, application["id"]),
+    )
+    uid = application["applicant_id"]
+    push_system_message(
+        db,
+        uid,
+        "账号申请已开通",
+        f"已开通 {len(results)} 个系统账号：{'；'.join(parts)}"
+        + (f"。备注：{remark}" if remark else ""),
+    )
+    return {
+        "ok": True,
+        "count": len(results),
+        "items": results,
+        "system": parts[0].split(" / ")[0] if parts else None,
+        "account": parts[0].split(" / ")[1] if parts else None,
+        "message": f"已开通 {len(results)} 个：{'；'.join(parts)}",
+        "applicant_id": uid,
+        "application_id": application["id"],
     }
     # AI-GEN-END
 
@@ -1720,7 +1889,7 @@ def start_multi_step_apply(
 ):
     """创建多级审批申请单，返回 (app_id, first_todo, first_assignee, step_preview)。"""
     # AI-GEN-BEGIN
-    now = datetime.now().strftime("%Y-%m-%d")
+    now = now_ts()
     meta_extra = meta_extra or {}
     if not steps:
         return None, None, None, []
@@ -1880,7 +2049,7 @@ def auto_provision_sensitive(db, application):
         account_id = cur.lastrowid
     db.execute(
         "UPDATE applications SET status = 'provisioned', provisioned = 1, updated_at = ? WHERE id = ?",
-        (datetime.now().strftime("%Y-%m-%d"), application["id"]),
+        (now_ts(), application["id"]),
     )
     owner_ids = list_system_owner_ids(db, sys_row["id"])
     notify_ids = owner_ids or ([sys_row["owner_user_id"]] if sys_row["owner_user_id"] else [])
@@ -1894,7 +2063,7 @@ def auto_provision_sensitive(db, application):
                 uid,
                 f"【自动开通】{(user['display_name'] if user else uid)} · {sys_row['name']} · 敏感权限",
                 "敏感开通",
-                datetime.now().strftime("%Y-%m-%d"),
+                now_ts(),
                 application["id"],
                 json.dumps({"account_id": account_id, "auto": True}, ensure_ascii=False),
             ),
@@ -1945,7 +2114,7 @@ def auto_revoke_sensitive(db, application, account_id=None):
     )
     db.execute(
         "UPDATE applications SET status = 'provisioned', provisioned = 1, updated_at = ? WHERE id = ?",
-        (datetime.now().strftime("%Y-%m-%d"), application["id"]),
+        (now_ts(), application["id"]),
     )
     db.execute(
         """UPDATE todos SET status = 'approved', title = ?
@@ -2034,7 +2203,7 @@ def execute_account_perm_close_items(db, application, meta=None):
         )
         db.execute(
             "UPDATE applications SET status = 'provisioned', provisioned = 1, updated_at = ? WHERE id = ?",
-            (datetime.now().strftime("%Y-%m-%d"), application["id"]),
+            (now_ts(), application["id"]),
         )
         return {
             "ok": True,
@@ -2085,7 +2254,7 @@ def execute_account_perm_close_items(db, application, meta=None):
     )
     db.execute(
         "UPDATE applications SET status = 'provisioned', provisioned = 1, updated_at = ? WHERE id = ?",
-        (datetime.now().strftime("%Y-%m-%d"), application["id"]),
+        (now_ts(), application["id"]),
     )
     if errors and not results:
         return {"ok": False, "error": errors[0], "results": results}
@@ -3817,7 +3986,9 @@ def todo_resubmit(user, tid):
         reject_from = None
     if reject_from in (None, "", 0, "0"):
         return jsonify({"ok": False, "error": "缺少原驳回节点，无法重提"}), 400
-    now = datetime.now().strftime("%Y-%m-%d")
+    # AI-GEN-BEGIN
+    now = now_ts()
+    # AI-GEN-END
     remark = (data.get("remark") or "").strip() or None
     meta = merge_todo_meta_updates(row["meta"], data.get("form") or data.get("meta") or {})
     meta.pop("needs_resubmit", None)
@@ -5079,7 +5250,9 @@ def apply_submit(user):
     system_name = (data.get("system_name") or "").strip()
     remark = (data.get("remark") or "").strip()
     db = get_db()
-    now = datetime.now().strftime("%Y-%m-%d")
+    # AI-GEN-BEGIN
+    now = now_ts()
+    # AI-GEN-END
 
     # 人事/负责人可代他人发起敏感/外部申请（链按目标用户解析）
     subject = user
@@ -5669,7 +5842,9 @@ def todo_decide(user, tid):
     if row["bucket"] != "pending":
         return jsonify({"ok": False, "error": "该待办已处理"}), 400
 
-    now = datetime.now().strftime("%Y-%m-%d")
+    # AI-GEN-BEGIN
+    now = now_ts()
+    # AI-GEN-END
     app_id = row["application_id"] if "application_id" in row.keys() else None
     step_order_for_remark = row["step_order"] if "step_order" in row.keys() else None
 
@@ -9156,7 +9331,9 @@ def bind_apply(user):
         leuc_user_ids = [user["id"]]
 
     db = get_db()
-    now = datetime.now().strftime("%Y-%m-%d")
+    # AI-GEN-BEGIN
+    now = now_ts()
+    # AI-GEN-END
     created = []
 
     def _create_grant(urow, sys_row, suggested, hints, uid, sid):
@@ -10998,7 +11175,9 @@ def _oa_spawn_bind_line(db, form_id, line_id, sys_row, leuc_user, requester_id, 
 
 
 def _oa_spawn_bind_for_form(db, form_id, leuc_user_id, requester_id):
-    now = datetime.now().strftime("%Y-%m-%d")
+    # AI-GEN-BEGIN
+    now = now_ts()
+    # AI-GEN-END
     urow = db.execute("SELECT * FROM users WHERE id = ?", (leuc_user_id,)).fetchone()
     if not urow:
         return
@@ -11071,7 +11250,9 @@ def oa_simulate_account_apply(user):
     data = request.get_json(force=True) or {}
     # 默认演示：给「刘一」申请来酷+北森（可能无 LEUC 人）；或指定已有用户
     scenario = data.get("scenario") or "mixed"
-    now = datetime.now().strftime("%Y-%m-%d")
+    # AI-GEN-BEGIN
+    now = now_ts()
+    # AI-GEN-END
     db = get_db()
     form_no = data.get("oa_form_no") or f"OA-ACCT-{datetime.now().strftime('%H%M%S')}"
 
@@ -11269,7 +11450,9 @@ def oa_simulate_leave(user):
     if not _oa_can_view(user):
         return jsonify({"ok": False, "error": "无权限"}), 403
     data = request.get_json(force=True) or {}
-    now = datetime.now().strftime("%Y-%m-%d")
+    # AI-GEN-BEGIN
+    now = now_ts()
+    # AI-GEN-END
     db = get_db()
 
     payload_in = data.get("beisen") or data.get("payload") or data
