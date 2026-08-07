@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS systems (
   access_mode TEXT NOT NULL DEFAULT 'apply',
   forbid_external INTEGER NOT NULL DEFAULT 0,
   has_sensitive INTEGER NOT NULL DEFAULT 0,
+  sso_login_field TEXT NOT NULL DEFAULT 'account_name',
   status TEXT NOT NULL DEFAULT 'enabled',
   owner_user_id INTEGER,
   created_at TEXT
@@ -297,6 +298,7 @@ CREATE TABLE IF NOT EXISTS leorg_sync_state (
 CREATE TABLE IF NOT EXISTS system_accounts (
   id INTEGER PRIMARY KEY,
   system_id INTEGER NOT NULL,
+  account_uid TEXT,
   account_name TEXT NOT NULL,
   display_name TEXT,
   phone TEXT,
@@ -496,6 +498,59 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
             )
         except sqlite3.OperationalError:
             pass
+    # AI-GEN-BEGIN
+    sa_cols = _table_cols(conn, "system_accounts")
+    if sa_cols and "account_uid" not in sa_cols:
+        conn.execute("ALTER TABLE system_accounts ADD COLUMN account_uid TEXT")
+    # 旧数据用 account_name 回填唯一标识；同系统重复名则加 #id
+    if sa_cols or "account_uid" in (_table_cols(conn, "system_accounts") or []):
+        rows = conn.execute(
+            """SELECT id, system_id, account_name, account_uid FROM system_accounts
+            WHERE account_uid IS NULL OR account_uid = ''"""
+        ).fetchall()
+        for r in rows:
+            base = (r["account_name"] or f"acct-{r['id']}").strip()
+            uid = base
+            clash = conn.execute(
+                """SELECT id FROM system_accounts
+                WHERE system_id = ? AND account_uid = ? AND id != ? LIMIT 1""",
+                (r["system_id"], uid, r["id"]),
+            ).fetchone()
+            if clash:
+                uid = f"{base}#{r['id']}"
+            conn.execute(
+                "UPDATE system_accounts SET account_uid = ? WHERE id = ?",
+                (uid, r["id"]),
+            )
+        try:
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_system_accounts_uid "
+                "ON system_accounts(system_id, account_uid) "
+                "WHERE account_uid IS NOT NULL AND account_uid != ''"
+            )
+        except sqlite3.OperationalError:
+            pass
+    # AI-GEN-BEGIN
+    # 子系统 SSO 登录字段：account_uid / account_name / email / phone / itcode
+    sys_cols = _table_cols(conn, "systems")
+    sso_field_just_added = bool(sys_cols and "sso_login_field" not in sys_cols)
+    if sso_field_just_added:
+        conn.execute(
+            "ALTER TABLE systems ADD COLUMN sso_login_field TEXT NOT NULL DEFAULT 'account_name'"
+        )
+    if sys_cols or "sso_login_field" in (_table_cols(conn, "systems") or []):
+        # 首次补列：北森→account_uid；空值补默认
+        if sso_field_just_added:
+            conn.execute(
+                "UPDATE systems SET sso_login_field = 'account_uid' WHERE code = 'beisen'"
+            )
+        conn.execute(
+            """UPDATE systems SET sso_login_field = CASE
+              WHEN code = 'beisen' THEN 'account_uid' ELSE 'account_name' END
+            WHERE sso_login_field IS NULL OR sso_login_field = ''"""
+        )
+    # AI-GEN-END
+    # AI-GEN-END
     conn.execute(
         """CREATE TABLE IF NOT EXISTS leorg_sync_state (
           id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -526,7 +581,7 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
 # 内置角色：code 固定（业务硬编码依赖）；可改显示名，不可删除
 BUILTIN_ROLE_DEFS = [
     ("employee", "普通员工", 10),
-    ("dept_owner", "组织负责人", 20),
+    ("dept_owner", "部门负责人", 20),
     ("hr_specialist", "人事专员", 30),
     ("system_owner", "系统管理员", 40),
     ("super_admin", "超级管理员", 50),
@@ -544,6 +599,10 @@ def ensure_roles_seeded(conn: sqlite3.Connection) -> None:
             VALUES (?, ?, 1, ?, ?)""",
             (code, label, sort, now),
         )
+    # 文案统一：组织→部门（仅旧默认显示名）
+    conn.execute(
+        "UPDATE roles SET label='部门负责人' WHERE code='dept_owner' AND label='组织负责人'"
+    )
     # 兼容旧演示角色：若库里仍有人占用则登记，否则忽略
     for code, label in (("employee_a", "普通员工A"), ("employee_b", "普通员工B")):
         n = conn.execute("SELECT COUNT(*) AS c FROM users WHERE role=?", (code,)).fetchone()
@@ -615,7 +674,7 @@ def init_db(force: bool = False) -> None:
     migrate_schema(conn)
     n = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
     d = conn.execute("SELECT COUNT(*) AS c FROM departments").fetchone()["c"]
-    # 仅空库播种；已有组织/同步数据时不再灌入演示账号
+    # 仅空库播种；已有部门/同步数据时不再灌入演示账号
     if n == 0 and d == 0:
         seed(conn)
     backfill_demo_beisen_user_ids(conn)
@@ -625,14 +684,14 @@ def init_db(force: bool = False) -> None:
 
 def seed(conn: sqlite3.Connection) -> None:
     # AI-GEN-BEGIN
-    # 默认空组织根：人员/部门由 LeOrg 同步回填；仅保留系统超管 admin（不挂部门）
+    # 默认空部门根：人员/部门由 LeOrg 同步回填；仅保留系统超管 admin（不挂部门）
     conn.execute(
         "INSERT INTO departments (id, name, parent_id, owner_user_id, leorg_id) VALUES (1,?,?,NULL,NULL)",
         ("来酷科技", None),
     )
     root_id = 1
     btit_id = 1
-    # 系统超管：全权限，不在「我的组织」展示
+    # 系统超管：全权限，不在「我的部门」展示
     conn.execute(
         """INSERT INTO users
         (id, username, password, display_name, role, dept_id, phone, email, itcode,
@@ -656,7 +715,7 @@ def seed(conn: sqlite3.Connection) -> None:
     if cap_rows:
         conn.executemany("INSERT INTO role_caps (role, cap_id) VALUES (?,?)", cap_rows)
     ensure_roles_seeded(conn)
-    # 负责人：根部门暂无负责人；组织由 LeOrg 同步后配置
+    # 负责人：根部门暂无负责人；部门由 LeOrg 同步后配置
     # AI-GEN-BEGIN
     gaojia = None
     chang = None
@@ -669,30 +728,33 @@ def seed(conn: sqlite3.Connection) -> None:
     conn.execute(
         """INSERT INTO messages (id, from_user_id, to_user_id, title, body, created_at, is_read, msg_type)
         VALUES
-        (1, 0, 1, '系统通知', '欢迎使用 LEUC；请用 admin / 123456 登录后从 LeOrg 同步组织。', '2026-08-04 09:00:00', 0, 'system')
+        (1, 0, 1, '系统通知', '欢迎使用 LEUC；请用 admin / 123456 登录后从 LeOrg 同步部门。', '2026-08-04 09:00:00', 0, 'system')
         """
     )
 
     # OIDC 客户端：统一回跳到业务系统导航页（按 app=code 区分）
     now = "2026-08-04T12:00:00"
     portal_cb = "http://127.0.0.1:5055/demo/home/callback"
+    # AI-GEN-BEGIN
+    # 末项 sso_login_field：北森用 account_uid，其它用 account_name
     systems = [
-        # access_mode; forbid_external; has_sensitive（系统级复选，与权限目录无关）
-        (1, "oa", "OA 办公", "client_oa", "sk_oa_demo_secret", f"{portal_cb}?app=oa", "openid profile email", "authorization_code", "client_secret_post", 1, "open", 0, 0, "enabled", None, now),
-        (2, "bip", "BIP", "client_bip", "sk_bip_demo_secret", f"{portal_cb}?app=bip", "openid profile", "authorization_code", "client_secret_post", 1, "open", 0, 0, "enabled", None, now),
-        (3, "laiku_erp", "来酷ERP", "client_laiku_erp", "sk_laiku_erp_secret", f"{portal_cb}?app=laiku_erp", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 0, 1, "enabled", None, now),
-        (4, "keji_erp", "科技ERP", "client_keji_erp", "sk_keji_erp_secret", f"{portal_cb}?app=keji_erp", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 0, 1, "enabled", None, now),
-        (5, "beisen", "北森", "client_beisen", "sk_beisen_demo_secret", f"{portal_cb}?app=beisen", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 1, 1, "enabled", None, now),
-        (6, "feishu", "飞书", "client_feishu", "sk_feishu_demo_secret", f"{portal_cb}?app=feishu", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 1, 0, "enabled", None, now),
+        # access_mode; forbid_external; has_sensitive; sso_login_field
+        (1, "oa", "OA 办公", "client_oa", "sk_oa_demo_secret", f"{portal_cb}?app=oa", "openid profile email", "authorization_code", "client_secret_post", 1, "open", 0, 0, "account_name", "enabled", None, now),
+        (2, "bip", "BIP", "client_bip", "sk_bip_demo_secret", f"{portal_cb}?app=bip", "openid profile", "authorization_code", "client_secret_post", 1, "open", 0, 0, "account_name", "enabled", None, now),
+        (3, "laiku_erp", "来酷ERP", "client_laiku_erp", "sk_laiku_erp_secret", f"{portal_cb}?app=laiku_erp", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 0, 1, "account_name", "enabled", None, now),
+        (4, "keji_erp", "科技ERP", "client_keji_erp", "sk_keji_erp_secret", f"{portal_cb}?app=keji_erp", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 0, 1, "account_name", "enabled", None, now),
+        (5, "beisen", "北森", "client_beisen", "sk_beisen_demo_secret", f"{portal_cb}?app=beisen", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 1, 1, "account_uid", "enabled", None, now),
+        (6, "feishu", "飞书", "client_feishu", "sk_feishu_demo_secret", f"{portal_cb}?app=feishu", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 1, 0, "account_name", "enabled", None, now),
     ]
     conn.executemany(
         """INSERT INTO systems
         (id, code, name, client_id, client_secret, redirect_uris, scopes, grant_types,
          token_endpoint_auth_method, require_pkce, access_mode, forbid_external, has_sensitive,
-         status, owner_user_id, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+         sso_login_field, status, owner_user_id, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         systems,
     )
+    # AI-GEN-END
     # AI-GEN-BEGIN
     # 空库仅超管；系统负责人由后续同步/分配配置
     # AI-GEN-END
@@ -746,7 +808,7 @@ def seed(conn: sqlite3.Connection) -> None:
         ],
     )
 
-    # 组织架构待同步花名册（人事专员初始化用户）
+    # 部门架构待同步花名册（人事专员初始化用户）
     conn.executemany(
         """INSERT INTO hr_sync_roster
         (id, display_name, dept_id, phone, email, emp_no, source, status)
@@ -764,26 +826,27 @@ def seed(conn: sqlite3.Connection) -> None:
     now_d = "2026-08-04"
     conn.executemany(
         """INSERT INTO system_accounts
-        (id, system_id, account_name, display_name, phone, email, itcode, status, leuc_user_id, source, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (id, system_id, account_uid, account_name, display_name, phone, email, itcode, status, leuc_user_id, source, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
         [
             # 已绑定
-            (1, 3, "zhangsan_laiku", "张三", "13800000001", "zhangsan@lecoo.com", "zhangsan", "bound", 1, "sync", now_d),
-            (2, 3, "lisi_laiku_main", "李四", "13800000002", "lisi@lecoo.com", "lisi", "bound", 2, "sync", now_d),
-            (3, 3, "lisi_laiku_audit", "李四审计", "13800000002", "lisi@lecoo.com", "lisi", "bound", 2, "sync", now_d),
+            (1, 3, "ERP-ZS-001", "zhangsan_laiku", "张三", "13800000001", "zhangsan@lecoo.com", "zhangsan", "bound", 1, "sync", now_d),
+            (2, 3, "ERP-LS-001", "lisi_laiku_main", "李四", "13800000002", "lisi@lecoo.com", "lisi", "bound", 2, "sync", now_d),
+            (3, 3, "ERP-LS-002", "lisi_laiku_audit", "李四审计", "13800000002", "lisi@lecoo.com", "lisi", "bound", 2, "sync", now_d),
             # 未绑定：可用手机/邮箱/姓名匹配到新同步用户或现有用户
-            (4, 3, "liuyi_erp", "刘一", "13910000001", "liuyi@lecoo.com", "liuyi", "unbound", None, "sync", now_d),
-            (5, 3, "chener01", "陈二", "13910000002", "chener@lecoo.com", None, "unbound", None, "import", now_d),
-            (6, 4, "zhaoliu_kj", "赵六", None, "zhaoliu@lecoo.com", "zhaoliu", "unbound", None, "sync", now_d),
-            (7, 3, "orphan_erp", "待建用户", "13919999999", "orphan@lecoo.com", "orphan", "unbound", None, "import", now_d),
-            (8, 5, "beisen_wujiu", "吴九", "13800000009", "wujiu@lecoo.com", "wujiu", "unbound", None, "sync", now_d),
+            (4, 3, "ERP-LY-001", "liuyi_erp", "刘一", "13910000001", "liuyi@lecoo.com", "liuyi", "unbound", None, "sync", now_d),
+            (5, 3, "ERP-CE-001", "chener01", "陈二", "13910000002", "chener@lecoo.com", None, "unbound", None, "import", now_d),
+            (6, 4, "KJ-ZL-001", "zhaoliu_kj", "赵六", None, "zhaoliu@lecoo.com", "zhaoliu", "unbound", None, "sync", now_d),
+            (7, 3, "ERP-OR-001", "orphan_erp", "待建用户", "13919999999", "orphan@lecoo.com", "orphan", "unbound", None, "import", now_d),
+            # 北森：account_uid = BeisenUserID（数字）
+            (8, 5, "630701809", "beisen_wujiu", "吴九", "13800000009", "wujiu@lecoo.com", "wujiu", "unbound", None, "sync", now_d),
         ],
     )
 
     todos = [
-        (2, 1, 2, "组织同步确认", "系统治理", "pending", "open", "2026-08-02", None, None, None),
+        (2, 1, 2, "部门同步确认", "系统治理", "pending", "open", "2026-08-02", None, None, None),
         (3, 4, 1, "来酷ERP secret 轮换确认", "系统治理", "pending", "open", "2026-08-03", None, None, None),
-        (4, 2, 2, "组织同步确认", "系统治理", "initiated", "open", "2026-08-02", None, None, None),
+        (4, 2, 2, "部门同步确认", "系统治理", "initiated", "open", "2026-08-02", None, None, None),
     ]
     conn.executemany(
         """INSERT INTO todos
@@ -800,7 +863,7 @@ ALL_MENUS = [
     {"id": "security", "label": "安全管理", "group": "个人"},
     {"id": "todo", "label": "我的待办", "group": "个人"},
     {"id": "apply", "label": "自助申请", "group": "个人"},
-    {"id": "my_org", "label": "我的组织", "group": "组织"},
+    {"id": "my_org", "label": "我的部门", "group": "部门"},
     {"id": "my_systems", "label": "业务系统管理", "group": "业务系统"},
     {"id": "sys_accounts", "label": "系统账号管理", "group": "业务系统"},
     {"id": "admin_sensitive", "label": "敏感审批链", "group": "系统设置"},
@@ -809,10 +872,10 @@ ALL_MENUS = [
 
 # 按钮权限（挂在菜单下；写入 role_caps）
 ALL_BUTTONS = [
-    {"id": "manage_all_org", "label": "管理全部组织", "menu": "my_org"},
+    {"id": "manage_all_org", "label": "管理全部部门", "menu": "my_org"},
     {"id": "org_add", "label": "添加人员", "menu": "my_org"},
     {"id": "org_import", "label": "导入人员", "menu": "my_org"},
-    {"id": "org_sync", "label": "组织同步", "menu": "my_org"},
+    {"id": "org_sync", "label": "部门同步", "menu": "my_org"},
     {"id": "org_set_owner", "label": "设置部门负责人", "menu": "my_org"},
     {"id": "proxy_apply", "label": "代人申请账号/权限", "menu": "my_org"},
     {"id": "direct_bind", "label": "直接绑定", "menu": "my_org"},
@@ -866,7 +929,7 @@ ROLE_LABELS = {
     "employee": "普通员工",
     "employee_a": "普通员工",
     "employee_b": "普通员工",
-    "dept_owner": "组织负责人",
+    "dept_owner": "部门负责人",
     "hr_specialist": "人事专员",
     "system_owner": "系统管理员",
     "super_admin": "超级管理员",

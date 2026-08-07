@@ -125,6 +125,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 .sys-block .acct{font-size:12px;color:var(--gray);padding:4px 0;border-top:1px dashed #E8EEF9}
 .kv{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed #E8EEF9;font-size:12.5px}
 .kv .lab{color:var(--muted)}
+.kv.todo-jump:hover{background:#F3F9FF;margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:6px}
 /* AI-GEN-BEGIN */
 .sec-grid{display:grid;gap:12px;grid-template-columns:1fr 1fr}
 @media(max-width:900px){.sec-grid{grid-template-columns:1fr}}
@@ -283,8 +284,8 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
     <div class="login-wrap">
       <div class="login-left">
         <h1>Lecoo 用户中心<br>LEUC</h1>
-        <p>账号为姓名拼音全拼。全员可看「我的组织」；员工只读+即时聊天；上级可管下级；系统消息右下角弹出提醒。</p>
-        <div class="caps"><span>错≥10次验证</span><span>忘记密码</span><span>拼音账号</span><span>我的组织</span></div>
+        <p>账号为姓名拼音全拼。全员可看「我的部门」；员工只读+即时聊天；上级可管下级；系统消息右下角弹出提醒。</p>
+        <div class="caps"><span>错≥10次验证</span><span>忘记密码</span><span>拼音账号</span><span>我的部门</span></div>
       </div>
       <div class="login-right">
         <div class="login-card">
@@ -389,7 +390,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 </div>
 
 <div class="screen" id="sc-home">
-  <div class="guide"><b>个人中心</b>：待办 / 自助申请 / 我的组织；右下角即时聊天，系统消息会弹出并带提示音。</div>
+  <div class="guide"><b>个人中心</b>：待办 / 自助申请 / 我的部门；右下角即时聊天，系统消息会弹出并带提示音。</div>
   <div class="stage">
     <div class="app">
       <div class="side">
@@ -407,7 +408,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 
 <div class="footer-tip">
   账号：xuhaohao / maning / wujinzhi / gaojia / changmingming · 密码 123456<br>
-  超管：admin（全权限，不在「我的组织」）· 密码 123456<br>
+  超管：admin（全权限，不在「我的部门」）· 密码 123456<br>
   登录验证码 888888 · 找回密码 666666 · 启动 <code>cd leuc-proto && python3 app.py</code>
 </div>
 <div class="toast" id="toast"></div>
@@ -442,7 +443,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   <div class="field"><label>角色</label>
     <select id="add-role">
       <option value="employee_a">普通员工</option>
-      <option value="dept_owner">组织负责人</option>
+      <option value="dept_owner">部门负责人</option>
       <option value="hr_specialist">人事专员</option>
     </select>
   </div>
@@ -523,8 +524,8 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   <div class="callout" id="bg-hint" style="margin-top:10px">点「新建一行」，在明细中下拉选择人员与业务系统。同一人可多行、同一系统可重复选。</div>
   <div class="field" style="margin-top:8px">
     <div class="toolbar" style="justify-content:space-between;margin-bottom:8px;flex-shrink:0">
-      <label style="margin:0">申请明细</label>
-      <button type="button" class="btn btn-sm btn-pri" style="width:auto" onclick="addBindLine()">新建一行</button>
+      <label id="bg-lines-label" style="margin:0">申请明细</label>
+      <button type="button" id="bg-add-line" class="btn btn-sm btn-pri" style="width:auto" onclick="addBindLine()">新建一行</button>
     </div>
     <div id="bg-lines" style="overflow:auto;border:1px solid #DDE7F7;border-radius:8px;padding:0">
       <div class="note" style="padding:12px">点击「新建一行」开始填写</div>
@@ -543,8 +544,8 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 </div></div>
 
 <div class="mask" id="m-pick-people" style="z-index:220"><div class="modal modal-lg">
-  <h3 id="pick-people-title">按组织筛选人员</h3>
-  <div class="callout" id="pick-people-hint">左侧组织树筛选，右侧点选一人填入当前明细行。</div>
+  <h3 id="pick-people-title">按部门筛选人员</h3>
+  <div class="callout" id="pick-people-hint">左侧部门树筛选，右侧点选一人填入当前明细行。</div>
   <div class="pick-layout">
     <div class="org-tree" id="pick-tree" style="max-height:min(520px,58vh)"></div>
     <div>
@@ -613,7 +614,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 </div>
 <div class="mask" id="m-sa-import"><div class="modal">
   <h3>导入子系统账号</h3>
-  <div class="callout">格式：账号名,姓名,手机,邮箱,itcode（首行可为表头）</div>
+  <div class="callout">格式：<b>唯一标识</b>,账号名,姓名,手机,邮箱,itcode（按唯一标识幂等；兼容旧 5 列格式）</div>
   <textarea id="sa-import-csv" rows="8" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit"></textarea>
   <div class="foot">
     <button class="btn btn-line" onclick="closeModal('m-sa-import')">取消</button>
@@ -634,7 +635,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   <div class="toolbar" style="margin-top:8px">
     <input id="dept-owner-q" placeholder="筛选候选人（姓名/账号）" style="width:200px"
       oninput="filterDeptOwnerCandidates()">
-    <span class="note">候选人来自当前组织及下级人员</span>
+    <span class="note">候选人来自当前部门及下级人员</span>
   </div>
   <div class="foot">
     <button class="btn btn-line" onclick="closeModal('m-dept-owner')">取消</button>
@@ -949,9 +950,9 @@ function renderSide() {
       ],
     },
     {
-      name: '组织',
+      name: '部门',
       items: [
-        { id: 'my_org', label: '我的组织' },
+        { id: 'my_org', label: '我的部门' },
       ],
     },
     {
@@ -1013,19 +1014,19 @@ async function renderMain() {
           <div class="note" style="margin-top:6px">点击上方数字进入对应列表</div>
           <!-- AI-GEN-END -->
         </div>
-        ${isMgr?`<div class="card"><h4>我的组织</h4>
-          <p class="note">${u.role==='hr_specialist'?'人事可管全部组织、同步与授权。':'可管理负责范围及下级。'}</p>
+        ${isMgr?`<div class="card"><h4>我的部门</h4>
+          <p class="note">${u.role==='hr_specialist'?'人事可管全部部门、同步与授权。':'可管理负责范围及下级。'}</p>
           <button class="btn btn-sm btn-line" onclick="nav('my_org')">进入</button></div>`:''}
       </div>
       <div class="card" style="margin-top:14px">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
-          <h4 style="margin:0">组织架构</h4>
-          <span class="note">仅组织节点与负责人，不含全员名单 · 可折叠</span>
+          <h4 style="margin:0">部门架构</h4>
+          <span class="note">仅部门节点与负责人，不含全员名单 · 可折叠</span>
         </div>
         <div class="org-tree home-org-tree" style="max-height:360px;border:0;padding:0;background:transparent">
-          ${renderHomeOrgTree(h.org_tree||[]) || '<div class="note">暂无组织数据</div>'}
+          ${renderHomeOrgTree(h.org_tree||[]) || '<div class="note">暂无部门数据</div>'}
         </div>
-        <button class="btn btn-sm btn-line" style="margin-top:12px" onclick="nav('my_org')">查看完整组织与人员</button>
+        <button class="btn btn-sm btn-line" style="margin-top:12px" onclick="nav('my_org')">查看完整部门与人员</button>
       </div>`;
     // AI-GEN-END
     return;
@@ -1057,7 +1058,7 @@ async function renderMain() {
         <div class="card sec-card">
           <h4>账号有效期</h4>
           <div class="kv"><span class="lab">当前有效期</span><b>${u.account_expire||'<span class="pill p-blue">永不过期</span>'}</b></div>
-          <div class="sec-status">不可自行修改；临近到期请走「自助申请 → 账号延期」（直属审批，默认 +90 天）。</div>
+          <div class="sec-status">不可自行修改；临近到期请走「自助申请 → 账号延期」（默认 +90 天；含敏感走直属→一级→财务）。</div>
           <div class="sec-actions">
             <button class="btn btn-sm btn-pri" style="width:auto" onclick="goApplyAccountExtend()">申请账号延期</button>
           </div>
@@ -1104,16 +1105,47 @@ async function renderMain() {
   if (state.view === 'todo') {
     const cur = state.todoTab || 'pending';
     const labels = {pending:'待处理',done:'已完成',initiated:'发起'};
-    const list = h.todos[cur]||[];
+    const rawList = h.todos[cur]||[];
     // AI-GEN-BEGIN
+    const allTodos = [
+      ...(h.todos.pending||[]),
+      ...(h.todos.done||[]),
+      ...(h.todos.initiated||[]),
+    ];
+    const typeSet = new Set();
+    allTodos.forEach(t => { if (t.todo_type) typeSet.add(t.todo_type); });
+    const typeOpts = [...typeSet].sort((a,b) => a.localeCompare(b, 'zh'));
+    if (state.todoTypeFilter && !typeOpts.includes(state.todoTypeFilter)) {
+      state.todoTypeFilter = '';
+    }
+    const typeFilter = state.todoTypeFilter || '';
+    const list = typeFilter
+      ? rawList.filter(t => (t.todo_type || '') === typeFilter)
+      : rawList;
     const approverName = (t) => {
       const a = t.current_approver;
       if (!a) return '—';
       return a.display_name || a.username || '—';
     };
+    const tabCount = (key) => {
+      const arr = h.todos[key] || [];
+      if (!typeFilter) return arr.length;
+      return arr.filter(t => (t.todo_type || '') === typeFilter).length;
+    };
     el.innerHTML = `<div class="ptitle">我的待办</div>
-      <div class="callout">账号延期、账号/权限关闭由上级审批。账号、权限申请：直属（→一级→财务）后由<strong>系统负责人开通</strong>；关闭与申请均可点<strong>详情</strong>查看流程时间线与预测。</div>
-      <div class="tabs">${['pending','done','initiated'].map(t=>`<div class="${t===cur?'on':''}" onclick="state.todoTab='${t}';renderMain()">${labels[t]} (${h.todos[t].length})</div>`).join('')}</div>
+      <div class="callout">账号延期 / 账号权限关闭 / 账号权限申请均可点<strong>详情</strong>看时间线。含敏感的延期与关闭走直属→一级→财务；账号申请末步由<strong>系统负责人开通</strong>。</div>
+      <div class="toolbar" style="margin-bottom:10px">
+        <label class="note" style="margin:0">类型</label>
+        <select id="todo-type-filter" style="min-width:180px;padding:6px 10px;border:1px solid var(--line);border-radius:8px"
+          onchange="state.todoTypeFilter=this.value;renderMain()">
+          <option value="">全部类型</option>
+          ${typeOpts.map(tp =>
+            `<option value="${tp.replace(/"/g,'&quot;')}" ${tp===typeFilter?'selected':''}>${tp}</option>`
+          ).join('')}
+        </select>
+        <span class="note">当前 ${list.length} / ${rawList.length} 条${typeFilter?` · ${typeFilter}`:''}</span>
+      </div>
+      <div class="tabs">${['pending','done','initiated'].map(t=>`<div class="${t===cur?'on':''}" onclick="state.todoTab='${t}';renderMain()">${labels[t]} (${tabCount(t)})</div>`).join('')}</div>
       <div class="card" style="padding:0;overflow:hidden"><table>
         <thead><tr><th>事项</th><th>类型</th><th>当前审核人</th><th>进度</th><th>状态</th><th>时间</th><th></th></tr></thead>
         <tbody>${list.length?list.map(t=>{
@@ -1151,7 +1183,7 @@ async function renderMain() {
             <td>${t.status}</td><td>${t.created_at}</td>
             <td style="white-space:nowrap">${actBtns.join(' ')}</td>
           </tr>`;
-        }).join(''):'<tr><td colspan="7" class="note">暂无</td></tr>'}
+        }).join(''):`<tr><td colspan="7" class="note">${typeFilter?`当前类型「${typeFilter}」下暂无`:'暂无'}</td></tr>`}
         </tbody></table></div>`;
     // AI-GEN-END
     return;
@@ -1161,20 +1193,18 @@ async function renderMain() {
     el.innerHTML = `<div class="ptitle">自助申请</div>
       <div class="callout">
         本入口<strong>仅可申请本人</strong>。<br>
-        <strong>账号延期</strong>：直属审批。<br>
+        <strong>账号延期</strong>：同款大面板；无敏感→直属；任一业务账号含敏感→直属→一级→财务。<br>
         <strong>账号、权限申请</strong>：选业务系统与权限；含敏感项须勾选，审批走直属→一级→财务；账号绑定由系统负责人确认。<br>
-        <strong>账号、权限关闭</strong>：选择本人系统账号与要关闭的权限。
+        <strong>账号、权限关闭</strong>：同款大面板选本人系统账号，关登录或权限；审核详情与申请一致。
       </div>
       <div class="cards g3">
-        <div class="card"><h4>账号延期</h4><p class="note">延长账号有效期 90 天 · 直属审批</p>
-          <div id="apply-preview-extend" class="flow-preview" style="margin:8px 0 10px"><h5>预计审批链</h5><div class="note" style="margin:0">加载中…</div></div>
-          <button class="btn btn-sm btn-pri" style="width:auto" onclick="submitApply('account_extend')">申请</button></div>
+        <div class="card"><h4>账号延期</h4><p class="note">默认 +90 天 · 含敏感走长链</p>
+          <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountExtend()">去延期</button></div>
         <div class="card"><h4>账号、权限申请</h4><p class="note">选系统与权限；敏感可勾选 · 仅本人</p>
           <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('apply')">去申请</button></div>
         <div class="card"><h4>账号、权限关闭</h4><p class="note">选系统账号；关登录/权限 · 审批同申请</p>
           <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountPermClose()">去关闭</button></div>
       </div>`;
-    loadApplyPreviewBox('apply-preview-extend', { type: 'account_extend' });
     // AI-GEN-END
     return;
   }
@@ -1498,11 +1528,11 @@ function orgTreeInnerHtml(){
   const tree = (state.deptData && state.deptData.tree) || [];
   return `
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
-      <span class="note" style="margin:0;flex:1">组织树</span>
+      <span class="note" style="margin:0;flex:1">部门树</span>
       <button type="button" class="btn btn-sm btn-line" onclick="expandAllOrg(true)">全部展开</button>
       <button type="button" class="btn btn-sm btn-line" onclick="expandAllOrg(false)">全部收起</button>
     </div>
-    <div class="node ${!deptId?'on':''}" data-dept-id="" onclick="selectOrgDept('')"><b>全部组织</b></div>
+    <div class="node ${!deptId?'on':''}" data-dept-id="" onclick="selectOrgDept('')"><b>全部部门</b></div>
     ${renderTreeNodes(tree)}`;
 }
 function paintOrgTree(){
@@ -1525,7 +1555,7 @@ function orgMembersTableHtml(data){
   return `<table class="org-members-table">
     <thead><tr>
       ${data.can_manage?'<th><input type="checkbox" onchange="toggleAll(this.checked)"></th>':''}
-      <th>姓名</th><th>账号</th><th>组织</th><th>北森用户ID</th>
+      <th>姓名</th><th>账号</th><th>部门</th><th>北森用户ID</th>
       <th style="min-width:220px">关联系统账号</th><th>敏感</th>
       ${canExpire?'<th class="col-expire">有效期</th>':''}
       <th class="col-actions">操作</th>
@@ -1589,7 +1619,7 @@ function orgRightPanelHtml(data){
       ownerCard = `<div class="card" style="margin-bottom:12px">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
           <div>
-            <h4 style="margin:0 0 6px">当前组织 · ${d.name}
+            <h4 style="margin:0 0 6px">当前部门 · ${d.name}
               <span class="note">dept#${d.id}</span></h4>
             <div class="kv"><span class="lab">主负责人</span>
               <b>${d.owner_name?`${d.owner_name}（${d.owner_username||'-'}）`:'<span class="pill p-gray">未指定</span>'}</b>
@@ -1720,7 +1750,7 @@ function toggleHomeOrgNode(id, ev){
 // AI-GEN-END
 
 async function renderOrg(el) {
-  el.innerHTML = `<div class="ptitle">我的组织</div><div class="note">加载中…</div>`;
+  el.innerHTML = `<div class="ptitle">我的部门</div><div class="note">加载中…</div>`;
   const q = state.deptQ || '';
   const deptId = state.deptFilter || '';
   // AI-GEN-BEGIN
@@ -1744,7 +1774,7 @@ async function renderOrg(el) {
     state.leorgSync = results[2].data.sync_state || null;
   }
 
-  if (!data.ok) { el.innerHTML = `<div class="ptitle">我的组织</div><div class="warn">${data.error}</div>`; return; }
+  if (!data.ok) { el.innerHTML = `<div class="ptitle">我的部门</div><div class="warn">${data.error}</div>`; return; }
   state.deptData = data;
   ensureOrgCollapsedInit(data.tree || []);
   expandOrgAncestors(data.tree || [], deptId);
@@ -1753,14 +1783,14 @@ async function renderOrg(el) {
     : '<span class="pill p-gray">只读 · 即时聊天</span>';
   const roster = (syncData && syncData.ok) ? (syncData.roster || []) : [];
   el.innerHTML = `
-    <div class="ptitle">我的组织 ${mode}
+    <div class="ptitle">我的部门 ${mode}
       ${data.unread_messages?`<span class="pill p-red">未读 ${data.unread_messages}</span>`:''}</div>
     <div class="callout">${data.can_manage
       ? (canAllOrg
-        ? '<strong>可管全部组织</strong>：按角色按钮权限显示添加/导入/同步/直接绑定/代人申请/有效期。'
+        ? '<strong>可管全部部门</strong>：按角色按钮权限显示添加/导入/同步/直接绑定/代人申请/有效期。'
         : '<strong>可管本级及下级</strong>：按角色按钮权限显示操作。' +
           (canSetAccountExpire() ? ' 已开通<strong>设置账号有效期</strong>。' : ''))
-      : '<strong>全员</strong>：可查看组织、即时聊天；「账号申请」默认为本人。'}</div>
+      : '<strong>全员</strong>：可查看部门、即时聊天；「账号申请」默认为本人。'}</div>
     <div class="org-actions">
       <button class="btn btn-sm btn-line" onclick="openInbox()">即时聊天</button>
       <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('apply')">账号、权限申请</button>
@@ -1775,12 +1805,12 @@ async function renderOrg(el) {
     ${showSync?`
     <div class="card" style="margin-bottom:14px">
       <!-- AI-GEN-BEGIN -->
-      <h4>组织同步 · 待初始化 <span class="pill p-orange">${roster.length}</span>
+      <h4>部门同步 · 待初始化 <span class="pill p-orange">${roster.length}</span>
         ${state.leorgSync?`<span class="pill p-gray">${state.leorgSync.last_mode||'-'} · ${state.leorgSync.updated_at||'未同步'}</span>`:''}
       </h4>
       <div class="note" style="margin-bottom:8px">
         <strong>增量</strong>：只拉 LeOrg「近期有变更」的员工（快，日常用）。
-        <strong>全量</strong>：重拉全部组织 + 全部在职/试用约九百人（慢，对账用）。
+        <strong>全量</strong>：重拉全部部门 + 全部在职/试用约九百人（慢，对账用）。
         两边都会幂等更新，点多次不会重复建人。首次/清空后点增量也会自动先走全量。
       </div>
       <div class="toolbar">
@@ -1788,14 +1818,14 @@ async function renderOrg(el) {
         <button class="btn btn-sm btn-line" onclick="hrPullFull()">全量同步</button>
         <button class="btn btn-sm btn-pri" style="width:auto" onclick="hrSyncAll()">全部确认创建</button>
         <button class="btn btn-sm btn-line" onclick="hrSyncSelected()">创建已勾选</button>
-        <!-- 测试用：上线前去掉「清空组织」 -->
-        <button class="btn btn-sm btn-line" onclick="hrOrgClear()" style="color:#b42318;border-color:#f3b4b0" title="仅原型测试用，上线去除">清空组织（测试）</button>
+        <!-- 测试用：上线前去掉「清空部门」 -->
+        <button class="btn btn-sm btn-line" onclick="hrOrgClear()" style="color:#b42318;border-color:#f3b4b0" title="仅原型测试用，上线去除">清空部门（测试）</button>
       </div>
       <div style="overflow:auto;margin-top:8px">
         <table>
           <thead><tr>
             <th><input type="checkbox" onchange="hrToggleAll(this.checked)"></th>
-            <th>姓名</th><th>组织</th><th>北森用户ID</th><th>登录用户名（可编辑）</th><th></th>
+            <th>姓名</th><th>部门</th><th>北森用户ID</th><th>登录用户名（可编辑）</th><th></th>
           </tr></thead>
           <tbody>${roster.length?roster.map(r=>`
             <tr>
@@ -1835,7 +1865,7 @@ let deptOwnerDraft = null;
 async function openSetDeptOwner(deptId){
   if (!canSetDeptOwner(deptId)) return toast('无权设置负责人');
   const d = (state.deptData?.departments||[]).find(x => String(x.id)===String(deptId));
-  if (!d) return toast('请先选择组织');
+  if (!d) return toast('请先选择部门');
   // 拉全量子树人员作候选人（不带搜索）
   const { data } = await api('/api/org/overview?dept_id='+deptId);
   if (!data.ok) return toast(data.error);
@@ -1848,7 +1878,7 @@ async function openSetDeptOwner(deptId){
     candidates: members,
   };
   document.getElementById('dept-owner-hint').innerHTML =
-    `组织 <strong>${d.name}</strong> · 主负责人用于直属审批；额外负责人可协同管理该组织。`;
+    `部门 <strong>${d.name}</strong> · 主负责人用于直属审批；额外负责人可协同管理该部门。`;
   document.getElementById('dept-owner-ids').textContent =
     `dept_id=${d.id} · owner_user_id=${d.owner_user_id??'空'} · 候选人 ${members.length} 人`;
   document.getElementById('dept-owner-q').value = '';
@@ -1904,7 +1934,7 @@ function renderDeptOwnerForm(){
       ${m.display_name} <code>${m.username}</code>
       ${isMain?'<span class="note">主负责人</span>':''}
     </label>`;
-  }).join('') : '<div class="note">无匹配候选人，可先到组织下添加人员</div>';
+  }).join('') : '<div class="note">无匹配候选人，可先到部门下添加人员</div>';
 }
 
 function togDeptExtraOwner(uid, on){
@@ -1990,8 +2020,8 @@ function openSecContact(channel){
 
 async function goApplyAccountExtend(){
   state.view = 'apply';
-  renderMain();
-  toast('请在下方「账号延期」提交申请');
+  await renderMain();
+  openAccountExtend();
 }
 
 async function sendSecContactCode(){
@@ -2383,7 +2413,7 @@ async function renderSensitiveConfig(el, opts={}){
         <div class="toolbar">
           <span id="finance-assignee-label">${finance.assignee_name||'未指定'} <span class="note">${finance.assignee_username||''}</span></span>
           <input type="hidden" id="finance-assignee-id" value="${finance.assignee_user_id||''}">
-          <button class="btn btn-sm btn-line" style="width:auto" onclick="openFinancePick()">组织筛选</button>
+          <button class="btn btn-sm btn-line" style="width:auto" onclick="openFinancePick()">部门筛选</button>
         </div>
       </div>
 
@@ -2414,7 +2444,7 @@ async function openFinancePick(){
   state.pickForLineKey = null;
   state.pickDept = state.pickDept || '';
   document.getElementById('pick-people-title').textContent = '选择财务审批人';
-  document.getElementById('pick-people-hint').textContent = '左侧组织树筛选，右侧点选财务审批人。';
+  document.getElementById('pick-people-hint').textContent = '左侧部门树筛选，右侧点选财务审批人。';
   document.getElementById('pick-q').value = state.pickQ || '';
   await loadPickPeople();
   openModal('m-pick-people');
@@ -2494,9 +2524,10 @@ function setProvAccountSelection(acct) {
   }
   idEl.value = acct.id;
   nameEl.value = acct.account_name || '';
+  const uid = acct.account_uid ? `[${acct.account_uid}] ` : '';
   const label = acct.display_name ? ` · ${acct.display_name}` : '';
   const bind = acct.bound ? '已绑定' : '无归属';
-  disp.value = `${acct.account_name || ''}${label}（${bind}）`;
+  disp.value = `${uid}${acct.account_name || ''}${label}（${bind}）`;
   // AI-GEN-END
 }
 
@@ -2585,13 +2616,14 @@ async function loadProvAccountPicker(){
   }
   const selId = provisionPickSelected && provisionPickSelected.id;
   body.innerHTML = `<table class="tbl"><thead><tr>
-    <th style="width:36px"></th><th>账号</th><th>显示名</th><th>状态</th><th>联系方式</th>
+    <th style="width:36px"></th><th>唯一标识</th><th>账号</th><th>显示名</th><th>状态</th><th>联系方式</th>
   </tr></thead><tbody>
   ${rows.map(a => {
     const checked = String(a.id)===String(selId) ? 'checked' : '';
     const contact = [a.phone,a.email,a.itcode].filter(Boolean).join(' · ') || '—';
     return `<tr style="cursor:pointer" onclick="pickProvAccountRow(${a.id})">
       <td><input type="radio" name="prov-pick" value="${a.id}" ${checked} onclick="event.stopPropagation();pickProvAccountRow(${a.id})"></td>
+      <td><code>${a.account_uid||'-'}</code></td>
       <td><code>${a.account_name||''}</code></td>
       <td>${a.display_name||'—'}</td>
       <td><span class="pill ${a.bound?'p-green':'p-orange'}">${a.bind_label||(a.bound?'已绑定':'无归属')}</span></td>
@@ -2994,7 +3026,7 @@ async function ensureBindPeoplePool(){
   const role = state.user?.role;
   const map = new Map((state.bindDraft.peoplePool || []).map(p => [p.id, p]));
   for (const m of data.members || []) {
-    // 代人申请：组织负责人仅本组织可管范围；人事/超管/人员开通看全部
+    // 代人申请：部门负责人仅本部门可管范围；人事/超管/人员开通看全部
     if (role === 'dept_owner' && !manageIds.has(m.dept_id)) continue;
     if (m.id === state.user.id && state._bindMode === 'apply_for') continue;
     map.set(m.id, {
@@ -3153,7 +3185,7 @@ function renderBindLines(){
             ${personOptionsHtml(ln.uid)}
           </select>
           ${selfOnly?'':`<button type="button" class="btn btn-sm btn-line" style="margin-top:4px"
-            onclick="openPickPeopleForLine(${ln.key})">组织筛选</button>`}
+            onclick="openPickPeopleForLine(${ln.key})">部门筛选</button>`}
         </td>
         <td>
           <select style="width:100%;min-width:140px"
@@ -3402,8 +3434,8 @@ async function openPickPeopleForLine(key){
   state.pickForLineKey = key;
   state.pickDept = state.pickDept || '';
   state.pickQ = state.pickQ || '';
-  document.getElementById('pick-people-title').textContent = '按组织筛选人员';
-  document.getElementById('pick-people-hint').textContent = '左侧组织树筛选，右侧点选一人填入当前明细行。';
+  document.getElementById('pick-people-title').textContent = '按部门筛选人员';
+  document.getElementById('pick-people-hint').textContent = '左侧部门树筛选，右侧点选一人填入当前明细行。';
   document.getElementById('pick-q').value = state.pickQ;
   await loadPickPeople();
   openModal('m-pick-people');
@@ -3432,14 +3464,14 @@ async function loadPickPeople(){
   if (!data.ok) return toast(data.error);
   state.pickData = data;
   document.getElementById('pick-tree').innerHTML = `
-    <div class="node ${!state.pickDept?'on':''}" onclick="state.pickDept='';loadPickPeople()"><b>全部组织</b></div>
+    <div class="node ${!state.pickDept?'on':''}" onclick="state.pickDept='';loadPickPeople()"><b>全部部门</b></div>
     ${renderPickTree(data.tree||[])}`;
   const members = data.members || [];
   const tip = data.truncated
-    ? `<div class="note" style="padding:8px 12px;border-bottom:1px solid #EDF2FB">${data.hint||'请用组织或搜索缩小范围'}</div>`
+    ? `<div class="note" style="padding:8px 12px;border-bottom:1px solid #EDF2FB">${data.hint||'请用部门或搜索缩小范围'}</div>`
     : '';
   document.getElementById('pick-members').innerHTML = tip + (members.length ? `<table>
-    <thead><tr><th>姓名</th><th>账号</th><th>组织</th><th>角色</th><th></th></tr></thead>
+    <thead><tr><th>姓名</th><th>账号</th><th>部门</th><th>角色</th><th></th></tr></thead>
     <tbody>${members.map(m => {
       const dname = m.dept_id
         ? ((data.departments.find(d=>d.id===m.dept_id)||{}).name || '')
@@ -3452,7 +3484,7 @@ async function loadPickPeople(){
         <td class="note">${m.role_label||m.role||''}</td>
         <td><button class="btn btn-sm btn-pri" style="width:auto" onclick="pickPersonIntoLine(${m.id})">${btnLabel}</button></td>
       </tr>`;
-    }).join('')}</tbody></table>` : '<div class="note" style="padding:12px">当前组织下无匹配人员</div>');
+    }).join('')}</tbody></table>` : '<div class="note" style="padding:12px">当前部门下无匹配人员</div>');
 }
 
 async function pickPersonIntoLine(uid){
@@ -3631,58 +3663,193 @@ async function submitAccountBind(mode){
 // AI-GEN-END
 
 // AI-GEN-BEGIN
-async function openAccountPermClose(){
+function restoreBatchGrantApplyChrome(){
+  const label = document.getElementById('bg-lines-label');
+  if (label) label.textContent = '申请明细';
+  const addBtn = document.getElementById('bg-add-line');
+  if (addBtn) addBtn.style.display = '';
+  state.closeDraft = null;
+  state.extendDraft = null;
+}
+
+async function openAccountExtend(){
   // AI-GEN-BEGIN
   const { data } = await api('/api/apply/my-accounts');
   if (!data.ok) return toast(data.error);
   const accounts = data.accounts || [];
-  if (!accounts.length) return toast('暂无关联系统账号');
-  state.closeDraft = { accounts, selectedAcct: accounts[0].id, close_login: false, perm_ids: [] };
-  const modal = document.querySelector('#m-sec .modal');
-  if (modal) modal.style.maxWidth = '640px';
-  document.getElementById('sec-modal-title').textContent = '账号、权限关闭';
-  document.getElementById('sec-modal-hint').textContent = '仅本人。先选系统账号，再勾选要关闭的权限；敏感权限走长链审批。也可仅关闭登录。';
-  renderPermCloseBody();
-  secModalMode = 'perm_close';
-  openModal('m-sec');
+  const sensList = accounts.filter(a => a.has_sensitive && a.can_login);
+  state._bindMode = 'extend';
+  state.bindDraft = null;
+  state.extendDraft = {
+    days: 90,
+    accounts,
+    has_sensitive: sensList.length > 0,
+    sens_names: sensList.map(a => `${a.system_name}/${a.account_name}`),
+  };
+  document.getElementById('bg-title').textContent = '账号延期';
+  document.getElementById('bg-hint').textContent =
+    '仅本人。默认延长 LEUC 账号有效期 90 天；若任一业务账号含敏感权限，审批走直属→一级→财务。';
+  const label = document.getElementById('bg-lines-label');
+  if (label) label.textContent = '延期明细';
+  const addBtn = document.getElementById('bg-add-line');
+  if (addBtn) addBtn.style.display = 'none';
+  renderAccountExtendBody();
+  document.getElementById('bg-foot').innerHTML =
+    `<button class="btn btn-line" onclick="closeModal('m-batch-grant');restoreBatchGrantApplyChrome()">取消</button>
+     <button class="btn btn-pri" style="width:auto" onclick="submitAccountExtend()">提交账号延期</button>`;
+  openModal('m-batch-grant');
   // AI-GEN-END
 }
+
+function renderAccountExtendBody(){
+  // AI-GEN-BEGIN
+  const d = state.extendDraft;
+  if (!d) return;
+  const expire = state.user?.account_expire || '未设置';
+  const sensHtml = d.has_sensitive
+    ? `<div class="callout" style="margin-top:10px">检测到含敏感业务账号：<b>${(d.sens_names||[]).join('、')}</b>，将走<strong>直属 → 一级 → 财务</strong>。</div>`
+    : `<div class="note" style="margin-top:10px">当前无可登录的敏感业务账号，审批为<strong>直属领导</strong>。</div>`;
+  const acctRows = (d.accounts||[]).length
+    ? `<table style="width:100%;margin-top:8px;font-size:12.5px"><thead><tr>
+        <th>系统</th><th>账号</th><th>登录</th><th>敏感</th></tr></thead><tbody>
+        ${d.accounts.map(a => `<tr>
+          <td>${a.system_name||'-'}</td>
+          <td><code>${a.account_name||'-'}</code></td>
+          <td>${a.can_login?'<span class="pill p-green">可登</span>':'<span class="pill p-gray">已关</span>'}</td>
+          <td>${a.has_sensitive?'<span class="pill p-red">敏感</span>':'—'}</td>
+        </tr>`).join('')}
+      </tbody></table>`
+    : '<div class="note" style="margin-top:8px">暂无关联业务账号（仍可申请 LEUC 账号延期）</div>';
+  document.getElementById('bg-lines').innerHTML = `
+    <div style="padding:14px 16px">
+      <div class="kv"><span class="lab">申请人</span>
+        <b>${state.user.display_name}（${state.user.username}）</b></div>
+      <div class="kv"><span class="lab">当前有效期</span><b>${expire}</b></div>
+      <div class="field" style="margin-top:12px"><label>延期天数</label>
+        <input id="extend-days" type="number" min="1" max="3650" value="${d.days||90}"
+          style="width:140px;padding:8px 10px;border:1px solid var(--line);border-radius:8px"
+          onchange="state.extendDraft.days=Number(this.value)||90;refreshExtendFlowPreview()">
+        <span class="note">默认 90 天</span>
+      </div>
+      ${sensHtml}
+      <div style="margin-top:12px"><b>关联业务账号（用于判断是否含敏感）</b>${acctRows}</div>
+    </div>`;
+  refreshExtendFlowPreview();
+  // AI-GEN-END
+}
+
+async function refreshExtendFlowPreview(){
+  // AI-GEN-BEGIN
+  const wrap = document.getElementById('bg-flow-preview');
+  const body = document.getElementById('bg-flow-preview-body');
+  if (!wrap || !body || state._bindMode !== 'extend') return;
+  wrap.style.display = 'block';
+  const days = Number(state.extendDraft?.days) || 90;
+  body.innerHTML = '<div class="note" style="margin:0">加载中…</div>';
+  const { data } = await api('/api/apply/preview-flow', {
+    method:'POST',
+    body: JSON.stringify({
+      type: 'account_extend',
+      days,
+      subject_user_id: state.user.id,
+      with_sensitive: !!state.extendDraft?.has_sensitive,
+    }),
+  });
+  body.innerHTML = renderFlowPreviewInline(data);
+  // AI-GEN-END
+}
+
+async function submitAccountExtend(){
+  // AI-GEN-BEGIN
+  const days = Number(document.getElementById('extend-days')?.value || state.extendDraft?.days || 90);
+  if (!days || days < 1) return toast('请填写有效延期天数');
+  const { data } = await api('/api/apply/submit', {
+    method:'POST',
+    body: JSON.stringify({ type: 'account_extend', days }),
+  });
+  if (!data.ok) return toast(data.error);
+  closeModal('m-batch-grant');
+  restoreBatchGrantApplyChrome();
+  const ap = data.approver || {};
+  toast((data.message || '已提交') + (ap.display_name ? '' : ''));
+  state.extendDraft = null;
+  state._bindMode = null;
+  state.view = 'todo'; state.todoTab = 'initiated';
+  renderSide(); renderMain();
+  // AI-GEN-END
+}
+
+async function openAccountPermClose(){
+  const { data } = await api('/api/apply/my-accounts');
+  if (!data.ok) return toast(data.error);
+  const accounts = data.accounts || [];
+  if (!accounts.length) return toast('暂无关联系统账号');
+  state._bindMode = 'close';
+  state.bindDraft = null;
+  state.closeDraft = {
+    accounts,
+    selectedAcct: accounts[0].id,
+    close_login: false,
+    perm_ids: [],
+  };
+  document.getElementById('bg-title').textContent = '账号、权限关闭';
+  document.getElementById('bg-hint').textContent =
+    '仅本人。先选系统账号，再勾选关闭登录或权限；敏感项走直属→一级→财务，与申请同一套审批详情。';
+  const label = document.getElementById('bg-lines-label');
+  if (label) label.textContent = '关闭明细';
+  const addBtn = document.getElementById('bg-add-line');
+  if (addBtn) addBtn.style.display = 'none';
+  renderPermCloseBody();
+  document.getElementById('bg-foot').innerHTML =
+    `<button class="btn btn-line" onclick="closeModal('m-batch-grant');restoreBatchGrantApplyChrome()">取消</button>
+     <button class="btn btn-pri" style="width:auto" onclick="submitPermClose()">提交账号、权限关闭</button>`;
+  openModal('m-batch-grant');
+}
+
 function renderPermCloseBody(){
   const d = state.closeDraft;
   if (!d) return;
   const acct = (d.accounts||[]).find(a => a.id === d.selectedAcct) || d.accounts[0];
   if (acct && d.selectedAcct !== acct.id) d.selectedAcct = acct.id;
-  const perms = ((acct && acct.permissions) || []).filter(p => p.perm_code && !['biz_root','kj_root','hr_root'].includes(p.perm_code));
+  const perms = ((acct && acct.permissions) || []).filter(
+    p => p.perm_code && !['biz_root','kj_root','hr_root'].includes(p.perm_code)
+  );
   const selected = new Set((d.perm_ids||[]).map(Number));
   const sysSens = !!(acct && (acct.sys_has_sensitive || acct.has_sensitive));
-  document.getElementById('sec-modal-body').innerHTML = `
-    <div class="kv"><span class="lab">系统账号</span>
-      <select style="min-width:220px" onchange="changeCloseAcct(this.value)">
-        ${(d.accounts||[]).map(a => `<option value="${a.id}" ${a.id===acct.id?'selected':''}>${a.system_name} / ${a.account_name}${a.has_sensitive?' ·含敏感':''}</option>`).join('')}
-      </select>
-    </div>
-    <div class="kv" style="margin-top:8px"><span class="lab">关闭登录</span>
-      <label style="display:flex;align-items:center;gap:6px;font-size:13px">
-        <input type="checkbox" ${d.close_login?'checked':''} ${acct && acct.can_login?'':'disabled'}
-          onchange="state.closeDraft.close_login=this.checked;refreshCloseFlowPreview()">
-        ${acct && acct.can_login ? '关闭本账号登录能力' : '当前已不可登录'}
-      </label>
-    </div>
-    <div style="margin-top:12px"><b>选择要关闭的权限</b>
-      <div class="note">${sysSens?'本系统含敏感权限，勾选敏感项后走直属→一级→财务':''}</div>
-      <div style="max-height:220px;overflow:auto;margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px">
-        ${perms.length ? perms.map(p => {
-          const sens = !!p.is_sensitive;
-          const disabled = sens && !sysSens && !acct.has_sensitive ? 'disabled' : '';
-          return `<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:4px 0;${disabled?'opacity:.4':''}">
-            <input type="checkbox" ${selected.has(p.id)?'checked':''} ${disabled}
-              onchange="toggleClosePerm(${p.id},this.checked)">
-            ${p.perm_name}${sens?' <span class="pill p-red">敏感</span>':' <span class="pill p-gray">普通</span>'}
-          </label>`;
-        }).join('') : '<div class="note">该系统暂无权限目录项</div>'}
+  document.getElementById('bg-lines').innerHTML = `
+    <div style="padding:14px 16px">
+      <div class="kv"><span class="lab">申请人</span>
+        <b>${state.user.display_name}（${state.user.username}）</b></div>
+      <div class="kv" style="margin-top:8px"><span class="lab">系统账号</span>
+        <select style="min-width:260px;padding:6px 8px;border:1px solid var(--line);border-radius:8px"
+          onchange="changeCloseAcct(this.value)">
+          ${(d.accounts||[]).map(a =>
+            `<option value="${a.id}" ${a.id===acct.id?'selected':''}>${a.system_name} / ${a.account_name}${a.has_sensitive?' ·含敏感':''}${!a.can_login?' ·已关登录':''}</option>`
+          ).join('')}
+        </select>
       </div>
-    </div>
-    <div id="close-flow-preview"></div>`;
+      <div class="kv" style="margin-top:10px"><span class="lab">关闭登录</span>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+          <input type="checkbox" ${d.close_login?'checked':''} ${acct && acct.can_login?'':'disabled'}
+            onchange="state.closeDraft.close_login=this.checked;refreshCloseFlowPreview()">
+          ${acct && acct.can_login ? '关闭本账号登录能力（直属审批）' : '当前已不可登录'}
+        </label>
+      </div>
+      <div style="margin-top:14px"><b>选择要关闭的权限</b>
+        <div class="note">${sysSens?'勾选敏感项后走直属→一级→财务，与敏感申请同链':''}</div>
+        <div style="max-height:260px;overflow:auto;margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:10px">
+          ${perms.length ? perms.map(p => {
+            const sens = !!p.is_sensitive;
+            const disabled = sens && !sysSens && !acct.has_sensitive ? 'disabled' : '';
+            return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:6px 0;${disabled?'opacity:.4':''}">
+              <input type="checkbox" ${selected.has(p.id)?'checked':''} ${disabled}
+                onchange="toggleClosePerm(${p.id},this.checked)">
+              ${p.perm_name}${sens?' <span class="pill p-red">敏感</span>':' <span class="pill p-gray">普通</span>'}
+            </label>`;
+          }).join('') : '<div class="note">该系统暂无权限目录项（仍可仅关闭登录）</div>'}
+        </div>
+      </div>
+    </div>`;
   refreshCloseFlowPreview();
 }
 function changeCloseAcct(id){
@@ -3699,7 +3866,6 @@ function toggleClosePerm(pid, on){
   refreshCloseFlowPreview();
 }
 async function submitPermClose(){
-  // AI-GEN-BEGIN
   const d = state.closeDraft;
   if (!d || !d.selectedAcct) return toast('请选择系统账号');
   const acct = (d.accounts||[]).find(a => a.id === d.selectedAcct);
@@ -3737,14 +3903,13 @@ async function submitPermClose(){
     });
     msgs.push(r.data?.message || r.data?.error || '');
   }
-  const modal = document.querySelector('#m-sec .modal');
-  if (modal) modal.style.maxWidth = '';
-  closeModal('m-sec');
+  closeModal('m-batch-grant');
+  restoreBatchGrantApplyChrome();
   toast(msgs.filter(Boolean)[0] || '已提交');
   state.closeDraft = null;
+  state._bindMode = null;
   state.view = 'todo'; state.todoTab = 'initiated';
   renderSide(); renderMain();
-  // AI-GEN-END
 }
 async function openAccountClose(){ return openAccountPermClose(); }
 async function openSensitiveClose(){ return openAccountPermClose(); }
@@ -3801,7 +3966,7 @@ async function hrPull(){
   renderMain();
 }
 async function hrPullFull(){
-  if (!confirm('全量同步会重拉全部组织 + 全部在职/试用人员（约九百人），比增量慢。\n可重复执行，不会重复建人。确认？')) return;
+  if (!confirm('全量同步会重拉全部部门 + 全部在职/试用人员（约九百人），比增量慢。\n可重复执行，不会重复建人。确认？')) return;
   toast('正在全量同步（拉全部人员）…');
   const { data } = await api('/api/hr/sync-pull', { method:'POST', body: JSON.stringify({ mode: 'full' }) });
   if (!data.ok) return toast(data.error);
@@ -3811,7 +3976,7 @@ async function hrPullFull(){
   renderMain();
 }
 async function hrOrgClear(){
-  if (!confirm('【仅测试】确认清空「我的组织」？\n将删除全部部门与普通员工，保留管理演示账号。\n上线版本将移除此按钮。')) return;
+  if (!confirm('【仅测试】确认清空「我的部门」？\n将删除全部部门与普通员工，保留管理演示账号。\n上线版本将移除此按钮。')) return;
   const { data } = await api('/api/hr/org-clear', { method:'POST', body: JSON.stringify({ confirm: true }) });
   if (!data.ok) return toast(data.error);
   state.deptFilter = '';
@@ -4003,7 +4168,7 @@ async function loadAdminSystems(el, title){
   const loginAccts = (focus && focus.login_accounts) || [];
   const filterAcct = (a) => {
     if (!acctQ) return true;
-    const hay = `${a.account_name||''} ${a.display_name||''} ${a.phone||''} ${a.email||''} ${a.itcode||''} ${a.leuc_name||''} ${a.leuc_username||''}`.toLowerCase();
+    const hay = `${a.account_uid||''} ${a.account_name||''} ${a.display_name||''} ${a.phone||''} ${a.email||''} ${a.itcode||''} ${a.leuc_name||''} ${a.leuc_username||''}`.toLowerCase();
     return hay.includes(acctQ);
   };
   const filteredAccts = accounts.filter(filterAcct);
@@ -4057,7 +4222,7 @@ async function loadAdminSystems(el, title){
             <span class="pill p-orange">无归属 ${focus.account_unbound_count||0}</span>
           </h4>
           <div class="toolbar" style="margin-bottom:10px">
-            <input id="sys-acct-q" type="search" placeholder="搜索账号/姓名/手机/邮箱/LEUC…"
+            <input id="sys-acct-q" type="search" placeholder="搜索唯一标识/账号/姓名/手机/邮箱/LEUC…"
               value="${(state.sysAcctQ||'').replace(/"/g,'&quot;')}"
               style="flex:1;min-width:180px;padding:8px 10px;border:1px solid var(--line);border-radius:8px"
               onkeydown="if(event.key==='Enter'){state.sysAcctQ=this.value;renderMain()}">
@@ -4068,10 +4233,11 @@ async function loadAdminSystems(el, title){
           <div style="max-height:42vh;overflow:auto">
             <table>
               <thead><tr>
-                <th>子系统账号</th><th>姓名</th><th>手机</th><th>邮箱</th><th>itcode</th>
+                <th>唯一标识</th><th>子系统账号</th><th>姓名</th><th>手机</th><th>邮箱</th><th>itcode</th>
                 <th>来源</th><th>绑定状态</th><th>归属 LEUC</th>
               </tr></thead>
               <tbody>${filteredAccts.length?filteredAccts.map(a=>`<tr>
+                <td><code>${a.account_uid||'-'}</code></td>
                 <td><code>${a.account_name}</code></td>
                 <td>${a.display_name||'-'}</td>
                 <td>${a.phone||'-'}</td>
@@ -4080,7 +4246,7 @@ async function loadAdminSystems(el, title){
                 <td>${a.source||'-'}</td>
                 <td><span class="pill ${a.bound?'p-green':'p-orange'}">${a.bind_label||(a.bound?'已绑定':'无归属')}</span></td>
                 <td>${a.bound?`${a.leuc_name||''}（${a.leuc_username||''}）`:'<span class="note">—</span>'}</td>
-              </tr>`).join(''):`<tr><td colspan="8" class="note">${accounts.length?'无匹配账号':'暂无子系统账号'}</td></tr>`}
+              </tr>`).join(''):`<tr><td colspan="9" class="note">${accounts.length?'无匹配账号':'暂无子系统账号'}</td></tr>`}
               </tbody>
             </table>
           </div>
@@ -4313,6 +4479,7 @@ async function renderSysAccounts(el){
             ${(g.matches||[]).length ? g.matches.map((m,i)=>`
               <label style="display:flex;gap:8px;align-items:center;padding:4px 0;cursor:pointer">
                 <input type="radio" name="g${g.id}" value="${m.account_id}" ${i===0?'checked':''}>
+                <code>${m.account_uid||'-'}</code>
                 <code>${m.account_name}</code> ${m.display_name||''}
                 <span class="pill p-blue">${(m.hits||[]).join('+')||'候选'}</span>
                 <span class="note">分 ${m.score}</span>
@@ -4329,12 +4496,13 @@ async function renderSysAccounts(el){
       <h4 style="padding:14px 14px 0">子系统账号池 <span class="note">当前列出 ${st.filtered||0}</span></h4>
       <table>
         <thead><tr>
-          <th>系统</th><th>子系统账号</th><th>姓名</th><th>手机</th><th>邮箱</th><th>itcode</th>
+          <th>系统</th><th>唯一标识</th><th>子系统账号</th><th>姓名</th><th>手机</th><th>邮箱</th><th>itcode</th>
           <th>来源</th><th>绑定状态</th><th>归属 LEUC</th>
         </tr></thead>
         <tbody>${(cat.accounts||[]).length ? cat.accounts.map(a => `
           <tr>
             <td>${a.system_name}<div class="note" style="margin:0">${a.system_code||''}</div></td>
+            <td><code>${a.account_uid||'-'}</code></td>
             <td><code>${a.account_name}</code></td>
             <td>${a.display_name||'-'}</td>
             <td>${a.phone||'-'}</td>
@@ -4343,7 +4511,7 @@ async function renderSysAccounts(el){
             <td>${a.source||'-'}</td>
             <td><span class="pill ${a.bound?'p-green':'p-orange'}">${a.bind_label||(a.bound?'已绑定':'无归属')}</span></td>
             <td>${a.bound?`${a.leuc_name||''}（${a.leuc_username||''}）`:'<span class="note">—</span>'}</td>
-          </tr>`).join('') : '<tr><td colspan="9" class="note">无匹配账号，可同步或导入</td></tr>'}
+          </tr>`).join('') : '<tr><td colspan="10" class="note">无匹配账号，可同步或导入</td></tr>'}
         </tbody>
       </table>
     </div>`;
@@ -4457,7 +4625,8 @@ function openSaImport(){
   const sid = state.sysAcctFilter || state.sysAcctData?.systems?.[0]?.id;
   if (!sid) return toast('请先选择系统');
   state._importSysId = sid;
-  document.getElementById('sa-import-csv').value = '账号名,姓名,手机,邮箱,itcode\nimp_user1,导入用户,13930000001,imp1@lecoo.com,impu1';
+  document.getElementById('sa-import-csv').value =
+    '唯一标识,账号名,姓名,手机,邮箱,itcode\nIMP-001,imp_user1,导入用户,13930000001,imp1@lecoo.com,impu1';
   openModal('m-sa-import');
 }
 async function submitSaImport(){
@@ -4678,7 +4847,7 @@ async function loadRoleButtons(){
   });
   const more = document.createElement('button');
   more.textContent = '切换任何人…';
-  more.title = '按组织筛选，切换到任意通讯录人员';
+  more.title = '按部门筛选，切换到任意通讯录人员';
   more.style.borderStyle = 'dashed';
   more.onclick = () => openDemoSwitchAnyone();
   box.appendChild(more);
@@ -4704,7 +4873,7 @@ async function openDemoSwitchAnyone(){
   state.pickDept = '';
   state.pickQ = '';
   document.getElementById('pick-people-title').textContent = '演示切换 · 选人';
-  document.getElementById('pick-people-hint').textContent = '左侧按组织筛选，右侧点选一人立即切换登录（含系统超管 admin）。';
+  document.getElementById('pick-people-hint').textContent = '左侧按部门筛选，右侧点选一人立即切换登录（含系统超管 admin）。';
   document.getElementById('pick-q').value = '';
   await loadPickPeople();
   openModal('m-pick-people');

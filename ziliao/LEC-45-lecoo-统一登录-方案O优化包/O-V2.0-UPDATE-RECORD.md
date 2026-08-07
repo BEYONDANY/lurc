@@ -104,7 +104,33 @@
 2. API：`POST/PATCH/DELETE /api/admin/roles`；列表与分配改读库。
 3. 「角色与权限」页增加新增/改名/删除入口。
 
+## 2026-08-07 演示切换任何人（leuc-proto）
+
+1. 顶部「快速切换」增加「切换任何人…」：组织树 + 搜索选人后即时切换登录。
+2. API：`GET /api/demo/org-pick`（免登录，含 admin）。
+
 ## 2026-08-07 北森 SSO 回跳 italent.cn（leuc-proto）
 
 1. `BEISEN_SSO_RETURN_URL=https://www.italent.cn/`；门户点北森走真实 SSO。
 2. 修复 `row_user` 漏传 `beisen_user_id`，否则无法签发 sub。
+
+## 2026-08-07 开通账号从池选择（leuc-proto）
+
+1. 系统负责人开通改为从「全部账户」弹窗选择，默认无归属，可查全部。
+2. 后端按 `account_id` 绑定池账号，禁止手填新建。
+
+## 2026-08-07 待办流程明细与预测（leuc-proto）
+
+1. 待办列表展示当前审核人、进度；详情弹窗时间线 + 尚未到达步骤预测。
+2. API：`GET /api/todo/<id>/flow`、`POST /api/apply/preview-flow`；`serialize_todo` 带摘要字段。
+3. 自助申请（延期卡片 / 账号申请弹窗 / 关闭弹窗）提交前可预览预计审批链。
+
+## 2026-08-07 我的组织局部刷新（leuc-proto）
+
+1. 组织树点击 / 查询改为只刷新右侧成员区（`selectOrgDept` / `refreshOrgMembers`），不再整页 `renderMain`。
+2. 展开/收起仅重绘左侧树，尽量保留滚动位置。
+
+## 2026-08-07 组织文案统一为部门（leuc-proto）
+
+1. 全站用户可见「组织」改为「部门」（我的部门 / 部门负责人 / 部门同步等）。
+2. 接口路径、菜单 id（如 `my_org`）、库表字段名保持不变。
