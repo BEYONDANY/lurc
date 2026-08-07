@@ -2,6 +2,47 @@
 """Lecoo 用户中心 LEUC · SQLite 多角色交互原型服务。"""
 from __future__ import annotations
 
+# AI-GEN-BEGIN
+# 直接 `python app.py` 时若落在 Rosetta(x86_64)+用户站 cryptography(arm64)，北森 SSO 会挂。
+# 作为入口脚本时自动切到本目录 .venv + arch -arm64。
+import os as _os
+import sys as _sys
+from pathlib import Path as _Path
+
+
+def _boot_arm64_venv() -> None:
+    if _os.environ.get("LEUC_REEXEC") == "1":
+        return
+    if __name__ != "__main__":
+        return
+    root = _Path(__file__).resolve().parent
+    venv_py = root / ".venv" / "bin" / "python3"
+    if not venv_py.is_file():
+        venv_py = root / ".venv" / "bin" / "python"
+    if not venv_py.is_file():
+        return
+    in_venv = _Path(_sys.prefix).resolve() == (root / ".venv").resolve()
+    if in_venv:
+        try:
+            import cryptography  # noqa: F401
+
+            return
+        except Exception:
+            pass
+    env = {**_os.environ, "PYTHONNOUSERSITE": "1", "LEUC_REEXEC": "1"}
+    arch = "/usr/bin/arch"
+    if _Path(arch).is_file():
+        _os.execve(
+            arch,
+            [arch, "-arm64", str(venv_py), str(_Path(__file__).resolve()), *_sys.argv[1:]],
+            env,
+        )
+    _os.execve(str(venv_py), [str(venv_py), str(_Path(__file__).resolve()), *_sys.argv[1:]], env)
+
+
+_boot_arm64_venv()
+# AI-GEN-END
+
 import csv
 import io
 import base64
@@ -76,7 +117,7 @@ CAPTCHA_THRESHOLD = 1  # 失败 ≥1 次需图片验证码
 FAIL_VERIFY_THRESHOLD = 10
 CAPTCHA_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 # AI-GEN-BEGIN
-# 系统超管：不进「我的部门」通讯录
+# 系统超管：不进「人员管理」通讯录
 SYSTEM_ADMIN_USERNAME = "admin"
 
 
@@ -606,6 +647,31 @@ def build_org_tree(depts, manage_ids=None):
             by_id[pid]["children"].append(d)
     roots = [d for d in by_id.values() if not d.get("parent_id") or d["parent_id"] not in by_id]
     return roots
+
+
+
+# AI-GEN-BEGIN
+def dept_ancestor_chain(depts, dept_id):
+    """从根到指定部门的祖先链（含自身）。"""
+    if not dept_id:
+        return []
+    by_id = {d["id"]: d for d in depts}
+    chain = []
+    cur = by_id.get(int(dept_id))
+    seen = set()
+    while cur and cur["id"] not in seen:
+        seen.add(cur["id"])
+        chain.append(cur)
+        pid = cur.get("parent_id")
+        cur = by_id.get(pid) if pid else None
+    chain.reverse()
+    return chain
+
+
+def dept_path_label(chain, sep=" / "):
+    """部门全路径文案。"""
+    return sep.join((d.get("name") or "").strip() for d in (chain or []) if d.get("name"))
+# AI-GEN-END
 
 
 def managed_dept_ids(db, user):
@@ -2711,6 +2777,11 @@ def home(user):
         "SELECT * FROM todos WHERE initiator_id = ? AND bucket = 'initiated' ORDER BY id DESC",
         (user["id"],),
     ).fetchall()
+    # AI-GEN-BEGIN
+    depts = all_departments(db)
+    my_dept_id = user.get("dept_id")
+    chain = dept_ancestor_chain(depts, my_dept_id)
+    # AI-GEN-END
     return jsonify(
         {
             "ok": True,
@@ -2721,8 +2792,12 @@ def home(user):
                 "done": [serialize_todo(db, r) for r in done],
                 "initiated": [serialize_todo(db, r) for r in initiated],
             },
-            # 个人中心精简部门树：仅结构 + 负责人
-            "org_tree": build_org_tree(all_departments(db)),
+            # AI-GEN-BEGIN
+            # 个人中心：仅本人所属组织路径
+            "org_tree": build_org_tree(chain),
+            "dept_path": dept_path_label(chain),
+            "my_dept_id": my_dept_id,
+            # AI-GEN-END
         }
     )
 
@@ -2806,7 +2881,8 @@ def apply_preview_flow(user):
 @app.get("/api/dept/overview")
 @login_required
 def org_overview(user):
-    """全员可看完整部门树；管理人员可管下级。"""
+    """组织概览：scope=mine 本人路径；scope=manage 可管全树。"""
+    # AI-GEN-BEGIN
     db = get_db()
     depts = all_departments(db)
     manage_ids = managed_dept_ids(db, user)
@@ -2814,11 +2890,59 @@ def org_overview(user):
     q = (request.args.get("q") or "").strip()
     dept_id = request.args.get("dept_id")
     focus_id = int(dept_id) if dept_id else None
+    scope = (request.args.get("scope") or "mine").strip()
+    if scope not in ("mine", "manage"):
+        scope = "mine"
+
+    unread = db.execute(
+        "SELECT COUNT(*) AS c FROM messages WHERE to_user_id = ? AND is_read = 0",
+        (user["id"],),
+    ).fetchone()["c"]
+    base = {
+        "ok": True,
+        "scope": scope,
+        "can_manage": can_manage,
+        "can_set_account_expire": user_can_set_account_expire(user),
+        "can_set_dept_owner": user_can_set_dept_owner(user),
+        "manage_dept_ids": sorted(manage_ids),
+        "unread_messages": unread,
+    }
+
+    if scope == "mine":
+        my_dept_id = user.get("dept_id")
+        chain = dept_ancestor_chain(depts, my_dept_id)
+        me_row = db.execute(
+            "SELECT * FROM users WHERE id = ?", (user["id"],)
+        ).fetchone()
+        members = [member_row_enriched(me_row)] if me_row else []
+        if q:
+            like = q.lower()
+            members = [
+                m
+                for m in members
+                if like in (m.get("display_name") or "").lower()
+                or like in (m.get("username") or "").lower()
+                or like in (m.get("phone") or "").lower()
+                or like in (m.get("email") or "").lower()
+            ]
+        return jsonify(
+            {
+                **base,
+                "departments": chain,
+                "tree": build_org_tree(chain, manage_ids),
+                "focus_dept_id": my_dept_id,
+                "my_dept_id": my_dept_id,
+                "dept_path": dept_path_label(chain),
+                "members": members,
+            }
+        )
+
+    if not can_manage:
+        return jsonify({"ok": False, "error": "无权查看组织管理"}), 403
 
     sql = "SELECT * FROM users WHERE 1=1 AND username != ?"
     params = [SYSTEM_ADMIN_USERNAME]
     if focus_id:
-        # 选中节点时展示该节点及下级人员
         ids = subtree_ids(depts, focus_id)
         sql += f" AND dept_id IN ({','.join('?' * len(ids))})"
         params.extend(ids)
@@ -2830,25 +2954,21 @@ def org_overview(user):
     members = db.execute(sql, params).fetchall()
     members = [m for m in members if not is_hidden_from_org(m)]
 
-    unread = db.execute(
-        "SELECT COUNT(*) AS c FROM messages WHERE to_user_id = ? AND is_read = 0",
-        (user["id"],),
-    ).fetchone()["c"]
-
     return jsonify(
         {
-            "ok": True,
-            "can_manage": can_manage,
-            "can_set_account_expire": user_can_set_account_expire(user),
-            "can_set_dept_owner": user_can_set_dept_owner(user),
-            "manage_dept_ids": sorted(manage_ids),
+            **base,
             "departments": depts,
             "tree": build_org_tree(depts, manage_ids),
             "focus_dept_id": focus_id,
+            "my_dept_id": user.get("dept_id"),
+            "dept_path": dept_path_label(
+                dept_ancestor_chain(depts, user.get("dept_id"))
+            ),
             "members": [member_row_enriched(m) for m in members],
-            "unread_messages": unread,
         }
     )
+    # AI-GEN-END
+
 
 
 # AI-GEN-BEGIN
@@ -5173,7 +5293,7 @@ def hr_sync_pull(user):
 @app.post("/api/hr/org-clear")
 @login_required
 def hr_org_clear(user):
-    """清空我的部门：部门树 + 普通员工；保留管理演示账号。"""
+    """清空部门人员：部门树 + 普通员工；保留管理演示账号。"""
     # AI-GEN-BEGIN
     if not require_hr_manage(user):
         return jsonify({"ok": False, "error": "无权限"}), 403
@@ -6470,16 +6590,22 @@ def sys_accounts_overview(user):
     db = get_db()
     system_id = request.args.get("system_id")
     manage_ids = managed_system_ids(db, user)
+    migrate_schema(db)
+    # AI-GEN-BEGIN
     if manage_ids is None:
-        systems = db.execute("SELECT id, code, name FROM systems ORDER BY id").fetchall()
+        systems = db.execute(
+            "SELECT id, code, name, sso_login_field FROM systems ORDER BY id"
+        ).fetchall()
     else:
         if not manage_ids:
             return jsonify({"ok": True, "systems": [], "accounts": [], "grants": []})
         ph0 = ",".join("?" * len(manage_ids))
         systems = db.execute(
-            f"SELECT id, code, name FROM systems WHERE id IN ({ph0}) ORDER BY id",
+            f"""SELECT id, code, name, sso_login_field FROM systems
+            WHERE id IN ({ph0}) ORDER BY id""",
             manage_ids,
         ).fetchall()
+    # AI-GEN-END
     sys_ids = [s["id"] for s in systems]
     if not sys_ids:
         return jsonify({"ok": True, "systems": [], "accounts": [], "grants": []})
@@ -6534,10 +6660,13 @@ def sys_accounts_overview(user):
             for m in matches[:8]
         ]
         grant_out.append(item)
+    # AI-GEN-BEGIN
+    systems_out = [enrich_system_sso_fields(dict(s)) for s in systems]
+    # AI-GEN-END
     return jsonify(
         {
             "ok": True,
-            "systems": [dict(s) for s in systems],
+            "systems": systems_out,
             "accounts": [dict(a) for a in accounts],
             "grants": grant_out,
             "match_fields": ["手机号", "邮箱", "itcode", "用户名", "姓名"],
@@ -6706,8 +6835,16 @@ def sys_accounts_confirm_bind(user):
     if create_new:
         # AI-GEN-BEGIN
         migrate_schema(db)
-        acct_name = (data.get("account_name") or f"{urow['username']}_auto").strip()
-        acct_uid = (data.get("account_uid") or acct_name).strip()
+        acct_name = (data.get("account_name") or "").strip()
+        acct_uid = (data.get("account_uid") or "").strip()
+        if not acct_uid or not acct_name:
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "新建绑定须填写唯一标识（SSO登录字段）与账号名",
+                    "need_account_uid": True,
+                }
+            ), 400
         exists = db.execute(
             """SELECT id FROM system_accounts
             WHERE system_id = ? AND account_uid = ? LIMIT 1""",
@@ -6948,10 +7085,72 @@ def _import_accounts_from_csv(system_id, text, source):
 # AI-GEN-END
 
 
+@app.post("/api/sys-accounts")
+@login_required
+def sys_accounts_create(user):
+    """手动添加子系统账号（须含唯一标识 / SSO 登录字段值）。"""
+    # AI-GEN-BEGIN
+    if not require_sys_owner(user):
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    data = request.get_json(force=True) or {}
+    system_id = int(data.get("system_id") or 0)
+    if not require_sys_owner(user, system_id):
+        return jsonify({"ok": False, "error": "非负责的系统"}), 403
+    account_uid = (data.get("account_uid") or "").strip()
+    account_name = (data.get("account_name") or "").strip()
+    if not account_uid:
+        return jsonify({"ok": False, "error": "唯一标识（SSO登录字段）必填"}), 400
+    if not account_name:
+        account_name = account_uid
+    db = get_db()
+    migrate_schema(db)
+    sys_row = db.execute("SELECT * FROM systems WHERE id = ?", (system_id,)).fetchone()
+    if not sys_row:
+        return jsonify({"ok": False, "error": "系统不存在"}), 404
+    try:
+        aid, is_new = upsert_system_account(
+            db,
+            system_id,
+            account_uid=account_uid,
+            account_name=account_name,
+            display_name=(data.get("display_name") or "").strip() or None,
+            phone=(data.get("phone") or "").strip() or None,
+            email=(data.get("email") or "").strip() or None,
+            itcode=(data.get("itcode") or "").strip() or None,
+            source="manual",
+        )
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    db.commit()
+    field = (
+        sys_row["sso_login_field"]
+        if "sso_login_field" in sys_row.keys() and sys_row["sso_login_field"]
+        else ("account_uid" if sys_row["code"] == "beisen" else "account_name")
+    )
+    label = sso_login_field_label(field, sys_row["code"])
+    return jsonify(
+        {
+            "ok": True,
+            "id": aid,
+            "created": is_new,
+            "account_uid": account_uid,
+            "account_name": account_name,
+            "sso_login_field": field,
+            "sso_login_field_label": label,
+            "message": (
+                f"已添加账号 {account_name}（{label}={account_uid}）"
+                if is_new
+                else f"已更新账号 {account_name}（{label}={account_uid}）"
+            ),
+        }
+    )
+    # AI-GEN-END
+
+
 @app.post("/api/sys-accounts/import")
 @login_required
 def sys_accounts_import(user):
-    """导入/同步子系统账号。CSV：唯一标识,账号名,姓名,手机,邮箱,itcode"""
+    """导入/同步子系统账号。CSV：唯一标识(SSO),账号名,姓名,手机,邮箱,itcode"""
     if not require_sys_owner(user):
         return jsonify({"ok": False, "error": "无权限"}), 403
     data = request.get_json(force=True) or {}
@@ -6978,11 +7177,24 @@ def sys_accounts_sync_demo(user):
     system_id = int(data.get("system_id") or 0)
     if not require_sys_owner(user, system_id):
         return jsonify({"ok": False, "error": "非负责的系统"}), 403
-    csv_text = (
-        "唯一标识,账号名,姓名,手机,邮箱,itcode\n"
-        "SYNC-A-001,sync_demo_a,同步甲,13920000001,a@lecoo.com,synca\n"
-        "SYNC-B-001,sync_demo_b,同步乙,13920000002,b@lecoo.com,syncb\n"
-    )
+    # AI-GEN-BEGIN
+    db = get_db()
+    migrate_schema(db)
+    sys_row = db.execute("SELECT code FROM systems WHERE id = ?", (system_id,)).fetchone()
+    code = sys_row["code"] if sys_row else ""
+    if code == "beisen":
+        csv_text = (
+            "唯一标识,账号名,姓名,手机,邮箱,itcode\n"
+            "630799001,sync_beisen_a,同步甲,13920000001,a@lecoo.com,synca\n"
+            "630799002,sync_beisen_b,同步乙,13920000002,b@lecoo.com,syncb\n"
+        )
+    else:
+        csv_text = (
+            "唯一标识,账号名,姓名,手机,邮箱,itcode\n"
+            "SYNC-A-001,sync_demo_a,同步甲,13920000001,a@lecoo.com,synca\n"
+            "SYNC-B-001,sync_demo_b,同步乙,13920000002,b@lecoo.com,syncb\n"
+        )
+    # AI-GEN-END
     stats = _import_accounts_from_csv(system_id, csv_text, "sync")
     return jsonify(
         {
@@ -7242,14 +7454,25 @@ def admin_create_system(user):
     if access_mode not in ("open", "apply"):
         return jsonify({"ok": False, "error": "access_mode 须为 open(全员登录) 或 apply(需账号绑定)"}), 400
     forbid_external = 1 if data.get("forbid_external") else 0
+    # AI-GEN-BEGIN
+    sso_login_field = (data.get("sso_login_field") or "").strip()
+    if not sso_login_field:
+        sso_login_field = "account_uid" if code == "beisen" else "account_name"
+    if sso_login_field not in SSO_LOGIN_FIELDS:
+        return jsonify(
+            {"ok": False, "error": f"sso_login_field 须为 {' / '.join(SSO_LOGIN_FIELDS)}"}
+        ), 400
+    # AI-GEN-END
     owner_ids = data.get("owner_user_ids") or data.get("owners") or []
     db = get_db()
+    migrate_schema(db)
     try:
         cur = db.execute(
             """INSERT INTO systems
             (code, name, client_id, client_secret, redirect_uris, scopes, grant_types,
-             token_endpoint_auth_method, require_pkce, access_mode, forbid_external, status, owner_user_id, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+             token_endpoint_auth_method, require_pkce, access_mode, forbid_external,
+             sso_login_field, status, owner_user_id, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 code,
                 name,
@@ -7262,6 +7485,7 @@ def admin_create_system(user):
                 require_pkce,
                 access_mode,
                 forbid_external,
+                sso_login_field,
                 "enabled",
                 None,
                 datetime.now().isoformat(timespec="seconds"),
@@ -7280,6 +7504,7 @@ def admin_create_system(user):
             "client_id": client_id,
             "client_secret": client_secret,
             "access_mode": access_mode,
+            "sso_login_field": sso_login_field,
             "owners": fetch_system_owners(db, sid),
             "message": f"已添加（{mode_label}），请妥善保存 secret",
         }
@@ -7991,19 +8216,142 @@ def demo_portal_systems():
 
 
 # AI-GEN-BEGIN
+def _bound_system_account_for_sso(db, leuc_user_id, system_code: str = "beisen"):
+    """取用户在某系统「已申请开通且可登录」的绑定账号池记录。
+
+    必须同时满足：
+    - system_accounts.leuc_user_id 已绑定
+    - user_system_accounts.can_login = 1（申请/开通后才可登录）
+    不用通讯录 users.beisen_user_id。
+    """
+    return db.execute(
+        """SELECT a.*, s.code AS system_code, s.sso_login_field, u.can_login, u.is_default
+        FROM system_accounts a
+        JOIN systems s ON s.id = a.system_id
+        JOIN user_system_accounts u ON u.user_id = a.leuc_user_id
+          AND u.system_id = a.system_id AND u.account_name = a.account_name
+        WHERE a.leuc_user_id = ? AND s.code = ?
+          AND IFNULL(a.status, '') != 'closed'
+          AND u.can_login = 1
+        ORDER BY u.is_default DESC, a.id
+        LIMIT 1""",
+        (leuc_user_id, system_code),
+    ).fetchone()
+
+
+def _value_from_sso_login_field(acct_row, field: str) -> str:
+    f = (field or "account_name").strip()
+    if not acct_row:
+        return ""
+    keys = acct_row.keys() if hasattr(acct_row, "keys") else []
+    if f in keys and acct_row[f]:
+        return str(acct_row[f]).strip()
+    return ""
+
+
+def _beisen_sso_diagnose(user) -> dict:
+    """诊断北森 SSO 不可用原因（不含通讯录兜底）。"""
+    db = get_db()
+    migrate_schema(db)
+    sys_row = db.execute(
+        "SELECT id, sso_login_field FROM systems WHERE code = 'beisen' LIMIT 1"
+    ).fetchone()
+    if not sys_row:
+        return {
+            "ok": False,
+            "error": "未配置北森业务系统",
+            "need_bind": True,
+        }
+    field = (
+        sys_row["sso_login_field"]
+        if "sso_login_field" in sys_row.keys() and sys_row["sso_login_field"]
+        else "account_uid"
+    )
+    field_label = sso_login_field_label(field, "beisen")
+    # 池中有绑定但不可登录
+    pool_any = db.execute(
+        """SELECT a.id, a.account_uid, a.account_name, a.status, u.can_login
+        FROM system_accounts a
+        JOIN systems s ON s.id = a.system_id
+        LEFT JOIN user_system_accounts u ON u.user_id = a.leuc_user_id
+          AND u.system_id = a.system_id AND u.account_name = a.account_name
+        WHERE a.leuc_user_id = ? AND s.code = 'beisen'
+        ORDER BY a.id LIMIT 1""",
+        (user["id"],),
+    ).fetchone()
+    acct = _bound_system_account_for_sso(db, user["id"], "beisen")
+    if not acct:
+        if pool_any is not None:
+            return {
+                "ok": False,
+                "error": (
+                    "北森账号池已关联但尚未开通可登录权限。"
+                    "请先完成账号/权限申请，由系统负责人确认开通后再 SSO。"
+                ),
+                "need_apply": True,
+                "sso_login_field": field,
+                "sso_login_field_label": field_label,
+            }
+        return {
+            "ok": False,
+            "error": (
+                "须先申请并开通北森系统账号后才能 SSO 登录。"
+                "请走账号申请，由系统负责人在「系统账号管理」绑定账号池中的北森用户ID；"
+                "通讯录中的北森ID不能直接用于登录。"
+            ),
+            "need_bind": True,
+            "sso_login_field": field,
+            "sso_login_field_label": field_label,
+        }
+    sub = _value_from_sso_login_field(acct, field)
+    if not sub:
+        return {
+            "ok": False,
+            "error": (
+                f"已绑定北森账号 {acct['account_name']}，但缺少「{field_label}」。"
+                "请在系统账号管理补全该账号池字段后再登录。"
+            ),
+            "need_sso_field": True,
+            "account_name": acct["account_name"],
+            "sso_login_field": field,
+            "sso_login_field_label": field_label,
+        }
+    return {
+        "ok": True,
+        "sub": sub,
+        "account_name": acct["account_name"],
+        "pool_account_id": acct["id"],
+        "sso_login_field": field,
+        "sso_login_field_label": field_label,
+        "source": "system_accounts",
+    }
+
+
 def _beisen_resolve_sub(user, data=None, uty: str = "id"):
-    """按 uty 取登录标识：id→beisen_user_id，email→邮箱，jobcode→工号/itcode。"""
+    """解析北森 SSO sub：仅用已开通绑定的账号池字段（不用通讯录 beisen_user_id）。"""
     data = data or {}
+    # 仅显式传 sub 时覆盖（联调）；正常流程必须走绑定账号
     override = (data.get("sub") or request.args.get("sub") or "").strip()
     if override:
         return override
     mode = (uty or "id").strip().lower()
     if mode == "email":
-        return (user.get("email") or "").strip()
+        # 仍要求已开通绑定；字段取自账号池 email
+        detail = _beisen_sso_diagnose(user)
+        if not detail.get("ok"):
+            return ""
+        db = get_db()
+        acct = _bound_system_account_for_sso(db, user["id"], "beisen")
+        return _value_from_sso_login_field(acct, "email")
     if mode in ("jobcode", "job_code"):
-        return (user.get("itcode") or user.get("username") or "").strip()
-    # 默认 id
-    return str(user.get("beisen_user_id") or "").strip()
+        detail = _beisen_sso_diagnose(user)
+        if not detail.get("ok"):
+            return ""
+        db = get_db()
+        acct = _bound_system_account_for_sso(db, user["id"], "beisen")
+        return _value_from_sso_login_field(acct, "itcode")
+    detail = _beisen_sso_diagnose(user)
+    return (detail.get("sub") or "").strip() if detail.get("ok") else ""
 
 
 @app.get("/api/beisen/sso/status")
@@ -8027,14 +8375,27 @@ def beisen_sso_launch(user):
         ), 400
     data = request.get_json(silent=True) or {}
     uty = (data.get("uty") or request.args.get("uty") or cfg.uty or "id").strip()
-    sub = _beisen_resolve_sub(user, data, uty=uty)
+    # AI-GEN-BEGIN
+    detail = _beisen_sso_diagnose(user)
+    override = (data.get("sub") or request.args.get("sub") or "").strip()
+    sub = override or _beisen_resolve_sub(user, data, uty=uty)
     if not sub:
-        tip = {
-            "id": "当前用户无北森用户ID，请在「我的部门」补全 beisen_user_id",
-            "email": "当前用户无邮箱，请补全邮箱或传 sub",
-            "jobcode": "当前用户无工号/itcode，请补全或传 sub",
-        }.get(uty, "缺少登录标识 sub")
-        return jsonify({"ok": False, "error": tip, "uty": uty}), 400
+        tip = detail.get("error") if not detail.get("ok") else "缺少登录标识 sub"
+        if uty == "email":
+            tip = tip or "绑定账号缺少邮箱"
+        if uty in ("jobcode", "job_code"):
+            tip = tip or "绑定账号缺少 itcode"
+        return jsonify(
+            {
+                "ok": False,
+                "error": tip,
+                "uty": uty,
+                "need_bind": bool(detail.get("need_bind")),
+                "need_apply": bool(detail.get("need_apply")),
+                "need_sso_field": bool(detail.get("need_sso_field")),
+            }
+        ), 400
+    # AI-GEN-END
     return_url = data.get("return_url")
     if return_url is None:
         return_url = request.args.get("return_url")
@@ -8053,12 +8414,15 @@ def beisen_sso_launch(user):
             "iss": out["iss"],
             "appid": out["appid"],
             "return_url": out.get("return_url"),
+            # AI-GEN-BEGIN
+            "sso_source": "override" if override else "system_accounts",
+            "bound_account": detail.get("account_name") if detail.get("ok") else None,
+            # AI-GEN-END
             "user": {
                 "id": user["id"],
                 "username": user.get("username"),
                 "display_name": user.get("display_name"),
                 "email": user.get("email"),
-                "beisen_user_id": user.get("beisen_user_id"),
             },
         }
     )
@@ -8094,20 +8458,22 @@ def beisen_sso_go():
         else pending.get("return_url"),
     }
     uty = (data.get("uty") or cfg.uty or "id").strip()
+    # AI-GEN-BEGIN
+    detail = _beisen_sso_diagnose(user)
     sub = _beisen_resolve_sub(user, data, uty=uty)
     if not sub:
-        tip = {
-            "id": "当前用户无北森用户ID。请到「我的部门」补全，或 "
-            "<code>?sub=北森UserID</code>。",
-            "email": "当前用户无邮箱。请补全邮箱或 <code>?sub=...</code>。",
-            "jobcode": "当前用户无工号。请补全 itcode 或 <code>?sub=...</code>。",
-        }.get(uty, "缺少登录标识 sub。")
+        tip = (detail.get("error") if not detail.get("ok") else None) or "缺少登录标识 sub。"
+        tip += (
+            " <a href='/'>回用户中心申请北森账号</a> · "
+            "<a href='/demo/home'>返回导航</a>"
+        )
         return (
             f"<!doctype html><meta charset=utf-8><title>北森 SSO</title>"
             f"<p>{tip}</p>",
             400,
             {"Content-Type": "text/html; charset=utf-8"},
         )
+    # AI-GEN-END
     try:
         out = beisen_launch_url(
             cfg, sub=sub, uty=uty, return_url=data.get("return_url")

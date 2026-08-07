@@ -284,8 +284,8 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
     <div class="login-wrap">
       <div class="login-left">
         <h1>Lecoo 用户中心<br>LEUC</h1>
-        <p>账号为姓名拼音全拼。全员可看「我的部门」；员工只读+即时聊天；上级可管下级；系统消息右下角弹出提醒。</p>
-        <div class="caps"><span>错≥10次验证</span><span>忘记密码</span><span>拼音账号</span><span>我的部门</span></div>
+        <p>账号为姓名拼音全拼。全员可看「人员管理」；员工只读+即时聊天；上级可管下级；系统消息右下角弹出提醒。</p>
+        <div class="caps"><span>错≥10次验证</span><span>忘记密码</span><span>拼音账号</span><span>人员管理</span></div>
       </div>
       <div class="login-right">
         <div class="login-card">
@@ -390,7 +390,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 </div>
 
 <div class="screen" id="sc-home">
-  <div class="guide"><b>个人中心</b>：待办 / 自助申请 / 我的部门；右下角即时聊天，系统消息会弹出并带提示音。</div>
+  <div class="guide"><b>个人中心</b>：待办 / 自助申请 / 人员管理；右下角即时聊天，系统消息会弹出并带提示音。</div>
   <div class="stage">
     <div class="app">
       <div class="side">
@@ -408,7 +408,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 
 <div class="footer-tip">
   账号：xuhaohao / maning / wujinzhi / gaojia / changmingming · 密码 123456<br>
-  超管：admin（全权限，不在「我的部门」）· 密码 123456<br>
+  超管：admin（全权限，不在「人员管理」通讯录）· 密码 123456<br>
   登录验证码 888888 · 找回密码 666666 · 启动 <code>cd leuc-proto && python3 app.py</code>
 </div>
 <div class="toast" id="toast"></div>
@@ -977,7 +977,7 @@ function renderSide() {
         { id: 'security', label: '安全管理' },
         { id: 'todo', label: '我的待办' },
         { id: 'apply', label: '自助申请' },
-        { id: 'my_org', label: '我的部门' },
+        { id: 'my_org', label: '人员管理' },
       ],
     },
     {
@@ -1018,7 +1018,7 @@ async function renderMain() {
     state.homeOrgCollapsed = {};
     el.innerHTML = `
       <div class="ptitle">个人中心 <span class="pill p-blue">${u.role_label}</span> <span class="pill p-gray">${u.username}</span></div>
-      <div class="cards g2">
+      <div class="cards g3">
         <div class="card"><h4>我可登录的系统及账号</h4>
           ${h.systems.length? h.systems.map(s=>`
             <div class="sys-block"><div class="hd"><b>${s.name}</b>
@@ -1039,7 +1039,7 @@ async function renderMain() {
           <div class="note" style="margin-top:6px">点击上方数字进入对应列表</div>
           <!-- AI-GEN-END -->
         </div>
-        <div class="card"><h4>我的部门</h4>
+        <div class="card"><h4>所属部门</h4>
           <div class="kv"><span class="lab">所属路径</span>
             <b>${h.dept_path || '<span class="pill p-gray">未分配部门</span>'}</b></div>
           <div class="kv"><span class="lab">本人</span>
@@ -1048,7 +1048,7 @@ async function renderMain() {
           <div class="org-tree home-org-tree" style="max-height:180px;border:0;padding:0;background:transparent;margin-top:8px">
             ${renderHomeOrgTree(h.org_tree)}
           </div>` : ''}
-          <button class="btn btn-sm btn-line" style="margin-top:10px" onclick="nav('my_org')">进入我的部门</button>
+          <button class="btn btn-sm btn-line" style="margin-top:10px" onclick="nav('my_org')">进入人员管理</button>
         </div>
       </div>`;
     // AI-GEN-END
@@ -1774,58 +1774,47 @@ function toggleHomeOrgNode(id, ev){
 
 async function renderOrg(el) {
   // AI-GEN-BEGIN
-  el.innerHTML = `<div class="ptitle">我的部门</div><div class="note">加载中…</div>`;
+  el.innerHTML = `<div class="ptitle">人员管理</div><div class="note">加载中…</div>`;
   const canAllOrg = hasBtn('manage_all_org') || ['hr_specialist','super_admin'].includes(state.user.role);
   const showSync = hasBtn('org_sync') || canAllOrg;
   const showAdd = hasBtn('org_add');
   const showImport = hasBtn('org_import');
   const showDirect = hasBtn('direct_bind');
 
-  // 先拉个人视图，拿 can_manage 决定页签
-  const { data: mineData } = await api('/api/org/overview?scope=mine');
-  if (!mineData.ok) {
-    el.innerHTML = `<div class="ptitle">我的部门</div><div class="warn">${mineData.error||'加载失败'}</div>`;
+  // 探测是否可管；无管理权则展示本人所属部门（只读）
+  const { data: probe } = await api('/api/org/overview?scope=mine');
+  if (!probe.ok) {
+    el.innerHTML = `<div class="ptitle">人员管理</div><div class="warn">${probe.error||'加载失败'}</div>`;
     return;
   }
-  const canManage = !!mineData.can_manage;
-  if (!canManage) state.orgTab = 'mine';
-  else if (!state.orgTab) state.orgTab = 'mine';
-  const tab = (state.orgTab === 'manage' && canManage) ? 'manage' : 'mine';
-  state.orgTab = tab;
+  const canManage = !!probe.can_manage;
+  state.orgTab = canManage ? 'manage' : 'mine';
 
-  const tabsHtml = canManage ? `<div class="tabs">
-      <div class="${tab==='mine'?'on':''}" onclick="switchOrgTab('mine')">我的</div>
-      <div class="${tab==='manage'?'on':''}" onclick="switchOrgTab('manage')">部门管理</div>
-    </div>` : '';
-
-  if (tab === 'mine') {
-    state.deptData = { ...mineData, tree: mineData.tree || [] };
-    const path = mineData.dept_path || '';
-    const me = (mineData.members || [])[0];
+  if (!canManage) {
+    state.deptData = { ...probe, tree: probe.tree || [] };
+    const path = probe.dept_path || '';
+    const me = (probe.members || [])[0];
     el.innerHTML = `
-      <div class="ptitle">我的部门
-        ${mineData.unread_messages?`<span class="pill p-red">未读 ${mineData.unread_messages}</span>`:''}</div>
-      ${tabsHtml}
-      <div class="callout">仅展示<strong>本人</strong>与<strong>所属部门全路径</strong>；不展示公司全员与其它部门。</div>
+      <div class="ptitle">人员管理
+        ${probe.unread_messages?`<span class="pill p-red">未读 ${probe.unread_messages}</span>`:''}</div>
+      <div class="callout">当前账号无部门管理权限，仅展示<strong>本人</strong>与<strong>所属部门</strong>。</div>
       <div class="card" style="margin-bottom:14px">
         <h4 style="margin:0 0 8px">所属部门</h4>
         <div style="font-size:16px;font-weight:600;line-height:1.5;color:var(--ink)">
           ${path || '<span class="pill p-gray">未分配部门</span>'}
         </div>
-        ${path ? `<div class="note" style="margin-top:8px">dept#${mineData.my_dept_id??'-'}</div>` : ''}
       </div>
       <div class="org-actions" style="margin-bottom:12px">
         <button class="btn btn-sm btn-line" onclick="openInbox()">即时聊天</button>
         <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('apply')">账号、权限申请</button>
       </div>
       <div class="card" style="padding:0;overflow:auto">
-        ${orgMembersTableHtml(mineData)}
+        ${orgMembersTableHtml(probe)}
       </div>
       ${!me ? '<div class="note" style="margin-top:8px">未找到本人资料</div>' : ''}`;
     return;
   }
 
-  // 部门管理页签
   const q = state.deptQ || '';
   const deptId = state.deptFilter || '';
   let url = '/api/org/overview?scope=manage&q=' + encodeURIComponent(q);
@@ -1842,7 +1831,7 @@ async function renderOrg(el) {
     state.leorgSync = results[2].data.sync_state || null;
   }
   if (!data.ok) {
-    el.innerHTML = `<div class="ptitle">我的部门</div>${tabsHtml}<div class="warn">${data.error||'无权'}</div>`;
+    el.innerHTML = `<div class="ptitle">人员管理</div><div class="warn">${data.error||'无权'}</div>`;
     return;
   }
   state.deptData = data;
@@ -1853,9 +1842,8 @@ async function renderOrg(el) {
     : '<span class="pill p-orange">可管理下级</span>';
   const roster = (syncData && syncData.ok) ? (syncData.roster || []) : [];
   el.innerHTML = `
-    <div class="ptitle">我的部门 ${mode}
+    <div class="ptitle">人员管理 ${mode}
       ${data.unread_messages?`<span class="pill p-red">未读 ${data.unread_messages}</span>`:''}</div>
-    ${tabsHtml}
     <div class="callout">${canAllOrg
       ? '<strong>可管全部部门</strong>：按角色按钮权限显示添加/导入/同步/直接绑定/代人申请/有效期。'
       : '<strong>可管本级及下级</strong>：按角色按钮权限显示操作。' +
@@ -1910,13 +1898,6 @@ async function renderOrg(el) {
       <div class="org-tree" id="org-tree-panel">${orgTreeInnerHtml()}</div>
       <div id="org-right-panel">${orgRightPanelHtml(data)}</div>
     </div>`;
-  // AI-GEN-END
-}
-
-function switchOrgTab(tab){
-  // AI-GEN-BEGIN
-  state.orgTab = tab === 'manage' ? 'manage' : 'mine';
-  renderMain();
   // AI-GEN-END
 }
 
@@ -4047,7 +4028,7 @@ async function hrPullFull(){
   renderMain();
 }
 async function hrOrgClear(){
-  if (!confirm('【仅测试】确认清空「我的部门」？\n将删除全部部门与普通员工，保留管理演示账号。\n上线版本将移除此按钮。')) return;
+  if (!confirm('【仅测试】确认清空人员与部门数据？\n将删除全部部门与普通员工，保留管理演示账号。\n上线版本将移除此按钮。')) return;
   const { data } = await api('/api/hr/org-clear', { method:'POST', body: JSON.stringify({ confirm: true }) });
   if (!data.ok) return toast(data.error);
   state.deptFilter = '';
