@@ -98,8 +98,13 @@
 2. 提供「全部展开 / 全部收起」；选中节点时自动展开祖先路径。
 3. 个人中心首页组织架构同样可折叠。
 
-## 2026-08-07 超管账号改为 admin（leuc-proto）
+## 2026-08-07 角色清单可配置（leuc-proto）
 
-1. 超管固定 `admin` / `123456`，角色 `super_admin`，全菜单+全按钮。
-2. `admin` 不挂部门、不在「我的组织」/人事用户列表展示；启动时 `ensure_system_admin` 兜底。
-3. 空库种子仅建 `admin`；登录页脚与会话记录已同步。
+1. 新增 `roles` 表；角色可新增 / 改名；内置不可删，自定义可删（占用人员迁回普通员工）。
+2. API：`POST/PATCH/DELETE /api/admin/roles`；列表与分配改读库。
+3. 「角色与权限」页增加新增/改名/删除入口。
+
+## 2026-08-07 北森 SSO 回跳 italent.cn（leuc-proto）
+
+1. `BEISEN_SSO_RETURN_URL=https://www.italent.cn/`；门户点北森走真实 SSO。
+2. 修复 `row_user` 漏传 `beisen_user_id`，否则无法签发 sub。

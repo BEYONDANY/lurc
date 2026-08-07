@@ -601,6 +601,29 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   </div>
 </div></div>
 <!-- AI-GEN-BEGIN -->
+<div class="mask" id="m-dept-owner"><div class="modal" style="max-width:560px">
+  <h3>设置部门负责人</h3>
+  <div class="callout" id="dept-owner-hint">指定主负责人与额外负责人；主负责人参与直属审批解析。</div>
+  <div class="note" id="dept-owner-ids" style="margin-bottom:8px;font-family:ui-monospace,monospace;font-size:12px"></div>
+  <div class="field"><label>主负责人</label>
+    <select id="dept-owner-main" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px"></select>
+  </div>
+  <div class="field"><label>额外负责人（可多选）</label>
+    <div id="dept-owner-extras" style="max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
+  </div>
+  <div class="toolbar" style="margin-top:8px">
+    <input id="dept-owner-q" placeholder="筛选候选人（姓名/账号）" style="width:200px"
+      oninput="filterDeptOwnerCandidates()">
+    <span class="note">候选人来自当前组织及下级人员</span>
+  </div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-dept-owner')">取消</button>
+    <button class="btn btn-line" onclick="clearDeptOwnerMain()">清空主负责人</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitDeptOwner()">保存</button>
+  </div>
+</div></div>
+<!-- AI-GEN-END -->
+<!-- AI-GEN-BEGIN -->
 <div class="mask" id="m-provision"><div class="modal" style="max-width:520px">
   <h3>系统负责人 · 开通账号</h3>
   <div class="callout" id="prov-hint">申请创建新账号：请录入业务系统账号名并添加备注，确认后与申请人关联。</div>
@@ -1155,22 +1178,34 @@ async function renderAdminRoles(el){
   }).join('');
   el.innerHTML = `
     <div class="ptitle">角色与权限 <span class="pill p-blue">可配置</span>
-      <span class="pill p-gray">菜单 + 按钮</span></div>
-    <div class="callout">树形勾选<strong>菜单</strong>与<strong>按钮</strong>；勾选菜单会自动勾选其下全部按钮，取消菜单会一并取消。保存后该角色人员立刻按配置生效。
-      当前账号：菜单 ${(state.user?.menus||[]).map(m=>`<span class="pill p-blue" style="margin:1px">${m}</span>`).join('')||'无'}；
-      按钮 ${(state.user?.buttons||state.user?.caps||[]).map(c=>`<span class="pill p-orange" style="margin:1px">${c}</span>`).join('')||'无'}。</div>
+      <span class="pill p-gray">角色 + 菜单 + 按钮</span></div>
+    <div class="callout">角色清单可<strong>新增 / 改名 / 删除</strong>（内置角色不可删，可改名）。删除自定义角色时，占用人员自动改回「普通员工」。
+      树形勾选<strong>菜单</strong>与<strong>按钮</strong>；勾选菜单会自动勾选其下全部按钮。</div>
     <div class="org-layout">
       <div class="org-tree" style="max-height:70vh">
+        ${canConfig?`<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-sm btn-pri" style="width:auto" onclick="openCreateRole()">新增角色</button>
+        </div>`:''}
         ${(data.roles||[]).map(r => `
           <div class="node ${r.role===focus?'on':''}" onclick="state.roleFocus='${r.role}';renderMain()">
             <b>${r.label}</b>
+            ${r.is_builtin?'':'<span class="pill p-orange" style="margin-left:4px">自定义</span>'}
             <span class="note">${r.user_count} 人 · ${(r.menus||[]).length}菜 · ${(r.caps||[]).length}钮</span>
           </div>`).join('')}
       </div>
       <div>
         <div class="card">
-          <h4>${cur?.label || ''} <code>${cur?.role || ''}</code>
-            <span class="note" style="font-weight:400;margin-left:8px">蓝=菜单 · 橙=按钮</span></h4>
+          <h4 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span>${cur?.label || ''}</span>
+            <code>${cur?.role || ''}</code>
+            ${cur?.is_builtin?'<span class="pill p-gray">内置</span>':'<span class="pill p-orange">自定义</span>'}
+            <span class="note" style="font-weight:400">蓝=菜单 · 橙=按钮</span>
+          </h4>
+          ${canConfig?`<div class="toolbar" style="margin-bottom:10px">
+            <button type="button" class="btn btn-sm btn-line" onclick="openRenameRole('${cur?.role||''}','${(cur?.label||'').replace(/'/g,"\\'")}')">改名</button>
+            ${!cur?.is_builtin?`<button type="button" class="btn btn-sm btn-line" style="color:#b42318;border-color:#f3b4b0"
+              onclick="deleteRole('${cur?.role||''}','${(cur?.label||'').replace(/'/g,"\\'")}',${cur?.user_count||0})">删除角色</button>`:''}
+          </div>`:''}
           <div class="org-tree role-perm-tree" style="max-height:56vh;border:1px solid #DDE7F7;padding:8px 10px;margin-bottom:12px">
             ${treeHtml || '<div class="note">暂无菜单目录</div>'}
           </div>
@@ -1201,6 +1236,47 @@ function onRoleBtnToggle(menuId, checked){
   if (!checked) return;
   const menuCb = document.querySelector(`.role-menu[value="${menuId}"]`);
   if (menuCb) menuCb.checked = true;
+}
+
+function openCreateRole(){
+  if (!hasBtn('config_roles') && state.user?.role !== 'super_admin') return toast('无权配置');
+  document.getElementById('sec-modal-title').textContent = '新增角色';
+  document.getElementById('sec-modal-hint').textContent = '创建后可配置菜单与按钮；编码自动生成。';
+  document.getElementById('sec-modal-body').innerHTML = `
+    <div class="field"><label>角色名称</label>
+      <input id="role-new-label" placeholder="例如：门店店长" maxlength="40"></div>`;
+  secModalMode = 'role_create';
+  openModal('m-sec');
+  setTimeout(() => document.getElementById('role-new-label')?.focus(), 50);
+}
+function openRenameRole(role, label){
+  if (!role) return;
+  if (!hasBtn('config_roles') && state.user?.role !== 'super_admin') return toast('无权配置');
+  document.getElementById('sec-modal-title').textContent = '修改角色名称';
+  document.getElementById('sec-modal-hint').textContent = `编码 ${role} 不变，仅改显示名。`;
+  document.getElementById('sec-modal-body').innerHTML = `
+    <div class="field"><label>角色名称</label>
+      <input id="role-rename-label" value="${(label||'').replace(/"/g,'&quot;')}" maxlength="40"></div>`;
+  secModalMode = 'role_rename';
+  state._roleRenameCode = role;
+  openModal('m-sec');
+  setTimeout(() => {
+    const inp = document.getElementById('role-rename-label');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 50);
+}
+async function deleteRole(role, label, userCount){
+  if (!role) return;
+  if (!hasBtn('config_roles') && state.user?.role !== 'super_admin') return toast('无权配置');
+  const tip = userCount > 0
+    ? `确定删除「${label}」？其下 ${userCount} 人将改回普通员工。`
+    : `确定删除自定义角色「${label}」？`;
+  if (!confirm(tip)) return;
+  const { data } = await api('/api/admin/roles/'+encodeURIComponent(role), { method:'DELETE' });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  if (state.roleFocus === role) state.roleFocus = 'employee';
+  renderMain();
 }
 // AI-GEN-END
 
@@ -1266,13 +1342,17 @@ function renderTreeNodes(nodes, depth=0) {
     const hasKids = kids.length > 0;
     const isCollapsed = hasKids && !!collapsed[n.id];
     const on = String(state.deptFilter||'') === String(n.id);
+    const ownerTip = n.owner_name
+      ? `负责人：${n.owner_name}`
+      : '负责人：未指定';
     return `<div>
-      <div class="node ${on?'on':''}" onclick="state.deptFilter='${n.id}';renderMain()">
+      <div class="node ${on?'on':''}" onclick="state.deptFilter='${n.id}';renderMain()" title="${ownerTip}">
         ${hasKids
           ? `<span class="org-caret" onclick="toggleOrgNode('${n.id}',event)">${isCollapsed?'▸':'▾'}</span>`
           : `<span class="org-caret empty"></span>`}
         <span>${n.name}</span>
         ${n.can_manage?'<span class="mgmt">可管</span>':''}
+        ${n.owner_name?`<span class="note" style="margin-left:4px;font-size:11px">${n.owner_name}</span>`:''}
       </div>
       ${hasKids && !isCollapsed ? `<div class="kids">${renderTreeNodes(kids, depth+1)}</div>` : ''}
     </div>`;
@@ -1485,6 +1565,30 @@ async function renderOrg(el) {
         ${renderTreeNodes(data.tree||[])}
       </div>
       <div>
+        ${(() => {
+          // AI-GEN-BEGIN
+          if (!deptId) return '';
+          const d = (data.departments||[]).find(x => String(x.id)===String(deptId));
+          if (!d) return '';
+          const canSet = canSetDeptOwner(d.id);
+          const extras = (d.extra_owners||[]).map(e => e.display_name).filter(Boolean);
+          return `<div class="card" style="margin-bottom:12px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+              <div>
+                <h4 style="margin:0 0 6px">当前组织 · ${d.name}
+                  <span class="note">dept#${d.id}</span></h4>
+                <div class="kv"><span class="lab">主负责人</span>
+                  <b>${d.owner_name?`${d.owner_name}（${d.owner_username||'-'}）`:'<span class="pill p-gray">未指定</span>'}</b>
+                  ${d.owner_user_id!=null?`<span class="note">uid#${d.owner_user_id}</span>`:''}
+                </div>
+                <div class="kv"><span class="lab">额外负责人</span>
+                  <b>${extras.length?extras.join('、'):'<span class="note">无</span>'}</b></div>
+              </div>
+              ${canSet?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openSetDeptOwner(${d.id})">设置负责人</button>`:''}
+            </div>
+          </div>`;
+          // AI-GEN-END
+        })()}
         <div class="toolbar">
           <input id="dept-q" value="${q}" placeholder="搜索姓名/账号/手机/邮箱" style="width:200px">
           <button class="btn btn-sm btn-line" onclick="state.deptQ=document.getElementById('dept-q').value;renderMain()">查询</button>
@@ -1550,6 +1654,127 @@ async function renderOrg(el) {
 }
 
 async function openOrgHrGrant(){ return openAccountBind('direct'); }
+
+// AI-GEN-BEGIN
+function canSetDeptOwner(deptId){
+  if (hasBtn('org_set_owner') || hasBtn('manage_all_org')) return true;
+  if (['hr_specialist','super_admin'].includes(state.user?.role)) return true;
+  const ids = state.deptData?.manage_dept_ids || [];
+  return deptId != null && ids.map(Number).includes(Number(deptId));
+}
+
+let deptOwnerDraft = null;
+
+async function openSetDeptOwner(deptId){
+  if (!canSetDeptOwner(deptId)) return toast('无权设置负责人');
+  const d = (state.deptData?.departments||[]).find(x => String(x.id)===String(deptId));
+  if (!d) return toast('请先选择组织');
+  // 拉全量子树人员作候选人（不带搜索）
+  const { data } = await api('/api/org/overview?dept_id='+deptId);
+  if (!data.ok) return toast(data.error);
+  const members = data.members || [];
+  deptOwnerDraft = {
+    dept_id: d.id,
+    dept_name: d.name,
+    owner_user_id: d.owner_user_id || '',
+    extra_ids: new Set((d.extra_owners||[]).map(e => Number(e.id))),
+    candidates: members,
+  };
+  document.getElementById('dept-owner-hint').innerHTML =
+    `组织 <strong>${d.name}</strong> · 主负责人用于直属审批；额外负责人可协同管理该组织。`;
+  document.getElementById('dept-owner-ids').textContent =
+    `dept_id=${d.id} · owner_user_id=${d.owner_user_id??'空'} · 候选人 ${members.length} 人`;
+  document.getElementById('dept-owner-q').value = '';
+  renderDeptOwnerForm();
+  openModal('m-dept-owner');
+}
+
+function filterDeptOwnerCandidates(){
+  renderDeptOwnerForm();
+}
+
+function renderDeptOwnerForm(){
+  const draft = deptOwnerDraft;
+  if (!draft) return;
+  const q = (document.getElementById('dept-owner-q')?.value || '').trim().toLowerCase();
+  let list = draft.candidates || [];
+  if (q) {
+    list = list.filter(m =>
+      `${m.display_name||''} ${m.username||''}`.toLowerCase().includes(q)
+    );
+  }
+  const sel = document.getElementById('dept-owner-main');
+  const cur = draft.owner_user_id === '' || draft.owner_user_id == null
+    ? ''
+    : String(draft.owner_user_id);
+  // 保证当前负责人在选项中（即使不在候选人列表）
+  const opts = [{ id: '', label: '（未指定）' }];
+  const seen = new Set();
+  list.forEach(m => {
+    seen.add(Number(m.id));
+    opts.push({ id: String(m.id), label: `${m.display_name}（${m.username}）` });
+  });
+  if (cur && !seen.has(Number(cur))) {
+    const d = (state.deptData?.departments||[]).find(x => String(x.id)===String(draft.dept_id));
+    opts.splice(1, 0, {
+      id: cur,
+      label: `${d?.owner_name||'当前负责人'}（${d?.owner_username||cur}）`,
+    });
+  }
+  sel.innerHTML = opts.map(o =>
+    `<option value="${o.id}" ${o.id===cur?'selected':''}>${o.label}</option>`
+  ).join('');
+  sel.onchange = () => {
+    draft.owner_user_id = sel.value === '' ? '' : Number(sel.value);
+  };
+  const box = document.getElementById('dept-owner-extras');
+  box.innerHTML = list.length ? list.map(m => {
+    const checked = draft.extra_ids.has(Number(m.id)) ? 'checked' : '';
+    const isMain = String(m.id) === String(draft.owner_user_id);
+    return `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;${isMain?'opacity:.45':''}">
+      <input type="checkbox" value="${m.id}" ${checked} ${isMain?'disabled':''}
+        onchange="togDeptExtraOwner(${m.id},this.checked)">
+      ${m.display_name} <code>${m.username}</code>
+      ${isMain?'<span class="note">主负责人</span>':''}
+    </label>`;
+  }).join('') : '<div class="note">无匹配候选人，可先到组织下添加人员</div>';
+}
+
+function togDeptExtraOwner(uid, on){
+  if (!deptOwnerDraft) return;
+  if (on) deptOwnerDraft.extra_ids.add(Number(uid));
+  else deptOwnerDraft.extra_ids.delete(Number(uid));
+}
+
+function clearDeptOwnerMain(){
+  if (!deptOwnerDraft) return;
+  deptOwnerDraft.owner_user_id = '';
+  const sel = document.getElementById('dept-owner-main');
+  if (sel) sel.value = '';
+  renderDeptOwnerForm();
+}
+
+async function submitDeptOwner(){
+  const draft = deptOwnerDraft;
+  if (!draft) return;
+  const owner_user_id = draft.owner_user_id === '' || draft.owner_user_id == null
+    ? null
+    : Number(draft.owner_user_id);
+  const extra_owner_ids = [...draft.extra_ids].filter(id => id !== owner_user_id);
+  const { data } = await api('/api/org/departments/'+draft.dept_id+'/owner', {
+    method: 'POST',
+    body: JSON.stringify({ owner_user_id, extra_owner_ids }),
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message + (data.owner ? ` · ${data.owner.display_name}` : ' · 已清空主负责人'));
+  closeModal('m-dept-owner');
+  deptOwnerDraft = null;
+  // 刷新当前用户能力（若本人被设为负责人）
+  const me = await api('/api/me');
+  if (me.data?.ok) state.user = me.data.user;
+  renderMain();
+}
+// AI-GEN-END
 
 // AI-GEN-BEGIN
 let secModalMode = null;
@@ -1656,6 +1881,32 @@ async function submitSecModal(){
   if (secModalMode === 'perm_add') {
     return submitPermAdd();
   }
+  // AI-GEN-BEGIN
+  if (secModalMode === 'role_create') {
+    const label = (document.getElementById('role-new-label')?.value || '').trim();
+    if (!label) return toast('请填写角色名称');
+    const { data } = await api('/api/admin/roles', {
+      method:'POST', body: JSON.stringify({ label })
+    });
+    if (!data.ok) return toast(data.error||'失败');
+    closeModal('m-sec'); toast(data.message);
+    state.roleFocus = data.role;
+    renderMain();
+    return;
+  }
+  if (secModalMode === 'role_rename') {
+    const label = (document.getElementById('role-rename-label')?.value || '').trim();
+    const role = state._roleRenameCode;
+    if (!label || !role) return toast('请填写角色名称');
+    const { data } = await api('/api/admin/roles/'+encodeURIComponent(role), {
+      method:'PATCH', body: JSON.stringify({ label })
+    });
+    if (!data.ok) return toast(data.error||'失败');
+    closeModal('m-sec'); toast(data.message);
+    renderMain();
+    return;
+  }
+  // AI-GEN-END
 }
 
 async function openEnrollFingerprint(){
@@ -3140,6 +3391,24 @@ async function openAdd(){
     document.getElementById('add-dept-wrap').style.display='block';
     document.getElementById('add-dept').innerHTML = depts.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
   } else document.getElementById('add-dept-wrap').style.display='none';
+  // AI-GEN-BEGIN
+  const roleSel = document.getElementById('add-role');
+  if (roleSel) {
+    let roles = (state.roleAdmin?.roles || []).filter(r => !['employee_a','employee_b'].includes(r.role));
+    if (!roles.length) {
+      const { data: rd } = await api('/api/admin/roles');
+      if (rd.ok) {
+        state.roleAdmin = rd;
+        roles = (rd.roles || []).filter(r => !['employee_a','employee_b'].includes(r.role));
+      }
+    }
+    if (roles.length) {
+      roleSel.innerHTML = roles.map(r =>
+        `<option value="${r.role}" ${r.role==='employee'?'selected':''}>${r.label}</option>`
+      ).join('');
+    }
+  }
+  // AI-GEN-END
   openModal('m-add');
 }
 function pickPersonType(el){
