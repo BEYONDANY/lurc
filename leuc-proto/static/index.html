@@ -846,6 +846,15 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
     <textarea id="decide-remark" rows="3" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit"
       placeholder="通过或驳回时可填写，详情中可见"></textarea>
   </div>
+  <!-- AI-GEN-BEGIN -->
+  <div class="field" id="decide-reject-wrap" style="display:none">
+    <label>驳回到指定节点</label>
+    <select id="decide-reject-to" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
+      <option value="">直接结束申请</option>
+    </select>
+    <div class="note">选申请人或前置节点后，对方可改单重提并回到你这里。</div>
+  </div>
+  <!-- AI-GEN-END -->
   <div class="foot">
     <button class="btn btn-line" onclick="closeModal('m-decide');state._decidePending=null">取消</button>
     <button class="btn btn-pri" style="width:auto" id="decide-ok" onclick="confirmDecideTodo()">确认</button>
@@ -2774,17 +2783,71 @@ async function loadApplyPreviewBox(elId, payload){
   });
   box.innerHTML = `<h5>预计审批链</h5>${renderFlowPreviewInline(data)}`;
 }
+function renderApplyFormFieldsHtml(fields, opts){
+  // AI-GEN-BEGIN
+  opts = opts || {};
+  const list = fields || [];
+  if (!list.length) return '<div class="note">暂无申请表单内容</div>';
+  const editable = !!opts.editable;
+  const editKeys = new Set(opts.editableKeys || []);
+  return `<div class="callout" style="margin-bottom:12px">
+    <strong>申请内容</strong>
+    <div style="margin-top:8px">
+      ${list.map(f => {
+        const canEdit = editable && editKeys.has(f.key);
+        const raw = (f.value==null ? '' : String(f.value));
+        if (canEdit) {
+          if (f.input_type === 'bool') {
+            const on = raw === '是' || raw === 'true' || raw === '1';
+            return `<div class="field" style="margin:6px 0"><label>${escapeHtml(f.label)}</label>
+              <select class="flow-form-input" data-key="${escapeHtml(f.key)}" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px">
+                <option value="true" ${on?'selected':''}>是</option>
+                <option value="false" ${!on?'selected':''}>否</option>
+              </select></div>`;
+          }
+          if (f.input_type === 'textarea') {
+            return `<div class="field" style="margin:6px 0"><label>${escapeHtml(f.label)}</label>
+              <textarea class="flow-form-input" data-key="${escapeHtml(f.key)}" rows="2"
+                style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit">${escapeHtml(raw==='是'||raw==='否'?'':raw)}</textarea></div>`;
+          }
+          return `<div class="field" style="margin:6px 0"><label>${escapeHtml(f.label)}</label>
+            <input class="flow-form-input" data-key="${escapeHtml(f.key)}" type="${f.input_type==='number'?'number':'text'}"
+              value="${escapeHtml(raw==='是'||raw==='否'?'':raw)}"
+              style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px"></div>`;
+        }
+        return `<div class="kv"><span class="lab">${escapeHtml(f.label)}</span><b style="white-space:pre-wrap;word-break:break-word">${escapeHtml(raw)}</b></div>`;
+      }).join('')}
+    </div>
+  </div>`;
+  // AI-GEN-END
+}
+function collectFlowFormUpdates(){
+  // AI-GEN-BEGIN
+  const form = {};
+  document.querySelectorAll('.flow-form-input').forEach(el => {
+    const key = el.getAttribute('data-key');
+    if (!key) return;
+    let v = el.value;
+    if (el.tagName === 'SELECT' && (v === 'true' || v === 'false')) v = (v === 'true');
+    else if (el.type === 'number' && v !== '') v = Number(v);
+    form[key] = v;
+  });
+  return form;
+  // AI-GEN-END
+}
 async function openTodoFlow(tid, opts){
   // AI-GEN-BEGIN
   opts = opts || {};
   const { data } = await api('/api/todo/' + tid + '/flow');
   if (!data.ok) return toast(data.error || '加载失败');
+  state._flowTodo = data.todo || {};
   const app = data.application || {};
   const todo = data.todo || {};
-  const ap = (app.applicant) || {};
-  const sy = (app.system) || {};
+  const ap = (app.applicant) || (todo.applicant) || {};
+  const sy = (app.system) || (todo.system) || {};
   document.getElementById('flow-title').textContent = todo.title || app.title || '流程详情';
   const cur = data.current_approver;
+  const statusMap = {pending:'审批中', returned:'已驳回待改单', rejected:'已驳回', approved:'已通过', done:'已关闭'};
   document.getElementById('flow-hint').innerHTML = [
     ap.display_name ? `申请人 <b>${ap.display_name}</b>` : '',
     sy.name ? `系统 <b>${sy.name}</b>` : '',
@@ -2793,19 +2856,18 @@ async function openTodoFlow(tid, opts){
     cur ? `当前审核人 <b>${cur.display_name||cur.username}</b>` : '当前无待审步骤',
   ].filter(Boolean).join(' · ');
   const forecast = data.forecast || [];
-  const canHandle = !!opts.handle
-    && todo.bucket === 'pending'
-    && todo.status === 'open'
-    && Number(todo.assignee_id) === Number(state.user && state.user.id);
-  // 待办列表直接点通过/驳回时也会走备注弹窗；详情页可直接填
-  const showRemark = canHandle || (todo.bucket === 'pending' && todo.status === 'open'
+  const canHandle = (todo.bucket === 'pending' && todo.status === 'open'
     && Number(todo.assignee_id) === Number(state.user && state.user.id));
+  const showRemark = canHandle;
+  const canResubmit = !!(todo.can_resubmit && canHandle);
+  const formFields = todo.form_fields || [];
   document.getElementById('flow-body').innerHTML = `
     <div style="margin-bottom:12px">
       <div class="kv"><span class="lab">创建时间</span><b>${app.created_at || todo.created_at || '—'}</b></div>
       <div class="kv"><span class="lab">更新时间</span><b>${app.updated_at || '—'}</b></div>
-      <div class="kv"><span class="lab">申请状态</span><b>${app.status || todo.status || '—'}</b></div>
+      <div class="kv"><span class="lab">申请状态</span><b>${statusMap[app.status] || app.status || todo.status || '—'}</b></div>
     </div>
+    ${renderApplyFormFieldsHtml(formFields, { editable: canResubmit, editableKeys: todo.editable_keys || [] })}
     ${(() => {
       const up = todo.user_permissions;
       if (!up) return '';
@@ -2830,32 +2892,39 @@ async function openTodoFlow(tid, opts){
     <div class="field" style="margin-top:14px">
       <label>本次操作备注（可选）</label>
       <textarea id="flow-decide-remark" rows="2" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit"
-        placeholder="通过或驳回时可填写，详情中可见"></textarea>
+        placeholder="通过、驳回或重提时可填写"></textarea>
     </div>
-    ${(!todo.is_cc && (todo.rejectable_steps||[]).length) ? `
+    ${(!todo.is_cc && !canResubmit && (todo.rejectable_steps||[]).length) ? `
     <div class="field">
       <label>驳回到指定节点（可选，不选则直接结束）</label>
       <select id="flow-reject-to" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
         <option value="">直接结束申请</option>
-        ${(todo.rejectable_steps||[]).map(s=>`<option value="${s.order}">${s.order}. ${s.label}</option>`).join('')}
+        ${(todo.rejectable_steps||[]).map(s=>`<option value="${s.order}">${s.order===0?'申请人':(s.order+'.')} ${s.label}</option>`).join('')}
       </select>
-      <div class="note">驳回后目标节点可修改并再次提交，将直接回到当前驳回人。</div>
+      <div class="note">驳回后目标可修改并再次提交，将直接回到当前驳回人。</div>
     </div>` : ''}
+    ${canResubmit ? `<div class="note" style="margin-top:8px;color:#b42318">本申请已被驳回，请修改上方表单后点击「修改并再次提交」。</div>` : ''}
     ` : ''}`;
   const foot = document.querySelector('#m-flow .foot');
   if (foot) {
     if (showRemark) {
-      const passLabel = todo.is_cc ? '已阅' : (todo.is_confirm ? '确认关闭' : '通过');
-      if (todo.need_provision_form) {
+      if (canResubmit) {
         foot.innerHTML = `
           <button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>
-          <button class="btn btn-line" onclick="decideTodoFromFlow(${tid},'rejected')">驳回</button>
-          <button class="btn btn-pri" style="width:auto" onclick="closeModal('m-flow');openProvision(${tid})">去开通</button>`;
+          <button class="btn btn-pri" style="width:auto" onclick="resubmitTodoFromFlow(${tid})">修改并再次提交</button>`;
       } else {
-        foot.innerHTML = `
-          <button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>
-          ${todo.is_cc ? '' : `<button class="btn btn-line" onclick="decideTodoFromFlow(${tid},'rejected')">驳回</button>`}
-          <button class="btn btn-pri" style="width:auto" onclick="decideTodoFromFlow(${tid},'approved')">${passLabel}</button>`;
+        const passLabel = todo.is_cc ? '已阅' : (todo.is_confirm ? '确认关闭' : '通过');
+        if (todo.need_provision_form) {
+          foot.innerHTML = `
+            <button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>
+            <button class="btn btn-line" onclick="decideTodoFromFlow(${tid},'rejected')">驳回</button>
+            <button class="btn btn-pri" style="width:auto" onclick="closeModal('m-flow');openProvision(${tid})">去开通</button>`;
+        } else {
+          foot.innerHTML = `
+            <button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>
+            ${todo.is_cc ? '' : `<button class="btn btn-line" onclick="decideTodoFromFlow(${tid},'rejected')">驳回</button>`}
+            <button class="btn btn-pri" style="width:auto" onclick="decideTodoFromFlow(${tid},'approved')">${passLabel}</button>`;
+        }
       }
     } else {
       foot.innerHTML = `<button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>`;
@@ -2867,13 +2936,31 @@ async function openTodoFlow(tid, opts){
 function decideTodoFromFlow(tid, decision){
   // AI-GEN-BEGIN
   const remark = (document.getElementById('flow-decide-remark')?.value || '').trim();
-  const rejectTo = document.getElementById('flow-reject-to')?.value || '';
+  const rejectTo = document.getElementById('flow-reject-to')?.value;
   closeModal('m-flow');
-  return decideTodo(tid, decision, {
-    remark,
-    skipRemarkPrompt: true,
-    reject_to_step: decision === 'rejected' && rejectTo ? Number(rejectTo) : null,
+  const extra = { remark, skipRemarkPrompt: true };
+  if (decision === 'rejected') {
+    // 空字符串=直接结束；数字（含 0）=驳回到节点
+    if (rejectTo !== undefined && rejectTo !== null && rejectTo !== '') {
+      extra.reject_to_step = Number(rejectTo);
+    }
+  }
+  return decideTodo(tid, decision, extra);
+  // AI-GEN-END
+}
+async function resubmitTodoFromFlow(tid){
+  // AI-GEN-BEGIN
+  const remark = (document.getElementById('flow-decide-remark')?.value || '').trim();
+  const form = collectFlowFormUpdates();
+  const { data } = await api('/api/todo/'+tid+'/resubmit', {
+    method:'POST', body: JSON.stringify({ form, remark })
   });
+  if (!data.ok) return toast(data.error || '重提失败');
+  toast(data.message || '已重新提交');
+  closeModal('m-flow');
+  await enterHome();
+  state.view = 'todo'; state.todoTab = 'done';
+  renderSide(); renderMain();
   // AI-GEN-END
 }
 async function refreshBindFlowPreview(){
@@ -3122,6 +3209,8 @@ async function decideTodo(id, decision, extra){
     const hintEl = document.getElementById('decide-hint');
     const remarkEl = document.getElementById('decide-remark');
     const okBtn = document.getElementById('decide-ok');
+    const rejectWrap = document.getElementById('decide-reject-wrap');
+    const rejectSel = document.getElementById('decide-reject-to');
     if (!titleEl || !hintEl || !remarkEl || !document.getElementById('m-decide')) {
       // 弹窗缺失时降级直提，避免按钮「点了没反应」
       return submitDecideTodo(id, decision, { ...extra, remark: '', skipRemarkPrompt: true });
@@ -3131,8 +3220,39 @@ async function decideTodo(id, decision, extra){
     hintEl.textContent =
       decision === 'approved'
         ? '确认通过该待办。可填写备注，将显示在流程详情中。'
-        : '确认驳回该待办。建议填写原因，将显示在流程详情中。';
+        : '确认驳回该待办。可选择驳回节点；目标可改单重提并回到你。';
     remarkEl.value = '';
+    if (rejectWrap && rejectSel) {
+      if (decision === 'rejected') {
+        rejectWrap.style.display = '';
+        rejectSel.innerHTML = '<option value="">直接结束申请</option>';
+        // 从首页待办缓存取可驳回节点
+        let steps = [];
+        try {
+          const bags = state.home?.todos || {};
+          const all = [].concat(bags.pending||[], bags.done||[], bags.initiated||[]);
+          const hit = all.find(t => Number(t.id) === Number(id));
+          steps = (hit && hit.rejectable_steps) || [];
+        } catch (e) { steps = []; }
+        if (!steps.length) {
+          try {
+            const { data: fl } = await api('/api/todo/'+id+'/flow');
+            steps = (fl.todo && fl.todo.rejectable_steps) || [];
+          } catch (e) {}
+        }
+        steps.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = String(s.order);
+          opt.textContent = (s.order===0 ? '申请人 · ' : (s.order+'. ')) + (s.label||'');
+          rejectSel.appendChild(opt);
+        });
+        // 默认驳回到申请人
+        if (steps.some(s => Number(s.order) === 0)) rejectSel.value = '0';
+      } else {
+        rejectWrap.style.display = 'none';
+        rejectSel.value = '';
+      }
+    }
     if (okBtn) {
       okBtn.textContent = decision === 'approved' ? '确认通过' : '确认驳回';
       okBtn.className = decision === 'approved' ? 'btn btn-pri' : 'btn btn-line';
@@ -3152,9 +3272,14 @@ async function confirmDecideTodo(){
   const p = state._decidePending;
   if (!p) return closeModal('m-decide');
   const remark = (document.getElementById('decide-remark')?.value || '').trim();
+  const rejectTo = document.getElementById('decide-reject-to')?.value;
   closeModal('m-decide');
   state._decidePending = null;
-  await submitDecideTodo(p.id, p.decision, { ...(p.extra || {}), remark, skipRemarkPrompt: true });
+  const extra = { ...(p.extra || {}), remark, skipRemarkPrompt: true };
+  if (p.decision === 'rejected' && rejectTo !== undefined && rejectTo !== null && rejectTo !== '') {
+    extra.reject_to_step = Number(rejectTo);
+  }
+  await submitDecideTodo(p.id, p.decision, extra);
   // AI-GEN-END
 }
 async function submitDecideTodo(id, decision, extra){

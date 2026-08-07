@@ -89,8 +89,12 @@ from db import (
 # AI-GEN-BEGIN
 from leuc_approval_ext import (
     append_applicant_confirm,
+    build_apply_form_fields,
     collect_cc_for_system_owners,
+    editable_form_keys,
     group_bind_items_by_owner,
+    jump_to_reject_from_step,
+    merge_todo_meta_updates,
     reject_to_specified_step,
     spawn_cc_todos,
     user_permission_snapshot,
@@ -1218,6 +1222,7 @@ def serialize_todo(db, row):
     flow_code = None
     applicant = None
     system = None
+    app_row = None
     if app_id:
         app_row = db.execute(
             "SELECT * FROM applications WHERE id = ?", (app_id,)
@@ -1294,16 +1299,49 @@ def serialize_todo(db, row):
     d["is_cc"] = bool(meta.get("cc") or d.get("todo_type") == "知会确认")
     d["is_confirm"] = step_key == "applicant_confirm"
     d["rejectable_steps"] = []
-    if app_id and d.get("bucket") == "pending" and not d["is_cc"]:
+    if app_id and d.get("bucket") == "pending" and not d["is_cc"] and not d["is_confirm"]:
+        # 0 = 申请人修改重提
+        d["rejectable_steps"] = [
+            {"order": 0, "label": "申请人（修改后重提）", "key": "applicant_edit"}
+        ]
         prior = db.execute(
             """SELECT step_order, step_label, step_key FROM application_steps
-            WHERE application_id = ? AND step_order < ? ORDER BY step_order""",
+            WHERE application_id = ? AND step_order < ?
+              AND step_key != 'applicant_confirm'
+            ORDER BY step_order""",
             (app_id, d.get("step_order") or 1),
         ).fetchall()
-        d["rejectable_steps"] = [
-            {"order": r["step_order"], "label": r["step_label"], "key": r["step_key"]}
-            for r in prior
-        ]
+        d["rejectable_steps"].extend(
+            [
+                {
+                    "order": r["step_order"],
+                    "label": r["step_label"],
+                    "key": r["step_key"],
+                }
+                for r in prior
+            ]
+        )
+    app_status = d.get("app_status")
+    reject_from = None
+    if app_id and app_row:
+        try:
+            reject_from = app_row["reject_from_step"] if "reject_from_step" in app_row.keys() else None
+        except Exception:
+            reject_from = None
+    d["can_resubmit"] = bool(
+        d.get("bucket") == "pending"
+        and d.get("status") == "open"
+        and not d["is_cc"]
+        and (
+            meta.get("needs_resubmit")
+            or app_status == "returned"
+            or (d.get("step_order") in (0, "0") and app_status == "returned")
+        )
+    )
+    d["reject_from_step"] = reject_from
+    form_fields = build_apply_form_fields(db, meta, app_row if app_id else None)
+    d["form_fields"] = form_fields
+    d["editable_keys"] = editable_form_keys(form_fields) if d["can_resubmit"] else []
     # 延期：展示用户权限详情（突出敏感）
     if flow_code in ("account_extend", "account_extend_sensitive") or meta.get("days"):
         uid = meta.get("leuc_user_id") or (applicant or {}).get("id")
@@ -1410,6 +1448,30 @@ def build_application_flow(db, app_id):
         progress = f"{cur}/{total}"
         progress_label = current_label or f"第{cur}步"
     applicant = _user_brief(db, app["applicant_id"])
+    # AI-GEN-BEGIN
+    # 驳回到申请人（current_step=0）：时间线插入虚拟当前节点
+    if app["status"] == "returned" and int(app["current_step"] or -1) == 0:
+        current_approver = applicant
+        progress = f"0/{total}"
+        progress_label = "申请人修改重提"
+        timeline.insert(
+            0,
+            {
+                "step_order": 0,
+                "step_key": "applicant_edit",
+                "step_label": "申请人修改重提",
+                "status": "pending",
+                "phase": "current",
+                "assignee": applicant,
+                "assignee_id": app["applicant_id"],
+                "todo_id": None,
+                "decided_at": None,
+                "remark": None,
+                "step_kind": "edit",
+            },
+        )
+        forecast = [t for t in timeline if t["phase"] == "forecast"]
+    # AI-GEN-END
     system = None
     if app["system_id"]:
         sy = db.execute(
@@ -1427,6 +1489,12 @@ def build_application_flow(db, app_id):
             "total_steps": app["total_steps"],
             "created_at": app["created_at"],
             "updated_at": app["updated_at"],
+            "reject_to_step": (
+                app["reject_to_step"] if "reject_to_step" in app.keys() else None
+            ),
+            "reject_from_step": (
+                app["reject_from_step"] if "reject_from_step" in app.keys() else None
+            ),
             "applicant": applicant,
             "system": system,
         },
@@ -3591,6 +3659,78 @@ def todo_flow(user, tid):
     # AI-GEN-END
 
 
+@app.post("/api/todo/<int:tid>/resubmit")
+@login_required
+def todo_resubmit(user, tid):
+    """驳回后修改表单并再次提交，直达原驳回人。"""
+    # AI-GEN-BEGIN
+    data = request.get_json(force=True) or {}
+    db = get_db()
+    row = db.execute("SELECT * FROM todos WHERE id = ?", (tid,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "待办不存在"}), 404
+    if row["assignee_id"] != user["id"] and not user_has_role(user, "super_admin"):
+        return jsonify({"ok": False, "error": "仅当前处理人可重提"}), 403
+    if row["bucket"] != "pending" or row["status"] != "open":
+        return jsonify({"ok": False, "error": "该待办不可重提"}), 400
+    app_id = row["application_id"]
+    if not app_id:
+        return jsonify({"ok": False, "error": "非流程待办"}), 400
+    app_row = db.execute(
+        "SELECT * FROM applications WHERE id = ?", (app_id,)
+    ).fetchone()
+    if not app_row or app_row["status"] != "returned":
+        return jsonify({"ok": False, "error": "仅驳回待改单的申请可重提"}), 400
+    try:
+        reject_from = (
+            app_row["reject_from_step"]
+            if "reject_from_step" in app_row.keys()
+            else None
+        )
+    except Exception:
+        reject_from = None
+    if reject_from in (None, "", 0, "0"):
+        return jsonify({"ok": False, "error": "缺少原驳回节点，无法重提"}), 400
+    now = datetime.now().strftime("%Y-%m-%d")
+    remark = (data.get("remark") or "").strip() or None
+    meta = merge_todo_meta_updates(row["meta"], data.get("form") or data.get("meta") or {})
+    meta.pop("needs_resubmit", None)
+    meta.pop("reject_from_step", None)
+    meta.pop("reject_to_step", None)
+    meta_json = json.dumps(meta, ensure_ascii=False)
+    # 同步同申请单 meta（业务字段）
+    for t in db.execute(
+        "SELECT id, meta FROM todos WHERE application_id = ?", (app_id,)
+    ).fetchall():
+        merged = merge_todo_meta_updates(t["meta"], data.get("form") or data.get("meta") or {})
+        merged.pop("needs_resubmit", None)
+        merged.pop("reject_from_step", None)
+        merged.pop("reject_to_step", None)
+        db.execute(
+            "UPDATE todos SET meta = ? WHERE id = ?",
+            (json.dumps(merged, ensure_ascii=False), t["id"]),
+        )
+    db.execute(
+        "UPDATE todos SET bucket = 'done', status = 'approved', remark = ? WHERE id = ?",
+        (remark or "修改后重提", tid),
+    )
+    result = jump_to_reject_from_step(
+        db,
+        app_id=app_id,
+        reject_from_step=int(reject_from),
+        todo_row=row,
+        meta_json=meta_json,
+        remark=remark,
+        now=now,
+        todo_type=row["todo_type"],
+    )
+    if not result.get("ok"):
+        return jsonify(result), 400
+    db.commit()
+    return jsonify(result)
+    # AI-GEN-END
+
+
 @app.post("/api/apply/preview-flow")
 @login_required
 def apply_preview_flow(user):
@@ -5529,11 +5669,16 @@ def todo_decide(user, tid):
         if not app_row:
             return jsonify({"ok": False, "error": "申请单不存在"}), 404
         flow_todo_type = row["todo_type"]
-        step_order = row["step_order"] or app_row["current_step"]
-        step_order_for_remark = step_order
         # AI-GEN-BEGIN
+        # step_order=0 表示申请人修改重提，不能用 `or` 回落
+        raw_so = row["step_order"] if "step_order" in row.keys() else None
+        if raw_so is None:
+            step_order = int(app_row["current_step"] or 1)
+        else:
+            step_order = int(raw_so)
+        step_order_for_remark = step_order if step_order > 0 else None
         # 开通前校验：新建账号须录入账号名（避免先落库再报错）
-        if decision == "approved":
+        if decision == "approved" and step_order > 0:
             cur_step = db.execute(
                 """SELECT step_key FROM application_steps
                 WHERE application_id = ? AND step_order = ?""",
@@ -5575,15 +5720,17 @@ def todo_decide(user, tid):
             "UPDATE todos SET bucket = 'done', status = ? WHERE id = ?",
             (decision, tid),
         )
-        db.execute(
-            """UPDATE application_steps SET status = ?, decided_at = ?
-            WHERE application_id = ? AND step_order = ?""",
-            (decision, now, app_id, step_order),
-        )
+        if step_order > 0:
+            db.execute(
+                """UPDATE application_steps SET status = ?, decided_at = ?
+                WHERE application_id = ? AND step_order = ?""",
+                (decision, now, app_id, step_order),
+            )
         if decision == "rejected":
             # AI-GEN-BEGIN
             reject_to = data.get("reject_to_step")
-            if reject_to not in (None, "", 0, "0"):
+            # 含 0=申请人；未传则直接结束
+            if reject_to not in (None, ""):
                 result = reject_to_specified_step(
                     db,
                     app_id=app_id,
@@ -5612,6 +5759,59 @@ def todo_decide(user, tid):
             # AI-GEN-END
             db.commit()
             return jsonify({"ok": True, "message": "已驳回，申请结束"})
+
+        # AI-GEN-BEGIN
+        # 驳回改单后再次通过：直达原驳回人
+        try:
+            reject_from = (
+                app_row["reject_from_step"]
+                if app_row and "reject_from_step" in app_row.keys()
+                else None
+            )
+        except Exception:
+            reject_from = None
+        if (
+            decision == "approved"
+            and (app_row["status"] if app_row else None) == "returned"
+            and reject_from not in (None, "", 0, "0")
+        ):
+            try:
+                meta_jump = json.loads(row["meta"] or "{}")
+            except Exception:
+                meta_jump = {}
+            meta_jump.pop("needs_resubmit", None)
+            meta_jump.pop("reject_from_step", None)
+            meta_jump.pop("reject_to_step", None)
+            meta_json = json.dumps(meta_jump, ensure_ascii=False)
+            db.execute("UPDATE todos SET meta = ? WHERE id = ?", (meta_json, tid))
+            # 同步 initiated / 同单其它待办 meta 业务字段
+            db.execute(
+                """UPDATE todos SET meta = ? WHERE application_id = ?
+                AND bucket IN ('initiated', 'pending') AND id != ?""",
+                (meta_json, app_id, tid),
+            )
+            db.execute(
+                "UPDATE todos SET bucket = 'done', status = 'approved', remark = ? WHERE id = ?",
+                ((remark or "").strip() or "修改后重提", tid),
+            )
+            result = jump_to_reject_from_step(
+                db,
+                app_id=app_id,
+                reject_from_step=int(reject_from),
+                todo_row=row,
+                meta_json=meta_json,
+                remark=remark,
+                now=now,
+                todo_type=flow_todo_type,
+            )
+            if not result.get("ok"):
+                return jsonify(result), 400
+            _persist_decide_remark(
+                db, tid, remark, app_id=app_id, step_order=step_order_for_remark
+            )
+            db.commit()
+            return jsonify(result)
+        # AI-GEN-END
 
         nxt = db.execute(
             """SELECT * FROM application_steps
