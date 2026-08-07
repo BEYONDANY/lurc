@@ -468,11 +468,13 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 
 <!-- AI-GEN-BEGIN -->
 <div class="mask" id="m-add-sys"><div class="modal" style="max-width:560px">
-  <h3>添加登录系统</h3>
-  <div class="callout">添加到「可登录系统」目录；账号申请读取此列表。仅<strong>超级管理员</strong>可添加并指定多名<strong>系统管理员</strong>。</div>
+  <h3 id="sys-form-title">添加登录系统</h3>
+  <div class="callout" id="sys-form-hint">添加到「可登录系统」目录；账号申请读取此列表。仅<strong>超级管理员</strong>可添加并指定多名<strong>系统管理员</strong>。</div>
   <div class="field"><label>系统名称</label><input id="sys-name" placeholder="如：客服系统"></div>
-  <div class="field"><label>code</label><input id="sys-code" placeholder="cs"></div>
-  <div class="field"><label>client_id（可空自动生成）</label><input id="sys-client" placeholder="client_cs"></div>
+  <div class="field"><label>code <span class="note" id="sys-code-lock" style="display:none">不可变</span></label>
+    <input id="sys-code" placeholder="cs"></div>
+  <div class="field"><label>client_id <span class="note" id="sys-client-lock" style="display:none">不可变</span></label>
+    <input id="sys-client" placeholder="client_cs"></div>
   <div class="field"><label>回调地址 redirect_uri</label><input id="sys-cb" value="http://127.0.0.1:5055/oidc/callback?app=cs"></div>
   <div class="field"><label>准入方式</label>
     <div class="stepup" id="sys-mode">
@@ -483,12 +485,21 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   <div class="field"><label><input type="checkbox" id="sys-forbid-ext"> 禁止外部人员登录</label>
     <div class="note">默认不勾选；北森/飞书等建议开启</div>
   </div>
-  <div class="field"><label>系统管理员（可多选）</label>
+  <div class="field"><label>SSO 登录字段</label>
+    <select id="sys-sso-field" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+      <option value="account_name">业务系统账号名</option>
+      <option value="account_uid">唯一标识/外部用户ID</option>
+      <option value="email">邮箱</option>
+      <option value="phone">手机号</option>
+      <option value="itcode">工号/itcode</option>
+    </select>
+  </div>
+  <div class="field" id="sys-owners-field"><label>系统管理员（可多选）</label>
     <div id="sys-owners-box" style="max-height:140px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
   </div>
   <div class="foot">
     <button class="btn btn-line" onclick="closeModal('m-add-sys')">取消</button>
-    <button class="btn btn-pri" style="width:auto" onclick="submitAddSys()">保存</button>
+    <button class="btn btn-pri" style="width:auto" id="sys-form-ok" onclick="submitAddSys()">保存</button>
   </div>
 </div></div>
 <!-- AI-GEN-END -->
@@ -945,7 +956,13 @@ async function doResetPwd() {
 async function enterHome() {
   const { data } = await api('/api/home');
   if (!data.ok) { toast(data.error||'请先登录'); showScreen('login'); return; }
-  state.home = data; state.user = data.user; state.view = 'home';
+  state.home = data; state.user = data.user;
+  // AI-GEN-BEGIN
+  const qs = new URLSearchParams(location.search);
+  const want = (qs.get('view') || '').trim();
+  const menus = data.user.menus || [];
+  state.view = (want && menus.includes(want)) ? want : 'home';
+  // AI-GEN-END
   document.getElementById('me-av').textContent = (data.user.display_name||'?')[0];
   document.getElementById('me-name').textContent = data.user.display_name;
   document.getElementById('me-role').textContent = `${data.user.role_label} · ${data.user.username}`;
@@ -1236,7 +1253,7 @@ async function renderMain() {
     await loadAdminSystems(el, '业务系统管理'); return;
   }
   if (state.view === 'sys_accounts' || state.view === 'sys_acct_overview') { await renderSysAccounts(el); return; }
-  if (state.view === 'oa_forms') { location.href = '/demo/oa'; return; }
+  if (state.view === 'oa_forms') { await renderOaForms(el); return; }
   if (state.view === 'admin_sensitive') {
     await renderSensitiveConfig(el); return;
   }
@@ -3846,7 +3863,7 @@ async function openAccountPermClose(){
   };
   document.getElementById('bg-title').textContent = '账号、权限关闭';
   document.getElementById('bg-hint').textContent =
-    '仅本人。先选系统账号，再勾选关闭登录或权限；敏感项走直属→一级→财务，与申请同一套审批详情。';
+    '仅本人。先选系统账号（含本系统 LEUC），再勾选关闭登录或权限；关闭本系统将无法再登录用户中心。敏感项走直属→一级→财务。';
   const label = document.getElementById('bg-lines-label');
   if (label) label.textContent = '关闭明细';
   const addBtn = document.getElementById('bg-add-line');
@@ -3868,6 +3885,7 @@ function renderPermCloseBody(){
   );
   const selected = new Set((d.perm_ids||[]).map(Number));
   const sysSens = !!(acct && (acct.sys_has_sensitive || acct.has_sensitive));
+  const isLeuc = !!(acct && (acct.system_code === 'leuc' || acct.system_is_builtin));
   document.getElementById('bg-lines').innerHTML = `
     <div style="padding:14px 16px">
       <div class="kv"><span class="lab">申请人</span>
@@ -3876,15 +3894,18 @@ function renderPermCloseBody(){
         <select style="min-width:260px;padding:6px 8px;border:1px solid var(--line);border-radius:8px"
           onchange="changeCloseAcct(this.value)">
           ${(d.accounts||[]).map(a =>
-            `<option value="${a.id}" ${a.id===acct.id?'selected':''}>${a.system_name} / ${a.account_name}${a.has_sensitive?' ·含敏感':''}${!a.can_login?' ·已关登录':''}</option>`
+            `<option value="${a.id}" ${a.id===acct.id?'selected':''}>${a.system_name} / ${a.account_name}${a.system_code==='leuc'?' ·本系统':''}${a.has_sensitive?' ·含敏感':''}${!a.can_login?' ·已关登录':''}</option>`
           ).join('')}
         </select>
       </div>
+      ${isLeuc?'<div class="callout" style="margin:10px 0 0">关闭<strong>本系统（LEUC）</strong>后将无法再登录用户中心（等同账号注销）。离职流程会在关完业务系统后最后执行此步。</div>':''}
       <div class="kv" style="margin-top:10px"><span class="lab">关闭登录</span>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px">
           <input type="checkbox" ${d.close_login?'checked':''} ${acct && acct.can_login?'':'disabled'}
             onchange="state.closeDraft.close_login=this.checked;refreshCloseFlowPreview()">
-          ${acct && acct.can_login ? '关闭本账号登录能力（直属审批）' : '当前已不可登录'}
+          ${acct && acct.can_login
+            ? (isLeuc ? '关闭本系统账号（审批通过后不可再登录 LEUC）' : '关闭本账号登录能力（直属审批）')
+            : '当前已不可登录'}
         </label>
       </div>
       <div style="margin-top:14px"><b>选择要关闭的权限</b>
@@ -4230,10 +4251,12 @@ async function loadAdminSystems(el, title){
   const statusCard = focus ? `
         <div class="card" style="margin-bottom:12px">
           <h4>当前状态 · ${focus.name} <span class="note">${focus.code}</span>
+            ${focus.is_builtin?'<span class="pill p-blue">内置</span>':''}
             ${focus.can_manage?'':'<span class="pill p-gray">只读</span>'}</h4>
           <div class="kv"><span class="lab">系统状态</span>
             <b>${focus.status==='enabled'?'<span class="pill p-green">启用中</span>':'<span class="pill p-orange">已禁用</span>'}</b>
-            ${canEdit?`<button class="btn btn-sm btn-line" onclick="toggleSys(${focus.id},'${focus.status==='enabled'?'disabled':'enabled'}')">${focus.status==='enabled'?'禁用系统':'启用系统'}</button>`:''}
+            ${canEdit && !focus.is_builtin?`<button class="btn btn-sm btn-line" onclick="toggleSys(${focus.id},'${focus.status==='enabled'?'disabled':'enabled'}')">${focus.status==='enabled'?'禁用系统':'启用系统'}</button>`:''}
+            ${focus.is_builtin?'<span class="note">内置本系统，不可禁用或删除</span>':''}
           </div>
           <div class="kv"><span class="lab">准入方式</span><b>${focus.access_mode==='open'?'全员登录':'需账号绑定'}</b></div>
           <!-- AI-GEN-BEGIN -->
@@ -4396,9 +4419,10 @@ async function loadAdminSystems(el, title){
           <div class="node ${String(s.id)===String(focus&&focus.id)?'on':''}"
             onclick="state.sysFocusId=${s.id};state.sysPermQ='';state.sysAcctQ='';renderMain()">
             <b>${s.name}</b>
+            ${s.is_builtin?'<span class="pill p-blue">内置</span>':''}
             ${s.status!=='enabled'?'<span class="pill p-orange">禁用</span>':''}
             ${s.can_manage?'<span class="mgmt">我管</span>':''}
-            <span class="note" style="margin-left:auto">${s.account_pool_count||0}账 · ${(s.permissions||[]).length}权</span>
+            <span class="note" style="margin-left:auto">${s.is_builtin?'本系统':`${s.account_pool_count||0}账 · ${(s.permissions||[]).length}权`}</span>
           </div>`).join('')||'<div class="note">暂无系统</div>'}
       </div>
       <div>
@@ -4597,9 +4621,9 @@ async function renderSysAccounts(el){
 
 // AI-GEN-BEGIN
 async function renderOaForms(el){
-  el.innerHTML = `<div class="ptitle">OA单据</div><div class="note">加载中…</div>`;
+  el.innerHTML = `<div class="ptitle">北森消息</div><div class="note">加载中…</div>`;
   const { data } = await api('/api/oa/forms');
-  if (!data.ok) { el.innerHTML = `<div class="ptitle">OA单据</div><div class="warn">${data.error}</div>`; return; }
+  if (!data.ok) { el.innerHTML = `<div class="ptitle">北森消息</div><div class="warn">${data.error}</div>`; return; }
   const statusPill = (s) => {
     const map = {
       received:'p-blue', processing:'p-orange', done:'p-green', rejected:'p-gray',
@@ -4608,22 +4632,37 @@ async function renderOaForms(el){
     };
     return `<span class="pill ${map[s]||'p-gray'}">${s}</span>`;
   };
-  const typeLabel = (t) => t === 'leave' ? '北森注销' : '账号申请';
+  const typeLabel = (t) => t === 'leave' ? '北森离职' : '账号申请';
+  const samplePayload = {
+    userId: 630702408,
+    approvalResultType: 'Passed',
+    processType: 'DimissionProcessNew',
+    lastWorkDate: new Date().toISOString().slice(0, 10),
+    EmployeeStatus: 8,
+    Name: '徐好好',
+    Email: 'xuhh2@lenovo.com',
+  };
   el.innerHTML = `
-    <div class="ptitle">OA单据 <span class="pill p-blue">${(data.forms||[]).length}</span></div>
-    <!-- AI-GEN-BEGIN -->
+    <div class="ptitle">北森消息 <span class="pill p-blue">${(data.forms||[]).length}</span></div>
     <div class="callout">
-      <strong>账号申请</strong>：OA 审批通过后接单 → 匹配到人则发起<strong>账号申请</strong>待办；匹配不到则人事<strong>新建人员</strong>后再申请。<br>
-      <strong>注销</strong>：北森单据通过后<strong>系统直接关闭</strong>各关联账号（不经系统负责人待办）；人员未匹配则派人人事核对。
+      <strong>离职审批通过</strong>：对齐北森 OpenAPI 字段
+      <code>userId</code> / <code>approvalResultType=Passed</code> /
+      <code>processType=DimissionProcessNew</code> /
+      <code>lastWorkDate</code> / <code>EmployeeStatus</code>。
+      匹配到人则<strong>先关闭各业务系统</strong>可登录账号，<strong>最后关闭本系统（LEUC）</strong>账号；未匹配则派人人事核对。<br>
+      参考：ApprovalFinish、员工变动查询（不必真调北森，本页仅模拟消息）。
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="hd"><b>示例消息（离职审批通过）</b></div>
+      <pre style="background:#0F1630;color:#7CE7A8;padding:12px;border-radius:10px;overflow:auto;font-size:12px;line-height:1.55;margin:10px 0 0">${escapeHtml(JSON.stringify(samplePayload, null, 2))}</pre>
     </div>
     <div class="toolbar">
-      <button class="btn btn-sm btn-pri" style="width:auto" onclick="oaSimApply('mixed')">模拟账号申请通过（混合）</button>
-      <button class="btn btn-sm btn-line" onclick="oaSimApply('existing')">模拟：已知人申请</button>
-      <button class="btn btn-sm btn-line" onclick="oaSimApply('new_person')">模拟：新人申请</button>
-      <button class="btn btn-sm btn-pri" style="width:auto" onclick="oaSimLeave('lisi')">模拟北森注销（李四·直关）</button>
-      <button class="btn btn-sm btn-line" onclick="oaSimLeave('unknown')">模拟北森注销（未匹配人）</button>
+      <button class="btn btn-sm btn-pri" style="width:auto" onclick="oaSimLeave('xuhaohao')">模拟离职审批通过（徐好好）</button>
+      <button class="btn btn-sm btn-line" onclick="oaSimLeave('unknown')">模拟离职消息（未匹配人）</button>
+      <button class="btn btn-sm btn-line" onclick="oaSimApply('mixed')">次要：模拟账号申请通过</button>
+      <button class="btn btn-sm btn-line" onclick="oaSimApply('existing')">次要：已知人申请</button>
+      <button class="btn btn-sm btn-line" onclick="oaSimApply('new_person')">次要：新人申请</button>
     </div>
-    <!-- AI-GEN-END -->
     ${(data.forms||[]).length ? data.forms.map(f => `
       <div class="card" style="margin-bottom:12px">
         <div class="hd" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
@@ -4633,11 +4672,12 @@ async function renderOaForms(el){
           </div>
           <div class="note">${f.approved_at || f.created_at || ''}</div>
         </div>
-        <div class="note" style="margin:6px 0">${f.title || ''} · 申请人 ${f.applicant_name || '-'} · OA编码 ${f.oa_person_code || '-'}
+        <div class="note" style="margin:6px 0">${f.title || ''} · 申请人 ${f.applicant_name || '-'} · 标识 ${f.oa_person_code || '-'}
           ${f.leuc_name?` · LEUC ${f.leuc_name}（${f.leuc_username}）`:''}</div>
+        ${f.beisen_payload ? `<pre style="background:#F4F7FB;border:1px solid #E2E8F0;padding:10px;border-radius:8px;font-size:11.5px;overflow:auto;margin:8px 0">${escapeHtml(JSON.stringify(f.beisen_payload, null, 2))}</pre>` : (f.remark && !String(f.remark).startsWith('{') ? `<div class="note">${escapeHtml(f.remark)}</div>` : '')}
         <table>
           <thead><tr>
-            <th>系统</th><th>需求分类</th><th>申请人</th><th>OA编码</th><th>岗位</th><th>处理状态</th><th>备注</th>
+            <th>系统</th><th>需求分类</th><th>申请人</th><th>标识</th><th>岗位</th><th>处理状态</th><th>备注</th>
           </tr></thead>
           <tbody>${(f.lines||[]).map(l => `
             <tr>
@@ -4651,8 +4691,11 @@ async function renderOaForms(el){
             </tr>`).join('') || '<tr><td colspan="7" class="note">无明细</td></tr>'}
           </tbody>
         </table>
-      </div>`).join('') : '<div class="card note">暂无单据，请点上方按钮模拟 OA 审批通过</div>'}
+      </div>`).join('') : '<div class="card note">暂无消息，请点上方按钮模拟北森离职审批通过</div>'}
   `;
+}
+function escapeHtml(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 async function oaSimApply(scenario){
   const { data } = await api('/api/oa/simulate-account-apply', {
@@ -4663,9 +4706,29 @@ async function oaSimApply(scenario){
   renderMain();
 }
 async function oaSimLeave(who){
-  const body = who === 'unknown'
-    ? { oa_person_code: 'E-LEAVE-X', applicant_name: '离职未知人' }
-    : { oa_person_code: 'lisi', applicant_name: '李四' };
+  const today = new Date().toISOString().slice(0, 10);
+  let body;
+  if (who === 'unknown') {
+    body = {
+      userId: 999999001,
+      approvalResultType: 'Passed',
+      processType: 'DimissionProcessNew',
+      lastWorkDate: today,
+      EmployeeStatus: 8,
+      Name: '离职未知人',
+      oa_person_code: 'E-LEAVE-X',
+    };
+  } else {
+    body = {
+      userId: 630702408,
+      approvalResultType: 'Passed',
+      processType: 'DimissionProcessNew',
+      lastWorkDate: today,
+      EmployeeStatus: 8,
+      Name: '徐好好',
+      Email: 'xuhh2@lenovo.com',
+    };
+  }
   const { data } = await api('/api/oa/simulate-leave', { method:'POST', body: JSON.stringify(body) });
   if (!data.ok) return toast(data.error);
   toast(data.message);

@@ -64,6 +64,7 @@ from db import (
     BUILTIN_ROLE_CODES,
     DEFAULT_ROLE_CAPS,
     DEFAULT_ROLE_MENUS,
+    LEUC_SYSTEM_CODE,
     ROLE_LABELS,
     ROLE_MENUS,
     alloc_username,
@@ -431,6 +432,8 @@ def ensure_db():
                 VALUES (?, 'org_set_owner')""",
                 (role,),
             )
+        # 北森消息菜单（oa_forms）
+        ensure_roles_seeded(conn)
         # AI-GEN-END
         ensure_system_admin(conn)
         conn.commit()
@@ -554,6 +557,7 @@ def row_user(row):
         "buttons": caps,  # 按钮权限 = role_caps
         "can_proxy_apply": "proxy_apply" in caps,
         "can_set_account_expire": "set_account_expire" in caps,
+        "status": (row["status"] if "status" in keys else "active") or "active",
     }
     # AI-GEN-END
 
@@ -878,8 +882,9 @@ def user_may_access_system(db, user_row, system_row):
 
 
 # AI-GEN-BEGIN
-def append_system_owner_step(db, system_id, steps):
-    """在审批链末尾追加系统负责人开通（跳过已在链中的人）。"""
+def append_system_owner_step(db, system_id, steps, *, purpose="open"):
+    """在审批链末尾追加系统负责人（开通或关闭）；跳过已在链中的人。"""
+    # AI-GEN-BEGIN
     steps = list(steps or [])
     used = {s[2] for s in steps if s and s[2]}
     owners = list_system_owner_ids(db, system_id) if system_id else []
@@ -889,11 +894,15 @@ def append_system_owner_step(db, system_id, steps):
         ).fetchone() if system_id else None
         if row and row["owner_user_id"]:
             owners = [row["owner_user_id"]]
+    label = (
+        "系统负责人关闭账号" if purpose == "close" else "系统负责人开通"
+    )
     for oid in owners:
         if oid and oid not in used:
-            steps.append(("system_owner", "系统负责人开通", oid))
+            steps.append(("system_owner", label, oid))
             break
     return steps
+    # AI-GEN-END
 
 
 def provision_account_apply(
@@ -1627,14 +1636,17 @@ def auto_revoke_sensitive(db, application, account_id=None):
 
 
 def close_user_system_account(db, user_id, account_id):
-    """关闭指定系统账号登录。"""
+    """关闭指定系统账号登录；本系统（LEUC）同时关闭 users.status。"""
+    # AI-GEN-BEGIN
     row = db.execute(
-        """SELECT a.*, s.name AS system_name FROM user_system_accounts a
+        """SELECT a.*, s.name AS system_name, s.code AS system_code FROM user_system_accounts a
         JOIN systems s ON s.id = a.system_id WHERE a.id = ?""",
         (account_id,),
     ).fetchone()
     if not row or int(row["user_id"]) != int(user_id):
         return {"ok": False, "error": "账号不存在或不属于该用户"}
+    if (row["system_code"] or "") == LEUC_SYSTEM_CODE:
+        return close_leuc_user(db, user_id)
     db.execute(
         "UPDATE user_system_accounts SET can_login = 0 WHERE id = ?", (account_id,)
     )
@@ -1647,7 +1659,103 @@ def close_user_system_account(db, user_id, account_id):
         "ok": True,
         "system": row["system_name"],
         "account": row["account_name"],
+        "closed_leuc": False,
     }
+    # AI-GEN-END
+
+
+# AI-GEN-BEGIN
+def ensure_user_leuc_account(db, user_row):
+    """确保用户有本系统（LEUC）登录账号行，便于自助关闭与离职统一处理。"""
+    if not user_row:
+        return None
+    sys = db.execute(
+        "SELECT id, name, code FROM systems WHERE code = ?", (LEUC_SYSTEM_CODE,)
+    ).fetchone()
+    if not sys:
+        return None
+    uid = int(user_row["id"])
+    existing = db.execute(
+        """SELECT * FROM user_system_accounts
+        WHERE user_id = ? AND system_id = ? ORDER BY id LIMIT 1""",
+        (uid, sys["id"]),
+    ).fetchone()
+    keys = user_row.keys()
+    status = (user_row["status"] if "status" in keys else "active") or "active"
+    can_login = 0 if status == "closed" else 1
+    uname = user_row["username"]
+    if existing:
+        if int(existing["can_login"] or 0) != can_login:
+            db.execute(
+                "UPDATE user_system_accounts SET can_login = ? WHERE id = ?",
+                (can_login, existing["id"]),
+            )
+            existing = db.execute(
+                "SELECT * FROM user_system_accounts WHERE id = ?", (existing["id"],)
+            ).fetchone()
+        return existing
+    db.execute(
+        """INSERT INTO user_system_accounts
+        (user_id, system_id, account_name, account_label, can_login, has_sensitive,
+         perm_summary, is_default)
+        VALUES (?,?,?,?,?,?,?,1)""",
+        (
+            uid,
+            sys["id"],
+            uname,
+            "本系统登录",
+            can_login,
+            0,
+            "LEUC 本系统登录",
+        ),
+    )
+    return db.execute(
+        """SELECT * FROM user_system_accounts
+        WHERE user_id = ? AND system_id = ? ORDER BY id DESC LIMIT 1""",
+        (uid, sys["id"]),
+    ).fetchone()
+
+
+def close_leuc_user(db, user_id):
+    """关闭本系统账号：users.status=closed，并关掉 leuc 登录账号行。"""
+    urow = db.execute("SELECT * FROM users WHERE id = ?", (int(user_id),)).fetchone()
+    if not urow:
+        return {"ok": False, "error": "用户不存在"}
+    ensure_user_leuc_account(db, urow)
+    db.execute(
+        "UPDATE users SET status = 'closed' WHERE id = ?", (int(user_id),)
+    )
+    sys = db.execute(
+        "SELECT id, name FROM systems WHERE code = ?", (LEUC_SYSTEM_CODE,)
+    ).fetchone()
+    acct_name = urow["username"]
+    if sys:
+        db.execute(
+            "UPDATE user_system_accounts SET can_login = 0 WHERE user_id = ? AND system_id = ?",
+            (int(user_id), sys["id"]),
+        )
+        row = db.execute(
+            """SELECT account_name FROM user_system_accounts
+            WHERE user_id = ? AND system_id = ? ORDER BY id LIMIT 1""",
+            (int(user_id), sys["id"]),
+        ).fetchone()
+        if row:
+            acct_name = row["account_name"]
+    return {
+        "ok": True,
+        "system": (sys["name"] if sys else "本系统（LEUC）"),
+        "account": acct_name,
+        "closed_leuc": True,
+    }
+
+
+def user_is_closed(row) -> bool:
+    if not row:
+        return True
+    keys = row.keys()
+    if "status" not in keys:
+        return False
+    return (row["status"] or "active") == "closed"
 # AI-GEN-END
 
 
@@ -2255,6 +2363,17 @@ def api_login():
                 "refresh_captcha": True,
             }
         ), 401
+
+    # AI-GEN-BEGIN
+    if user_is_closed(row):
+        return jsonify(
+            {
+                "ok": False,
+                "error": "账号已关闭，无法登录（如离职关闭）",
+                "flow": "account_closed",
+            }
+        ), 403
+    # AI-GEN-END
 
     set_risk(username, 0)
     session.pop("login_captcha", None)
@@ -3662,15 +3781,21 @@ def apply_my_accounts(user):
         target = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
         if not can_manage_member(user, target):
             return jsonify({"ok": False, "error": "仅可查看下级账号"}), 403
+    # AI-GEN-BEGIN
+    target_u = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+    if target_u:
+        ensure_user_leuc_account(db, target_u)
+        db.commit()
+    # AI-GEN-END
     rows = db.execute(
         """SELECT a.id, a.account_name, a.account_label, a.can_login, a.has_sensitive,
                   a.perm_summary, a.system_id, s.name AS system_name, s.code AS system_code,
-                  s.has_sensitive AS sys_has_sensitive
+                  s.has_sensitive AS sys_has_sensitive, s.is_builtin AS system_is_builtin
         FROM user_system_accounts a
         JOIN systems s ON s.id = a.system_id
         WHERE a.user_id = ?
-        ORDER BY s.id, a.id""",
-        (uid,),
+        ORDER BY CASE WHEN s.code = ? THEN 1 ELSE 0 END, s.id, a.id""",
+        (uid, LEUC_SYSTEM_CODE),
     ).fetchall()
     perms_by_sys = {}
     for r in db.execute(
@@ -4414,6 +4539,7 @@ def todo_decide(user, tid):
         "账号延期",
         "外部人员",
         "账号申请",
+        "北森离职关闭",
     ):
         app_row = db.execute("SELECT * FROM applications WHERE id = ?", (app_id,)).fetchone()
         if not app_row:
@@ -4617,6 +4743,48 @@ def todo_decide(user, tid):
                     "revoked": True,
                 }
             )
+        if app_row["flow_code"] in ("beisen_leave", "beisen_leave_sensitive"):
+            # AI-GEN-BEGIN
+            try:
+                meta = json.loads(row["meta"] or "{}")
+            except Exception:
+                meta = {}
+            uid = meta.get("leuc_user_id") or app_row["applicant_id"]
+            aid = meta.get("account_id")
+            if not aid:
+                return jsonify({"ok": False, "error": "离职单缺少账号"}), 400
+            result = close_user_system_account(db, int(uid), int(aid))
+            if not result.get("ok"):
+                return jsonify({"ok": False, "error": result.get("error") or "关闭失败"}), 400
+            line_id = meta.get("oa_line_id")
+            form_id = meta.get("oa_form_id")
+            if line_id:
+                db.execute(
+                    """UPDATE oa_form_lines SET handle_status = 'done', remark = ?
+                    WHERE id = ?""",
+                    (
+                        f"审批通过已关闭：{result.get('system')} / {result.get('account')}",
+                        line_id,
+                    ),
+                )
+            if form_id:
+                _oa_refresh_form_status(db, form_id)
+            push_system_message(
+                db,
+                int(uid),
+                "北森离职账号已关闭",
+                f"{result['system']} / {result['account']} 已按北森离职审批关闭",
+            )
+            db.commit()
+            return jsonify(
+                {
+                    "ok": True,
+                    "message": f"审批完成，已关闭：{result['system']} / {result['account']}",
+                    "closed_leuc": bool(result.get("closed_leuc")),
+                    "revoked": True,
+                }
+            )
+            # AI-GEN-END
         # AI-GEN-END
         # AI-GEN-BEGIN
         if app_row["flow_code"] in ("sensitive", "account_apply", "account_apply_sensitive"):
@@ -4869,7 +5037,8 @@ def dept_apply_systems(user):
     if not require_dept_manage(user):
         return jsonify({"ok": False, "error": "无权限"}), 403
     rows = get_db().execute(
-        "SELECT id, code, name, access_mode, status FROM systems WHERE status='enabled' AND access_mode='apply' ORDER BY id"
+        "SELECT id, code, name, access_mode, status FROM systems WHERE status='enabled' AND access_mode='apply' AND code != ? ORDER BY id",
+        (LEUC_SYSTEM_CODE,),
     ).fetchall()
     return jsonify({"ok": True, "systems": [dict(r) for r in rows]})
 
@@ -6053,7 +6222,8 @@ def bind_systems(user):
     db = get_db()
     rows = db.execute(
         """SELECT id, code, name, access_mode, forbid_external, has_sensitive
-        FROM systems WHERE status='enabled' ORDER BY id"""
+        FROM systems WHERE status='enabled' AND code != ? ORDER BY id""",
+        (LEUC_SYSTEM_CODE,),
     ).fetchall()
     perms_by_sys = {}
     for r in db.execute(
@@ -7284,6 +7454,7 @@ def admin_systems(user):
         item["owner_user_ids"] = [o["id"] for o in owners]
         item["can_manage"] = manage_ids is None or r["id"] in manage_ids
         # AI-GEN-BEGIN
+        item["is_builtin"] = int(r["is_builtin"] if "is_builtin" in r.keys() else 0)
         if "sso_login_field" not in item or not item.get("sso_login_field"):
             item["sso_login_field"] = (
                 "account_uid" if item.get("code") == "beisen" else "account_name"
@@ -7511,6 +7682,114 @@ def admin_create_system(user):
     )
 
 
+# AI-GEN-BEGIN
+@app.patch("/api/admin/systems/<int:sid>")
+@app.put("/api/admin/systems/<int:sid>")
+@login_required
+def admin_update_system(user, sid):
+    """编辑业务系统：name / 回调 / 准入 / 外部登录 / SSO字段 / 管理员；code 与 client_id 不可改。"""
+    if not require_sys_owner(user, sid):
+        return jsonify({"ok": False, "error": "无权限或不负责该系统"}), 403
+    data = request.get_json(force=True) or {}
+    db = get_db()
+    migrate_schema(db)
+    row = db.execute("SELECT * FROM systems WHERE id = ?", (sid,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "系统不存在"}), 404
+    # 拒绝篡改不可变字段
+    if "code" in data and (data.get("code") or "").strip() and (data.get("code") or "").strip() != row["code"]:
+        return jsonify({"ok": False, "error": "code 不可修改"}), 400
+    if (
+        "client_id" in data
+        and (data.get("client_id") or "").strip()
+        and (data.get("client_id") or "").strip() != row["client_id"]
+    ):
+        return jsonify({"ok": False, "error": "client_id 不可修改"}), 400
+
+    name = (data.get("name") if "name" in data else row["name"]) or ""
+    name = str(name).strip()
+    redirect_uris = (
+        data.get("redirect_uris") if "redirect_uris" in data else row["redirect_uris"]
+    ) or ""
+    redirect_uris = str(redirect_uris).strip()
+    if not name or not redirect_uris:
+        return jsonify({"ok": False, "error": "名称、回调地址必填"}), 400
+
+    access_mode = data.get("access_mode") if "access_mode" in data else row["access_mode"]
+    access_mode = (access_mode or "apply").strip()
+    if access_mode not in ("open", "apply"):
+        return jsonify({"ok": False, "error": "access_mode 须为 open 或 apply"}), 400
+
+    if "forbid_external" in data:
+        forbid_external = 1 if data.get("forbid_external") else 0
+    else:
+        forbid_external = int(row["forbid_external"] or 0)
+
+    if "require_pkce" in data:
+        require_pkce = 1 if data.get("require_pkce") else 0
+    else:
+        require_pkce = int(row["require_pkce"] or 1)
+
+    sso_login_field = (
+        data.get("sso_login_field")
+        if "sso_login_field" in data
+        else (row["sso_login_field"] if "sso_login_field" in row.keys() else None)
+    )
+    sso_login_field = (sso_login_field or "").strip()
+    if not sso_login_field:
+        sso_login_field = "account_uid" if row["code"] == "beisen" else "account_name"
+    if sso_login_field not in SSO_LOGIN_FIELDS:
+        return jsonify(
+            {"ok": False, "error": f"sso_login_field 须为 {' / '.join(SSO_LOGIN_FIELDS)}"}
+        ), 400
+
+    scopes = data.get("scopes") if "scopes" in data else row["scopes"]
+    scopes = (scopes or "openid profile").strip()
+
+    db.execute(
+        """UPDATE systems SET
+          name=?, redirect_uris=?, access_mode=?, forbid_external=?,
+          require_pkce=?, sso_login_field=?, scopes=?
+        WHERE id=?""",
+        (
+            name,
+            redirect_uris,
+            access_mode,
+            forbid_external,
+            require_pkce,
+            sso_login_field,
+            scopes,
+            sid,
+        ),
+    )
+    # 仅超管可改系统管理员
+    if "owner_user_ids" in data or "owners" in data:
+        if user["role"] != "super_admin":
+            return jsonify({"ok": False, "error": "仅超管可修改系统管理员"}), 403
+        owner_ids = data.get("owner_user_ids") or data.get("owners") or []
+        set_system_owners(db, sid, owner_ids)
+
+    db.commit()
+    owners = fetch_system_owners(db, sid)
+    return jsonify(
+        {
+            "ok": True,
+            "id": sid,
+            "code": row["code"],
+            "client_id": row["client_id"],
+            "name": name,
+            "redirect_uris": redirect_uris,
+            "access_mode": access_mode,
+            "forbid_external": forbid_external,
+            "sso_login_field": sso_login_field,
+            "sso_login_field_label": sso_login_field_label(sso_login_field, row["code"]),
+            "owners": owners,
+            "message": "已保存系统配置",
+        }
+    )
+# AI-GEN-END
+
+
 @app.post("/api/admin/systems/<int:sid>/status")
 @login_required
 def admin_system_status(user, sid):
@@ -7524,6 +7803,10 @@ def admin_system_status(user, sid):
     row = db.execute("SELECT * FROM systems WHERE id = ?", (sid,)).fetchone()
     if not row:
         return jsonify({"ok": False, "error": "系统不存在"}), 404
+    # AI-GEN-BEGIN
+    if int(row["is_builtin"] if "is_builtin" in row.keys() else 0):
+        return jsonify({"ok": False, "error": "本系统为内置系统，不可禁用或删除"}), 400
+    # AI-GEN-END
     db.execute("UPDATE systems SET status = ? WHERE id = ?", (status, sid))
     db.commit()
     return jsonify({"ok": True, "status": status})
@@ -7656,11 +7939,21 @@ def _oa_hr_user_id(db):
     return row["id"] if row else None
 
 
-def _oa_find_user(db, oa_person_code, applicant_name=None):
+def _oa_find_user(db, oa_person_code, applicant_name=None, beisen_user_id=None):
+    """匹配 LEUC 用户：优先北森 userId，再 itcode/username，再唯一姓名。"""
+    # AI-GEN-BEGIN
+    bid = str(beisen_user_id or "").strip()
+    if bid:
+        row = db.execute(
+            "SELECT * FROM users WHERE beisen_user_id = ?", (bid,)
+        ).fetchone()
+        if row:
+            return row
     code = (oa_person_code or "").strip()
     if code:
         row = db.execute(
-            "SELECT * FROM users WHERE itcode = ? OR username = ?", (code, code)
+            "SELECT * FROM users WHERE itcode = ? OR username = ? OR beisen_user_id = ?",
+            (code, code, code),
         ).fetchone()
         if row:
             return row
@@ -7672,6 +7965,7 @@ def _oa_find_user(db, oa_person_code, applicant_name=None):
         if len(rows) == 1:
             return rows[0]
     return None
+    # AI-GEN-END
 
 
 def _oa_refresh_form_status(db, form_id):
@@ -7815,6 +8109,16 @@ def oa_forms_list(user):
     out = []
     for f in forms:
         item = dict(f)
+        # AI-GEN-BEGIN
+        rem = item.get("remark") or ""
+        if rem.startswith("{") and "processType" in rem:
+            try:
+                item["beisen_payload"] = json.loads(rem)
+            except Exception:
+                item["beisen_payload"] = None
+        else:
+            item["beisen_payload"] = None
+        # AI-GEN-END
         item["lines"] = [
             dict(l)
             for l in db.execute(
@@ -8020,18 +8324,96 @@ def oa_simulate_account_apply(user):
 @app.post("/api/oa/simulate-leave")
 @login_required
 def oa_simulate_leave(user):
-    """模拟：北森注销单据通过 → 直接关闭各系统账号（不经系统负责人待办）。"""
+    """模拟：北森离职审批通过 → 按账号是否敏感进入审批链，末步系统负责人关闭。
+
+    无敏感：直属 → 系统负责人关闭
+    有敏感：直属→一级→财务 → 系统负责人关闭
+    本系统（LEUC）账号单独一单，排在末尾，由本系统管理员关闭。
+
+    对齐北森字段：userId / approvalResultType / processType / lastWorkDate / EmployeeStatus
+    """
     # AI-GEN-BEGIN
     if not _oa_can_view(user):
         return jsonify({"ok": False, "error": "无权限"}), 403
     data = request.get_json(force=True) or {}
     now = datetime.now().strftime("%Y-%m-%d")
     db = get_db()
-    oa_code = (data.get("oa_person_code") or "lisi").strip()
-    name = (data.get("applicant_name") or "").strip()
-    form_no = data.get("oa_form_no") or f"BS-LEAVE-{datetime.now().strftime('%H%M%S')}"
 
-    urow = _oa_find_user(db, oa_code, name or None)
+    payload_in = data.get("beisen") or data.get("payload") or data
+    user_id = (
+        payload_in.get("userId")
+        or payload_in.get("UserID")
+        or payload_in.get("user_id")
+        or data.get("userId")
+        or data.get("beisen_user_id")
+    )
+    original_id = payload_in.get("originalId") or data.get("originalId")
+    name = (
+        (payload_in.get("Name") or payload_in.get("name") or data.get("applicant_name") or "")
+        .strip()
+    )
+    email = (payload_in.get("Email") or payload_in.get("email") or "").strip()
+    last_work = (
+        payload_in.get("lastWorkDate")
+        or payload_in.get("LastWorkDate")
+        or data.get("lastWorkDate")
+        or now
+    )
+    emp_status = payload_in.get("EmployeeStatus")
+    if emp_status is None:
+        emp_status = data.get("EmployeeStatus", 8)
+    approval_result = (
+        payload_in.get("approvalResultType")
+        or data.get("approvalResultType")
+        or "Passed"
+    )
+    process_type = (
+        payload_in.get("processType")
+        or data.get("processType")
+        or "DimissionProcessNew"
+    )
+    oa_code = (
+        (data.get("oa_person_code") or original_id or "").strip()
+        or (str(user_id).strip() if user_id else "")
+        or "unknown"
+    )
+    form_no = (
+        data.get("oa_form_no")
+        or payload_in.get("formNo")
+        or f"BS-LEAVE-{datetime.now().strftime('%H%M%S')}"
+    )
+
+    beisen_payload = {
+        "userId": int(user_id) if str(user_id or "").isdigit() else user_id,
+        "originalId": original_id,
+        "approvalResultType": approval_result,
+        "processType": process_type,
+        "lastWorkDate": last_work,
+        "EmployeeStatus": emp_status,
+        "Name": name or None,
+        "Email": email or None,
+        "source": "leuc-proto-simulate",
+    }
+
+    if str(approval_result) not in ("Passed", "1", "通过"):
+        return jsonify(
+            {
+                "ok": False,
+                "error": f"仅模拟审批通过场景，收到 approvalResultType={approval_result}",
+                "beisen_payload": beisen_payload,
+            }
+        ), 400
+
+    urow = _oa_find_user(
+        db, oa_code, name or None, beisen_user_id=user_id
+    )
+    if not urow and email:
+        urow = db.execute(
+            "SELECT * FROM users WHERE email = ?", (email,)
+        ).fetchone()
+
+    remark_json = json.dumps(beisen_payload, ensure_ascii=False)
+    display = name or (urow["display_name"] if urow else oa_code)
     fcur = db.execute(
         """INSERT INTO oa_forms
         (form_type, oa_form_no, status, title, applicant_name, oa_person_code,
@@ -8039,13 +8421,13 @@ def oa_simulate_leave(user):
         VALUES ('leave', ?, 'received', ?, ?, ?, ?, ?, ?, ?)""",
         (
             form_no,
-            f"北森注销 · {name or (urow['display_name'] if urow else oa_code)}",
-            name or (urow["display_name"] if urow else oa_code),
-            oa_code,
+            f"北森离职审批通过 · {display}",
+            display,
+            str(user_id or oa_code),
             urow["id"] if urow else None,
+            last_work,
             now,
-            now,
-            "北森注销单据已通过，系统直接关闭账号",
+            remark_json,
         ),
     )
     form_id = fcur.lastrowid
@@ -8057,7 +8439,13 @@ def oa_simulate_leave(user):
             """INSERT INTO oa_form_lines
             (form_id, system_name, applicant_name, oa_person_code, handle_status, remark)
             VALUES (?,?,?,?, 'pending_create_user', ?)""",
-            (form_id, "—", name or oa_code, oa_code, "未匹配到 LEUC 用户，待人事核对"),
+            (
+                form_id,
+                "—",
+                display,
+                str(user_id or oa_code),
+                "未匹配到 LEUC 用户，待人事核对",
+            ),
         )
         tcur = db.execute(
             """INSERT INTO todos
@@ -8066,17 +8454,19 @@ def oa_simulate_leave(user):
             (
                 hr_id,
                 user["id"],
-                f"北森注销 · 人员未匹配 {name or oa_code}",
+                f"北森离职 · 人员未匹配 {display}",
                 "人员核对",
                 now,
                 json.dumps(
                     {
                         "oa_form_id": form_id,
                         "oa_line_id": lcur.lastrowid,
-                        "applicant_name": name or oa_code,
-                        "oa_person_code": oa_code,
+                        "applicant_name": display,
+                        "oa_person_code": str(user_id or oa_code),
+                        "beisen_user_id": str(user_id) if user_id else None,
                         "leave": True,
                         "source": "beisen",
+                        "beisen_payload": beisen_payload,
                     },
                     ensure_ascii=False,
                 ),
@@ -8089,26 +8479,30 @@ def oa_simulate_leave(user):
             {
                 "ok": True,
                 "form_id": form_id,
-                "message": f"北森注销单 {form_no} 未匹配到用户，已派人人事核对",
+                "beisen_payload": beisen_payload,
+                "message": f"北森离职消息 {form_no} 未匹配到用户，已派人人事核对",
                 "todos": created,
             }
         )
 
+    # 确保有本系统账号，并纳入末尾关闭
+    ensure_user_leuc_account(db, urow)
     accts = db.execute(
-        """SELECT a.system_id, s.name AS system_name, s.code AS system_code,
-            GROUP_CONCAT(a.account_name) AS account_names, COUNT(*) AS cnt
+        """SELECT a.id AS account_id, a.system_id, a.account_name, a.has_sensitive,
+                  s.name AS system_name, s.code AS system_code
         FROM user_system_accounts a
         JOIN systems s ON s.id = a.system_id
         WHERE a.user_id = ? AND a.can_login = 1
-        GROUP BY a.system_id""",
-        (urow["id"],),
+        ORDER BY CASE WHEN s.code = ? THEN 1 ELSE 0 END, s.id, a.id""",
+        (urow["id"], LEUC_SYSTEM_CODE),
     ).fetchall()
+
     if not accts:
         db.execute(
             """INSERT INTO oa_form_lines
             (form_id, applicant_name, oa_person_code, handle_status, remark)
             VALUES (?,?,?, 'done', ?)""",
-            (form_id, urow["display_name"], oa_code, "无可关闭的可登录账号"),
+            (form_id, urow["display_name"], str(user_id or oa_code), "无可关闭的可登录账号"),
         )
         db.execute("UPDATE oa_forms SET status = 'done' WHERE id = ?", (form_id,))
         db.commit()
@@ -8116,67 +8510,142 @@ def oa_simulate_leave(user):
             {
                 "ok": True,
                 "form_id": form_id,
+                "beisen_payload": beisen_payload,
                 "message": f"{urow['display_name']} 无可关闭账号",
-                "closed": [],
+                "applications": [],
             }
         )
 
-    closed = []
+    admin_fb = db.execute(
+        """SELECT id FROM users
+        WHERE username = ? OR role = 'super_admin'
+        ORDER BY CASE WHEN username = ? THEN 0 ELSE 1 END, id LIMIT 1""",
+        (SYSTEM_ADMIN_USERNAME, SYSTEM_ADMIN_USERNAME),
+    ).fetchone()
+    fallback_owner = admin_fb["id"] if admin_fb else user["id"]
+
+    apps_out = []
     for a in accts:
-        db.execute(
-            "UPDATE user_system_accounts SET can_login = 0 WHERE user_id = ? AND system_id = ?",
-            (urow["id"], a["system_id"]),
+        has_sens = bool(int(a["has_sensitive"] or 0))
+        if has_sens:
+            steps = materialize_approval_chain(db, "sensitive", urow["id"])
+            flow_code = "beisen_leave_sensitive"
+            sens_tag = "含敏感"
+        else:
+            direct = find_approver(db, urow["id"])
+            if not direct or int(direct) == int(urow["id"]):
+                steps = []
+            else:
+                steps = [("direct_leader", "直属领导", int(direct))]
+            flow_code = "beisen_leave"
+            sens_tag = "普通"
+        if not steps:
+            # 无直属时退化：仅系统负责人关闭
+            steps = []
+        before = len(steps)
+        steps = append_system_owner_step(
+            db, a["system_id"], steps, purpose="close"
         )
-        db.execute(
-            """UPDATE system_accounts SET status = 'closed'
-            WHERE leuc_user_id = ? AND system_id = ?""",
-            (urow["id"], a["system_id"]),
+        if len(steps) == before:
+            steps.append(
+                ("system_owner", "系统负责人关闭账号", int(fallback_owner))
+            )
+
+        is_leuc = (a["system_code"] or "") == LEUC_SYSTEM_CODE
+        title = (
+            f"北森离职关闭 · {urow['display_name']} · "
+            f"{a['system_name']} / {a['account_name']}（{sens_tag}）"
         )
-        db.execute(
+        init_title = f"北森离职关闭 · {a['system_name']}（审批中）"
+        lcur = db.execute(
             """INSERT INTO oa_form_lines
             (form_id, system_id, system_code, system_name, applicant_name, oa_person_code,
              handle_status, remark)
-            VALUES (?,?,?,?,?,?, 'done', ?)""",
+            VALUES (?,?,?,?,?,?, 'pending_close', ?)""",
             (
                 form_id,
                 a["system_id"],
                 a["system_code"],
                 a["system_name"],
                 urow["display_name"],
-                oa_code,
-                f"北森直办已关闭：{a['account_names']}",
+                str(user_id or oa_code),
+                f"已进入审批（{sens_tag}，末步系统负责人关闭）",
             ),
         )
-        closed.append(
+        meta_extra = {
+            "account_id": a["account_id"],
+            "system_id": a["system_id"],
+            "account_name": a["account_name"],
+            "system_name": a["system_name"],
+            "leuc_user_id": urow["id"],
+            "close_login": True,
+            "beisen_leave": True,
+            "is_leuc": is_leuc,
+            "oa_form_id": form_id,
+            "oa_line_id": lcur.lastrowid,
+            "beisen_payload": beisen_payload,
+            "with_sensitive": has_sens,
+        }
+        app_id, first_todo, first_assignee, step_preview = start_multi_step_apply(
+            db,
+            flow_code=flow_code,
+            todo_type="北森离职关闭",
+            title=title,
+            init_title=init_title,
+            subject_id=urow["id"],
+            initiator_id=user["id"],
+            system_id=a["system_id"],
+            steps=steps,
+            meta_extra=meta_extra,
+        )
+        chain = " → ".join(s["label"] for s in step_preview)
+        apps_out.append(
             {
+                "application_id": app_id,
+                "todo_id": first_todo,
                 "system": a["system_name"],
-                "accounts": a["account_names"],
+                "account": a["account_name"],
+                "flow_code": flow_code,
+                "with_sensitive": has_sens,
+                "chain": chain,
+                "is_leuc": is_leuc,
+            }
+        )
+        created.append(
+            {
+                "type": "北森离职关闭",
+                "todo_id": first_todo,
+                "system": a["system_name"],
             }
         )
 
-    push_system_message(
-        db,
-        urow["id"],
-        "账号已注销关闭",
-        f"北森注销单 {form_no} 已生效，已关闭 {len(closed)} 个系统的可登录账号",
+    db.execute(
+        "UPDATE oa_forms SET status = 'processing' WHERE id = ?", (form_id,)
     )
-    db.execute("UPDATE oa_forms SET status = 'done' WHERE id = ?", (form_id,))
     db.commit()
+    n_biz = sum(1 for x in apps_out if not x.get("is_leuc"))
+    n_leuc = sum(1 for x in apps_out if x.get("is_leuc"))
     return jsonify(
         {
             "ok": True,
             "form_id": form_id,
             "oa_form_no": form_no,
             "user": urow["display_name"],
-            "closed": closed,
-            "todos": [],
-            "message": f"北森注销单 {form_no} 已直接关闭 {len(closed)} 个系统账号（无待办）",
+            "beisen_user_id": urow["beisen_user_id"] if urow["beisen_user_id"] else None,
+            "beisen_payload": beisen_payload,
+            "applications": apps_out,
+            "todos": created,
+            "message": (
+                f"北森离职消息 {form_no} 已生成 {n_biz} 笔业务系统关闭审批"
+                + (f" + 1 笔本系统关闭" if n_leuc else "")
+                + "（按敏感区分，末步系统负责人关闭）"
+            ),
         }
     )
+    # AI-GEN-END
 
 
 # AI-GEN-END
-
 
 @app.get("/api/demo/portal-systems")
 def demo_portal_systems():
@@ -8186,7 +8655,8 @@ def demo_portal_systems():
     rows = get_db().execute(
         """SELECT id, code, name, client_id, client_secret, redirect_uris,
                   access_mode, status, require_pkce
-           FROM systems WHERE status = 'enabled' ORDER BY id"""
+           FROM systems WHERE status = 'enabled' AND code != ? ORDER BY id""",
+        (LEUC_SYSTEM_CODE,),
     ).fetchall()
     systems = []
     for r in rows:
@@ -8829,6 +9299,10 @@ def switch_role():
     row = get_db().execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
     if not row:
         return jsonify({"ok": False, "error": "用户不存在"}), 404
+    # AI-GEN-BEGIN
+    if user_is_closed(row):
+        return jsonify({"ok": False, "error": "账号已关闭，无法切换登录"}), 403
+    # AI-GEN-END
     session.clear()
     session["user_id"] = row["id"]
     session["login_source"] = "leuc"

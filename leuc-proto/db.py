@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS users (
   can_proxy_apply INTEGER DEFAULT 0,
   can_set_account_expire INTEGER DEFAULT 0,
   beisen_user_id TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
   FOREIGN KEY (dept_id) REFERENCES departments(id)
 );
 
@@ -90,6 +91,7 @@ CREATE TABLE IF NOT EXISTS systems (
   has_sensitive INTEGER NOT NULL DEFAULT 0,
   sso_login_field TEXT NOT NULL DEFAULT 'account_name',
   status TEXT NOT NULL DEFAULT 'enabled',
+  is_builtin INTEGER NOT NULL DEFAULT 0,
   owner_user_id INTEGER,
   created_at TEXT
 );
@@ -550,7 +552,6 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
             WHERE sso_login_field IS NULL OR sso_login_field = ''"""
         )
     # AI-GEN-END
-    # AI-GEN-END
     conn.execute(
         """CREATE TABLE IF NOT EXISTS leorg_sync_state (
           id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -574,7 +575,64 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
         )"""
     )
     ensure_roles_seeded(conn)
+    # AI-GEN-BEGIN
+    user_cols2 = _table_cols(conn, "users")
+    if user_cols2 and "status" not in user_cols2:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
+        )
+    sys_cols2 = _table_cols(conn, "systems")
+    if sys_cols2 and "is_builtin" not in sys_cols2:
+        conn.execute(
+            "ALTER TABLE systems ADD COLUMN is_builtin INTEGER NOT NULL DEFAULT 0"
+        )
+    ensure_leuc_system(conn)
     # AI-GEN-END
+
+
+# AI-GEN-BEGIN
+LEUC_SYSTEM_CODE = "leuc"
+
+
+def ensure_leuc_system(conn: sqlite3.Connection) -> None:
+    """内置本系统（LEUC）：业务系统管理可见，不可删/不可禁用。"""
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    row = conn.execute(
+        "SELECT id FROM systems WHERE code = ?", (LEUC_SYSTEM_CODE,)
+    ).fetchone()
+    if row:
+        conn.execute(
+            """UPDATE systems SET is_builtin = 1, status = 'enabled',
+              name = CASE WHEN name IS NULL OR name = '' THEN '本系统（LEUC）' ELSE name END
+            WHERE code = ?""",
+            (LEUC_SYSTEM_CODE,),
+        )
+        return
+    conn.execute(
+        """INSERT INTO systems
+        (code, name, client_id, client_secret, redirect_uris, scopes, grant_types,
+         token_endpoint_auth_method, require_pkce, access_mode, forbid_external,
+         has_sensitive, sso_login_field, status, is_builtin, owner_user_id, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,NULL,?)""",
+        (
+            LEUC_SYSTEM_CODE,
+            "本系统（LEUC）",
+            "client_leuc",
+            "sk_leuc_builtin_not_for_oidc",
+            "",
+            "openid profile",
+            "authorization_code",
+            "client_secret_post",
+            0,
+            "open",
+            0,
+            0,
+            "account_name",
+            "enabled",
+            now,
+        ),
+    )
+# AI-GEN-END
 
 
 # AI-GEN-BEGIN
@@ -746,20 +804,21 @@ def seed(conn: sqlite3.Connection) -> None:
     # AI-GEN-BEGIN
     # 末项 sso_login_field：北森用 account_uid，其它用 account_name
     systems = [
-        # access_mode; forbid_external; has_sensitive; sso_login_field
-        (1, "oa", "OA 办公", "client_oa", "sk_oa_demo_secret", f"{portal_cb}?app=oa", "openid profile email", "authorization_code", "client_secret_post", 1, "open", 0, 0, "account_name", "enabled", None, now),
-        (2, "bip", "BIP", "client_bip", "sk_bip_demo_secret", f"{portal_cb}?app=bip", "openid profile", "authorization_code", "client_secret_post", 1, "open", 0, 0, "account_name", "enabled", None, now),
-        (3, "laiku_erp", "来酷ERP", "client_laiku_erp", "sk_laiku_erp_secret", f"{portal_cb}?app=laiku_erp", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 0, 1, "account_name", "enabled", None, now),
-        (4, "keji_erp", "科技ERP", "client_keji_erp", "sk_keji_erp_secret", f"{portal_cb}?app=keji_erp", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 0, 1, "account_name", "enabled", None, now),
-        (5, "beisen", "北森", "client_beisen", "sk_beisen_demo_secret", f"{portal_cb}?app=beisen", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 1, 1, "account_uid", "enabled", None, now),
-        (6, "feishu", "飞书", "client_feishu", "sk_feishu_demo_secret", f"{portal_cb}?app=feishu", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 1, 0, "account_name", "enabled", None, now),
+        # access_mode; forbid_external; has_sensitive; sso_login_field; is_builtin
+        (1, "oa", "OA 办公", "client_oa", "sk_oa_demo_secret", f"{portal_cb}?app=oa", "openid profile email", "authorization_code", "client_secret_post", 1, "open", 0, 0, "account_name", "enabled", 0, None, now),
+        (2, "bip", "BIP", "client_bip", "sk_bip_demo_secret", f"{portal_cb}?app=bip", "openid profile", "authorization_code", "client_secret_post", 1, "open", 0, 0, "account_name", "enabled", 0, None, now),
+        (3, "laiku_erp", "来酷ERP", "client_laiku_erp", "sk_laiku_erp_secret", f"{portal_cb}?app=laiku_erp", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 0, 1, "account_name", "enabled", 0, None, now),
+        (4, "keji_erp", "科技ERP", "client_keji_erp", "sk_keji_erp_secret", f"{portal_cb}?app=keji_erp", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 0, 1, "account_name", "enabled", 0, None, now),
+        (5, "beisen", "北森", "client_beisen", "sk_beisen_demo_secret", f"{portal_cb}?app=beisen", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 1, 1, "account_uid", "enabled", 0, None, now),
+        (6, "feishu", "飞书", "client_feishu", "sk_feishu_demo_secret", f"{portal_cb}?app=feishu", "openid profile", "authorization_code", "client_secret_post", 1, "apply", 1, 0, "account_name", "enabled", 0, None, now),
+        (7, "leuc", "本系统（LEUC）", "client_leuc", "sk_leuc_builtin_not_for_oidc", "", "openid profile", "authorization_code", "client_secret_post", 0, "open", 0, 0, "account_name", "enabled", 1, None, now),
     ]
     conn.executemany(
         """INSERT INTO systems
         (id, code, name, client_id, client_secret, redirect_uris, scopes, grant_types,
          token_endpoint_auth_method, require_pkce, access_mode, forbid_external, has_sensitive,
-         sso_login_field, status, owner_user_id, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+         sso_login_field, status, is_builtin, owner_user_id, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         systems,
     )
     # AI-GEN-END
