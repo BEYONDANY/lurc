@@ -789,18 +789,18 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   <h3>系统负责人 · 开通账号</h3>
   <div class="callout" id="prov-hint">从「业务系统管理 · 全部账户」选择账号并关联申请人。</div>
   <div class="note" id="prov-ids" style="margin-bottom:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.65;white-space:pre-wrap"></div>
+  <!-- AI-GEN-BEGIN -->
   <div class="field">
-    <label>业务系统账号 <span class="pill p-orange">必选</span>
+    <label>待开通系统 <span class="pill p-orange" id="prov-target-count">0 个</span>
       <span class="pill p-orange" id="prov-unbound-pill">无归属 —</span>
     </label>
-    <div style="display:flex;gap:8px;align-items:center">
-      <input id="prov-account-display" readonly placeholder="请从账号池选择（默认无归属）" style="flex:1;cursor:pointer;background:#f8fafc" onclick="openProvAccountPicker()">
-      <input type="hidden" id="prov-account-id">
-      <input type="hidden" id="prov-account-name">
-      <button type="button" class="btn btn-sm btn-pri" style="width:auto;white-space:nowrap" onclick="openProvAccountPicker()">选择账号</button>
-    </div>
-    <div class="note" style="margin-top:6px">须从账号池选择，不可手填；默认展示无归属，可切换查看全部并支持查询。</div>
+    <div id="prov-lines" style="border:1px solid #DDE7F7;border-radius:8px;overflow:auto"></div>
+    <div class="note" style="margin-top:6px">每个系统须从对应账号池各选一个账号；不可手填。</div>
   </div>
+  <input type="hidden" id="prov-account-id">
+  <input type="hidden" id="prov-account-name">
+  <input type="hidden" id="prov-account-display">
+  <!-- AI-GEN-END -->
   <div class="field"><label>备注</label>
     <textarea id="prov-remark" rows="3" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit" placeholder="开通说明，将通知申请人"></textarea></div>
   <div class="foot">
@@ -2753,7 +2753,7 @@ function renderFlowTimelineHtml(timeline){
     const a = s.assignee || {};
     const name = a.display_name || a.username || '—';
     const when = s.decided_at
-      ? `处理时间 ${s.decided_at}`
+      ? `处理时间 ${fmtDateTime(s.decided_at)}`
       : (s.phase === 'current' ? '等待审批' : '尚未到达');
     const rem = (s.remark || '').trim();
     return `<li class="${flowPhaseClass(s)}">
@@ -3370,30 +3370,78 @@ async function openProvision(todoId){
   // AI-GEN-BEGIN
   provisionTodoId = todoId;
   provisionPickSelected = null;
+  state.provSelections = {}; // system_id -> {id, account_name, system_id}
+  state.provPickForSystemId = null;
   const { data } = await api('/api/todo/'+todoId);
   if (!data.ok) return toast(data.error);
   const t = data.todo || {};
   const ap = t.applicant || {};
   const sy = t.system || {};
-  provisionSystemId = t.system_id || sy.id || null;
+  let targets = t.provision_targets || [];
+  if (!targets.length) {
+    const sids = (t.meta_obj && t.meta_obj.system_ids) || [];
+    if (sids.length) {
+      targets = sids.map(id => ({ system_id: id, system_name: '系统#'+id, with_sensitive: !!t.with_sensitive }));
+    } else {
+      targets = [{
+        system_id: t.system_id || sy.id,
+        system_name: sy.name || ('系统#'+(t.system_id||sy.id||'')),
+        with_sensitive: !!t.with_sensitive,
+      }].filter(x => x.system_id);
+    }
+  }
+  state.provTargets = targets;
+  provisionSystemId = targets[0]?.system_id || t.system_id || sy.id || null;
+  const sysNames = targets.map(x => x.system_name + (x.with_sensitive?'(敏感)':'')).join('、');
   document.getElementById('prov-hint').innerHTML =
-    `申请人 <strong>${ap.display_name||'-'}</strong>（${ap.username||'-'}）· 系统 <strong>${sy.name||'-'}</strong>`
+    `申请人 <strong>${ap.display_name||'-'}</strong>（${ap.username||'-'}）· 待开通 <strong>${targets.length}</strong> 个系统`
+    + (sysNames ? `：${sysNames}` : '')
     + (t.with_sensitive ? ' · <span class="pill p-red">含敏感</span>' : '')
-    + `<br><span class="note">请从该系统「全部账户」中选择；默认展示无归属账号。</span>`;
+    + `<br><span class="note">请为每个系统从「全部账户」中各选一个账号（默认无归属）。</span>`;
   document.getElementById('prov-ids').textContent = [
-    `todo_id=${t.id}`,
-    `application_id=${t.application_id??'-'}`,
-    `applicant_id=${t.applicant_id??ap.id??'-'}`,
-    `system_id=${provisionSystemId??'-'}`,
-    `step_key=${t.step_key||'-'}`,
-    `flow_code=${t.flow_code||'-'}`,
-    `create_new=${!!t.create_new}`,
-    `assignee_id=${t.assignee_id??'-'}`,
+    `todo#${t.id} · app#${t.application_id??'-'} · 申请人#${t.applicant_id??ap.id??'-'}`,
+    `systems=${targets.map(x=>x.system_id).join(',')||'-'} · step=${t.step_key||'-'} · ${t.flow_code||'-'}`,
   ].join('\n');
-  setProvAccountSelection(null);
+  document.getElementById('prov-target-count').textContent = `${targets.length} 个`;
   document.getElementById('prov-remark').value = '';
-  await refreshProvUnboundCount(provisionSystemId);
+  renderProvLines();
+  if (provisionSystemId) await refreshProvUnboundCount(provisionSystemId);
   openModal('m-provision');
+  // AI-GEN-END
+}
+function renderProvLines(){
+  // AI-GEN-BEGIN
+  const box = document.getElementById('prov-lines');
+  const targets = state.provTargets || [];
+  const sel = state.provSelections || {};
+  if (!box) return;
+  if (!targets.length) {
+    box.innerHTML = '<div class="note" style="padding:12px">无可开通系统</div>';
+    return;
+  }
+  box.innerHTML = `<table class="tbl" style="margin:0"><thead><tr>
+    <th style="width:40px">#</th><th>业务系统</th><th>敏感</th><th>开通账号</th><th style="width:100px"></th>
+  </tr></thead><tbody>${targets.map((t,i) => {
+    const picked = sel[t.system_id];
+    const label = picked
+      ? `${picked.account_name||picked.account_uid||('#'+picked.id)}`
+      : '未选择';
+    return `<tr>
+      <td>${i+1}</td>
+      <td><b>${t.system_name||('系统#'+t.system_id)}</b><div class="note">system_id=${t.system_id}</div></td>
+      <td>${t.with_sensitive?'<span class="pill p-red">敏感</span>':'—'}</td>
+      <td>${picked?`<code>${label}</code>`:`<span class="note">${label}</span>`}</td>
+      <td><button type="button" class="btn btn-sm btn-pri" style="width:auto"
+        onclick="openProvAccountPickerFor(${t.system_id})">${picked?'重选':'选择账号'}</button></td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+  // AI-GEN-END
+}
+function openProvAccountPickerFor(systemId){
+  // AI-GEN-BEGIN
+  state.provPickForSystemId = Number(systemId);
+  provisionSystemId = Number(systemId);
+  return openProvAccountPicker();
   // AI-GEN-END
 }
 
@@ -3403,8 +3451,8 @@ async function openProvAccountPicker(){
   document.getElementById('prov-pick-unbound').checked = true;
   document.getElementById('prov-pick-q').value = '';
   provisionPickSelected = null;
-  const curId = document.getElementById('prov-account-id').value;
-  if (curId) provisionPickSelected = { id: Number(curId) };
+  const cur = (state.provSelections || {})[provisionSystemId];
+  if (cur && cur.id) provisionPickSelected = { id: Number(cur.id) };
   openModal('m-prov-pick');
   await loadProvAccountPicker();
   // AI-GEN-END
@@ -3476,10 +3524,21 @@ function confirmProvAccountPick(){
   const rows = state._provPickRows || [];
   const acct = rows.find(a => String(a.id)===String(provisionPickSelected.id)) || provisionPickSelected;
   if (acct.bound && acct.leuc_user_id) {
-    // 已绑他人仍允许选中，提交时后端会拒绝；这里仅提示
     toast('该账号已绑定，若非当前申请人将无法开通');
   }
-  setProvAccountSelection(acct);
+  const sid = Number(state.provPickForSystemId || provisionSystemId);
+  if (!state.provSelections) state.provSelections = {};
+  state.provSelections[sid] = {
+    id: Number(acct.id),
+    account_name: acct.account_name || '',
+    account_uid: acct.account_uid || '',
+    system_id: sid,
+  };
+  // 兼容单系统旧字段
+  if ((state.provTargets||[]).length <= 1) {
+    setProvAccountSelection(acct);
+  }
+  renderProvLines();
   closeModal('m-prov-pick');
   // AI-GEN-END
 }
@@ -3487,13 +3546,27 @@ function confirmProvAccountPick(){
 async function submitProvision(){
   // AI-GEN-BEGIN
   if (!provisionTodoId) return;
-  const account_id = (document.getElementById('prov-account-id')?.value || '').trim();
-  const account_name = (document.getElementById('prov-account-name')?.value || '').trim();
   const remark = (document.getElementById('prov-remark')?.value || '').trim();
-  if (!account_id && !account_name) return toast('请从账号池选择业务系统账号');
-  const payload = { remark };
-  if (account_id) payload.account_id = Number(account_id);
-  if (account_name) payload.account_name = account_name;
+  const targets = state.provTargets || [];
+  const sel = state.provSelections || {};
+  const provisions = [];
+  const missing = [];
+  for (const t of targets) {
+    const p = sel[t.system_id];
+    if (!p || !p.id) { missing.push(t.system_name || ('系统#'+t.system_id)); continue; }
+    provisions.push({
+      system_id: Number(t.system_id),
+      account_id: Number(p.id),
+      account_name: p.account_name || undefined,
+    });
+  }
+  if (missing.length) return toast('请先为以下系统选择账号：' + missing.join('、'));
+  const payload = { remark, provisions, skipRemarkPrompt: true };
+  // 单系统仍带旧字段，兼容后端
+  if (provisions.length === 1) {
+    payload.account_id = provisions[0].account_id;
+    if (provisions[0].account_name) payload.account_name = provisions[0].account_name;
+  }
   await decideTodo(provisionTodoId, 'approved', payload);
   // AI-GEN-END
 }

@@ -1466,6 +1466,12 @@ def serialize_todo(db, row):
         or (flow_code in ("account_apply_sensitive", "sensitive") if flow_code else False)
     )
     # AI-GEN-BEGIN
+    if need_form:
+        d["provision_targets"] = get_provision_targets(db, meta, app_row)
+    else:
+        d["provision_targets"] = []
+    # AI-GEN-END
+    # AI-GEN-BEGIN
     d["is_cc"] = bool(meta.get("cc") or d.get("todo_type") == "知会确认")
     d["is_confirm"] = step_key == "applicant_confirm"
     d["rejectable_steps"] = []
@@ -6175,25 +6181,58 @@ def todo_decide(user, tid):
             at_owner_effect = cur_step and cur_step["step_key"] == "system_owner" and (
                 not nxt_chk or nxt_chk["step_key"] == "applicant_confirm"
             )
-            if (
-                at_owner_effect
-                and meta_pre.get("create_new")
-                and not (
-                    data.get("account_id")
-                    or (data.get("account_name") or "").strip()
-                )
-            ):
-                return jsonify(
-                    {
-                        "ok": False,
-                        "error": "请从账号池选择要开通的业务系统账号",
-                        "need_account_input": True,
-                        "todo_id": tid,
-                        "application_id": app_id,
-                        "applicant_id": app_row["applicant_id"],
-                        "system_id": app_row["system_id"],
-                    }
-                ), 400
+            if at_owner_effect and meta_pre.get("create_new"):
+                targets = get_provision_targets(db, meta_pre, app_row)
+                provisions = data.get("provisions")
+                if not isinstance(provisions, list):
+                    provisions = []
+                # 单系统兼容旧字段
+                if (
+                    not provisions
+                    and len(targets) == 1
+                    and (
+                        data.get("account_id")
+                        or (data.get("account_name") or "").strip()
+                    )
+                ):
+                    provisions = [
+                        {
+                            "system_id": targets[0]["system_id"],
+                            "account_id": data.get("account_id"),
+                            "account_name": (data.get("account_name") or "").strip()
+                            or None,
+                        }
+                    ]
+                covered = {
+                    int(p.get("system_id"))
+                    for p in provisions
+                    if isinstance(p, dict)
+                    and p.get("system_id") not in (None, "")
+                    and (
+                        p.get("account_id")
+                        or (p.get("account_name") or "").strip()
+                    )
+                }
+                missing = [
+                    t for t in targets if int(t["system_id"]) not in covered
+                ]
+                if missing:
+                    names = "、".join(t["system_name"] for t in missing)
+                    return jsonify(
+                        {
+                            "ok": False,
+                            "error": f"请为以下系统选择账号后再开通：{names}",
+                            "need_account_input": True,
+                            "todo_id": tid,
+                            "application_id": app_id,
+                            "applicant_id": app_row["applicant_id"],
+                            "system_id": app_row["system_id"],
+                            "provision_targets": targets,
+                            "missing_system_ids": [t["system_id"] for t in missing],
+                        }
+                    ), 400
+                # 供后续开通使用
+                data["_resolved_provisions"] = provisions
         # AI-GEN-END
         db.execute(
             "UPDATE todos SET bucket = 'done', status = ? WHERE id = ?",
@@ -6335,18 +6374,40 @@ def todo_decide(user, tid):
                 ) or bool(meta_fx.get("with_sensitive"))
                 create_new = bool(meta_fx.get("create_new"))
                 if create_new or app_row["flow_code"].startswith("account_apply"):
-                    result = provision_account_apply(
+                    # AI-GEN-BEGIN
+                    provisions = data.get("_resolved_provisions") or data.get("provisions")
+                    if not isinstance(provisions, list) or not provisions:
+                        if data.get("account_id") or (data.get("account_name") or "").strip():
+                            targets = get_provision_targets(db, meta_fx, app_row)
+                            sid0 = (
+                                targets[0]["system_id"]
+                                if targets
+                                else app_row["system_id"]
+                            )
+                            provisions = [
+                                {
+                                    "system_id": sid0,
+                                    "account_id": data.get("account_id"),
+                                    "account_name": (data.get("account_name") or "").strip()
+                                    or None,
+                                }
+                            ]
+                    result = provision_account_apply_multi(
                         db,
                         app_row,
+                        provisions,
+                        meta=meta_fx,
                         with_sensitive=with_sens,
-                        account_name=(data.get("account_name") or "").strip() or None,
                         remark=(data.get("remark") or remark or "").strip() or None,
-                        account_id=data.get("account_id"),
                     )
+                    # AI-GEN-END
                     if not result.get("ok"):
-                        return jsonify({"ok": False, "error": result.get("error")}), 400
-                    fx_msg = f"已开通 {result.get('system')} / {result.get('account')}"
+                        return jsonify(result), 400
+                    fx_msg = result.get("message") or (
+                        f"已开通 {result.get('system')} / {result.get('account')}"
+                    )
                     meta_fx["effect_done"] = True
+                    meta_fx["provisioned_items"] = result.get("items") or []
                 else:
                     result = auto_provision_sensitive(db, app_row)
                     if not result.get("ok"):
@@ -6595,45 +6656,77 @@ def todo_decide(user, tid):
             account_name = (data.get("account_name") or "").strip()
             account_id = data.get("account_id")
             remark = (data.get("remark") or "").strip()
-            # 新建账号：系统负责人开通必须从账号池选择
-            if (
-                last
-                and last["step_key"] == "system_owner"
-                and create_new
-                and not (account_id or account_name)
-            ):
-                return jsonify(
-                    {
-                        "ok": False,
-                        "error": "请从账号池选择要开通的业务系统账号",
-                        "need_account_input": True,
-                        "todo_id": tid,
-                        "application_id": app_id,
-                        "applicant_id": app_row["applicant_id"],
-                        "system_id": app_row["system_id"],
-                    }
-                ), 400
-            kwargs = {
-                "with_sensitive": with_sens if last and last["step_key"] == "system_owner"
-                else (True if app_row["flow_code"] == "sensitive" else with_sens),
-                "account_name": account_name or None,
-                "account_id": account_id,
-                "remark": remark or None,
-            }
-            if last and last["step_key"] == "system_owner":
-                result = provision_account_apply(db, app_row, **kwargs)
+            # AI-GEN-BEGIN
+            # 新建账号：系统负责人须为每个待开通系统选账号
+            if last and last["step_key"] == "system_owner" and create_new:
+                targets = get_provision_targets(db, meta, app_row)
+                provisions = data.get("provisions")
+                if not isinstance(provisions, list):
+                    provisions = []
+                if (
+                    not provisions
+                    and len(targets) == 1
+                    and (account_id or account_name)
+                ):
+                    provisions = [
+                        {
+                            "system_id": targets[0]["system_id"],
+                            "account_id": account_id,
+                            "account_name": account_name or None,
+                        }
+                    ]
+                covered = {
+                    int(p.get("system_id"))
+                    for p in provisions
+                    if isinstance(p, dict)
+                    and p.get("system_id") not in (None, "")
+                    and (p.get("account_id") or (p.get("account_name") or "").strip())
+                }
+                missing = [t for t in targets if int(t["system_id"]) not in covered]
+                if missing:
+                    names = "、".join(t["system_name"] for t in missing)
+                    return jsonify(
+                        {
+                            "ok": False,
+                            "error": f"请为以下系统选择账号后再开通：{names}",
+                            "need_account_input": True,
+                            "todo_id": tid,
+                            "application_id": app_id,
+                            "applicant_id": app_row["applicant_id"],
+                            "system_id": app_row["system_id"],
+                            "provision_targets": targets,
+                            "missing_system_ids": [t["system_id"] for t in missing],
+                        }
+                    ), 400
+                result = provision_account_apply_multi(
+                    db,
+                    app_row,
+                    provisions,
+                    meta=meta,
+                    with_sensitive=with_sens,
+                    remark=remark or None,
+                )
             elif app_row["flow_code"] == "sensitive":
                 result = provision_account_apply(db, app_row, with_sensitive=True)
             else:
-                result = provision_account_apply(db, app_row, with_sensitive=False)
+                result = provision_account_apply(
+                    db,
+                    app_row,
+                    with_sensitive=False,
+                    account_name=account_name or None,
+                    account_id=account_id,
+                    remark=remark or None,
+                )
+            # AI-GEN-END
             if not result.get("ok"):
-                return jsonify({"ok": False, "error": result.get("error") or "开通失败"}), 400
+                return jsonify(result), 400
             # 回写开通信息到待办 meta，便于排查
             meta.update(
                 {
                     "provisioned_account": result.get("account"),
                     "provisioned_account_id": result.get("account_id"),
                     "pool_account_id": result.get("pool_account_id"),
+                    "provisioned_items": result.get("items") or [],
                     "remark": remark,
                 }
             )
