@@ -80,12 +80,26 @@
 ## 2026-08-06 北森真实 SSO（leuc-proto）
 
 1. 新增 `beisen_sso.py`：按北森手册签发 JWT id_token 并跳转 AuthCenter。
-2. 配置：`.env` 的 `BEISEN_SSO_*`（见 `.env.example`），租户 `614218`，`uty` 先 email。
-3. 入口：`/beisen/sso/go`、`POST /api/beisen/sso/launch`；业务导航点北森在已配置时走真实 SSO。
-4. Java SDK 仅作协议参考，不引入运行依赖。
+2. 配置：`.env` 的 `BEISEN_SSO_*`（见 `.env.example`），租户 `614218`，`uty=id`。
+3. 用户表增加 `beisen_user_id`；「我的组织」可展示/编辑；SSO `sub` 取该字段。
+4. LeOrg 同步映射员工 `beisen_id` → `users.beisen_user_id` / 待建花名册。
+5. 入口：`/beisen/sso/go`、`POST /api/beisen/sso/launch`；业务导航点北森在已配置时走真实 SSO。
+6. Java SDK 仅作协议参考，不引入运行依赖。
 
 ## 2026-08-07 角色权限树勾选（leuc-proto）
 
 1. 「角色与权限」右侧改为组织树风格权限树：分组 → 菜单 → 按钮。
 2. 菜单 / 按钮分别用蓝 / 橙 pill 区分；勾菜单自动勾下属全部按钮，取消菜单一并取消；勾按钮自动勾父菜单。
 3. 保存接口不变（`menus` + `caps`）。
+
+## 2026-08-07 我的组织树可折叠（leuc-proto）
+
+1. 「我的组织」左侧组织树支持 ▸/▾ 折叠；默认二级及以下收起。
+2. 提供「全部展开 / 全部收起」；选中节点时自动展开祖先路径。
+3. 个人中心首页组织架构同样可折叠。
+
+## 2026-08-07 超管账号改为 admin（leuc-proto）
+
+1. 超管固定 `admin` / `123456`，角色 `super_admin`，全菜单+全按钮。
+2. `admin` 不挂部门、不在「我的组织」/人事用户列表展示；启动时 `ensure_system_admin` 兜底。
+3. 空库种子仅建 `admin`；登录页脚与会话记录已同步。

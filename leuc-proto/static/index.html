@@ -89,6 +89,20 @@ body{background:#0B1126;color:var(--ink);min-height:100vh}
 table{width:100%;border-collapse:collapse;font-size:12.5px}
 th{color:var(--muted);text-align:left;font-weight:500;padding:9px 10px;border-bottom:1px solid var(--line);background:#FAFCFF}
 td{padding:10px;border-bottom:1px solid #EDF2FB}
+/* AI-GEN-BEGIN */
+.org-members-table{min-width:980px;table-layout:auto}
+.org-members-table th,.org-members-table td{vertical-align:middle}
+.org-members-table th.col-expire,.org-members-table td.col-expire{
+  white-space:nowrap;min-width:96px;
+}
+.org-members-table th.col-actions,.org-members-table td.col-actions{
+  white-space:nowrap;min-width:200px;
+}
+.org-members-table .row-actions{
+  display:inline-flex;flex-wrap:nowrap;gap:6px;align-items:center;
+}
+.org-members-table .row-actions .btn{flex:none;white-space:nowrap}
+/* AI-GEN-END */
 .tabs{display:flex;border-bottom:1px solid var(--line);margin-bottom:12px}
 .tabs div{padding:10px 14px;cursor:pointer;font-size:13px;color:var(--gray);border-bottom:2px solid transparent}
 .tabs div.on{color:var(--blue-d);border-color:var(--blue-d);font-weight:600}
@@ -153,6 +167,9 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 .org-tree .node.on{background:#EEF3FF;color:var(--pri);font-weight:600}
 .org-tree .node .mgmt{font-size:10px;color:#C47A20;border:1px solid #F0D9A8;background:#FFF8EB;border-radius:999px;padding:1px 6px}
 .org-tree .kids{margin-left:14px;border-left:1px dashed #D7E0F5;padding-left:8px}
+.org-tree .org-caret{width:14px;flex:none;text-align:center;color:var(--muted);font-size:12px;line-height:1;user-select:none}
+.org-tree .org-caret:not(.empty){cursor:pointer}
+.org-tree .org-caret:not(.empty):hover{color:var(--blue-d)}
 .home-org-tree .node{cursor:default}
 .home-org-tree .node:hover{background:#F7F9FC}
 .home-org-tree .owner{margin-left:auto;font-size:12px;color:var(--muted);font-weight:400}
@@ -376,7 +393,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 
 <div class="footer-tip">
   账号：xuhaohao / maning / wujinzhi / gaojia / changmingming · 密码 123456<br>
-  管理：chenchao / sunli / zhangcai / zhaomin·liufang·huangwei<br>
+  超管：admin（全权限，不在「我的组织」）· 密码 123456<br>
   登录验证码 888888 · 找回密码 666666 · 启动 <code>cd leuc-proto && python3 app.py</code>
 </div>
 <div class="toast" id="toast"></div>
@@ -408,7 +425,6 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   <div class="note" id="add-user-hint" style="margin-top:-6px;margin-bottom:10px"></div>
   <div class="field"><label>手机</label><input id="add-phone"></div>
   <div class="field"><label>邮箱</label><input id="add-email"></div>
-  <div class="field"><label>北森用户ID</label><input id="add-beisen-uid" placeholder="BeisenUserID，SSO 用"></div>
   <div class="field"><label>角色</label>
     <select id="add-role">
       <option value="employee_a">普通员工</option>
@@ -467,8 +483,14 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 <div class="mask" id="m-set-expire"><div class="modal" style="max-width:440px">
   <h3>设置账号有效期</h3>
   <div class="callout" id="expire-hint">为已选人员设置有效期，或勾选永不过期。</div>
-  <div class="field"><label>有效期至</label><input type="date" id="expire-date"></div>
-  <div class="field"><label><input type="checkbox" id="expire-never" onchange="togExpireNever(this.checked)"> 永不过期</label></div>
+  <div class="field"><label>快捷选项</label>
+    <div class="stepup" id="expire-presets">
+      <div class="on" data-preset="90" onclick="pickExpirePreset(this)"><b>90天</b>自今日起</div>
+      <div data-preset="custom" onclick="pickExpirePreset(this)"><b>指定日期</b>自选到期日</div>
+      <div data-preset="never" onclick="pickExpirePreset(this)"><b>永不过期</b></div>
+    </div>
+  </div>
+  <div class="field" id="expire-date-wrap"><label>有效期至</label><input type="date" id="expire-date"></div>
   <div class="foot">
     <button class="btn btn-line" onclick="closeModal('m-set-expire')">取消</button>
     <button class="btn btn-pri" style="width:auto" onclick="submitSetExpire()">保存</button>
@@ -578,6 +600,21 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
     <button class="btn btn-pri" style="width:auto" onclick="submitSaImport()">导入</button>
   </div>
 </div></div>
+<!-- AI-GEN-BEGIN -->
+<div class="mask" id="m-provision"><div class="modal" style="max-width:520px">
+  <h3>系统负责人 · 开通账号</h3>
+  <div class="callout" id="prov-hint">申请创建新账号：请录入业务系统账号名并添加备注，确认后与申请人关联。</div>
+  <div class="note" id="prov-ids" style="margin-bottom:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.65;white-space:pre-wrap"></div>
+  <div class="field"><label>业务系统账号名 <span class="pill p-orange">必填</span></label>
+    <input id="prov-account" placeholder="如 xuhaohao_erp" autocomplete="off"></div>
+  <div class="field"><label>备注</label>
+    <textarea id="prov-remark" rows="3" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit" placeholder="开通说明，将通知申请人"></textarea></div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-provision')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitProvision()">确认开通</button>
+  </div>
+</div></div>
+<!-- AI-GEN-END -->
 <div class="mask" id="m-perm"><div class="modal">
   <h3 id="perm-title">分系统权限</h3>
   <div id="perm-body"></div>
@@ -870,6 +907,7 @@ async function renderMain() {
   if (state.view === 'home') {
     const isMgr = ['dept_owner','hr_specialist','super_admin'].includes(u.role);
     // AI-GEN-BEGIN
+    ensureHomeOrgCollapsedInit(h.org_tree || []);
     el.innerHTML = `
       <div class="ptitle">个人中心 <span class="pill p-blue">${u.role_label}</span> <span class="pill p-gray">${u.username}</span></div>
       <div class="cards ${isMgr?'g3':'g2'}">
@@ -895,7 +933,7 @@ async function renderMain() {
       <div class="card" style="margin-top:14px">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
           <h4 style="margin:0">组织架构</h4>
-          <span class="note">仅组织节点与负责人，不含全员名单</span>
+          <span class="note">仅组织节点与负责人，不含全员名单 · 可折叠</span>
         </div>
         <div class="org-tree home-org-tree" style="max-height:360px;border:0;padding:0;background:transparent">
           ${renderHomeOrgTree(h.org_tree||[]) || '<div class="note">暂无组织数据</div>'}
@@ -980,18 +1018,41 @@ async function renderMain() {
     const cur = state.todoTab || 'pending';
     const labels = {pending:'待处理',done:'已完成',initiated:'发起'};
     const list = h.todos[cur]||[];
+    // AI-GEN-BEGIN
     el.innerHTML = `<div class="ptitle">我的待办</div>
-      <div class="callout">账号延期/账号关闭由上级审批。敏感开通与关闭走<strong>直属→一级→财务</strong>；开通通过后自动生效，关闭同理。</div>
+      <div class="callout">账号延期/账号关闭由上级审批。账号申请：直属（→一级→财务）后由<strong>系统负责人开通</strong>；新建账号须录入账号名与备注。</div>
       <div class="tabs">${['pending','done','initiated'].map(t=>`<div class="${t===cur?'on':''}" onclick="state.todoTab='${t}';renderMain()">${labels[t]} (${h.todos[t].length})</div>`).join('')}</div>
       <div class="card" style="padding:0;overflow:hidden"><table>
         <thead><tr><th>事项</th><th>类型</th><th>状态</th><th>时间</th><th></th></tr></thead>
-        <tbody>${list.length?list.map(t=>`<tr>
-          <td>${t.title}${t.step_order?` <span class="pill p-orange">第${t.step_order}步</span>`:''}</td>
-          <td>${t.todo_type}</td><td>${t.status}</td><td>${t.created_at}</td>
-          <td>${cur==='pending'?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="decideTodo(${t.id},'approved')">通过</button>
-            <button class="btn btn-sm btn-line" onclick="decideTodo(${t.id},'rejected')">驳回</button>`:''}</td>
-        </tr>`).join(''):'<tr><td colspan="5" class="note">暂无</td></tr>'}
-        </tbody></table></div>`; return;
+        <tbody>${list.length?list.map(t=>{
+          const ids = [
+            `todo#${t.id}`,
+            t.application_id!=null?`app#${t.application_id}`:'',
+            t.applicant_id!=null?`申请人#${t.applicant_id}`:'',
+            t.system_id!=null?`系统#${t.system_id}`:'',
+            t.step_key?`step=${t.step_key}`:'',
+          ].filter(Boolean).join(' · ');
+          const act = cur!=='pending' ? '' : (
+            t.need_provision_form
+              ? `<button class="btn btn-sm btn-pri" style="width:auto" onclick="openProvision(${t.id})">开通</button>
+                 <button class="btn btn-sm btn-line" onclick="decideTodo(${t.id},'rejected')">驳回</button>`
+              : `<button class="btn btn-sm btn-pri" style="width:auto" onclick="decideTodo(${t.id},'approved')">通过</button>
+                 <button class="btn btn-sm btn-line" onclick="decideTodo(${t.id},'rejected')">驳回</button>`
+          );
+          return `<tr>
+            <td>
+              <div>${t.title}${t.step_order?` <span class="pill p-orange">第${t.step_order}步</span>`:''}
+                ${t.need_provision_form?' <span class="pill p-blue">待录入账号</span>':''}
+                ${t.with_sensitive?' <span class="pill p-red">敏感</span>':''}</div>
+              <div class="note" style="font-family:ui-monospace,monospace;font-size:11px">${ids}</div>
+            </td>
+            <td>${t.todo_type}</td><td>${t.status}</td><td>${t.created_at}</td>
+            <td>${act}</td>
+          </tr>`;
+        }).join(''):'<tr><td colspan="5" class="note">暂无</td></tr>'}
+        </tbody></table></div>`;
+    // AI-GEN-END
+    return;
   }
   if (state.view === 'apply') {
     // AI-GEN-BEGIN
@@ -1197,23 +1258,89 @@ async function assignUserRole(uid){
 // AI-GEN-END
 
 function renderTreeNodes(nodes, depth=0) {
+  // AI-GEN-BEGIN
   if (!nodes || !nodes.length) return '';
+  const collapsed = state.orgCollapsed || {};
   return nodes.map(n => {
+    const kids = n.children || [];
+    const hasKids = kids.length > 0;
+    const isCollapsed = hasKids && !!collapsed[n.id];
     const on = String(state.deptFilter||'') === String(n.id);
     return `<div>
       <div class="node ${on?'on':''}" onclick="state.deptFilter='${n.id}';renderMain()">
-        <span>${'·'.repeat(Math.min(depth,1))}${n.name}</span>
+        ${hasKids
+          ? `<span class="org-caret" onclick="toggleOrgNode('${n.id}',event)">${isCollapsed?'▸':'▾'}</span>`
+          : `<span class="org-caret empty"></span>`}
+        <span>${n.name}</span>
         ${n.can_manage?'<span class="mgmt">可管</span>':''}
       </div>
-      <div class="kids">${renderTreeNodes(n.children||[], depth+1)}</div>
+      ${hasKids && !isCollapsed ? `<div class="kids">${renderTreeNodes(kids, depth+1)}</div>` : ''}
     </div>`;
   }).join('');
+  // AI-GEN-END
 }
+
+// AI-GEN-BEGIN
+function ensureOrgCollapsedInit(tree){
+  if (state.orgCollapsed) return;
+  const map = {};
+  const walk = (nodes, depth) => {
+    (nodes || []).forEach(n => {
+      const kids = n.children || [];
+      if (kids.length && depth >= 1) map[n.id] = true;
+      walk(kids, depth + 1);
+    });
+  };
+  walk(tree, 0);
+  state.orgCollapsed = map;
+}
+function expandOrgAncestors(tree, focusId){
+  if (!focusId || !state.orgCollapsed) return;
+  const byId = {};
+  const walk = (nodes, parentId) => {
+    (nodes || []).forEach(n => {
+      byId[n.id] = parentId;
+      walk(n.children || [], n.id);
+    });
+  };
+  walk(tree, null);
+  let cur = byId[focusId];
+  while (cur != null) {
+    delete state.orgCollapsed[cur];
+    cur = byId[cur];
+  }
+}
+function toggleOrgNode(id, ev){
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (!state.orgCollapsed) state.orgCollapsed = {};
+  state.orgCollapsed[id] = !state.orgCollapsed[id];
+  renderMain();
+}
+function expandAllOrg(expand){
+  const tree = (state.deptData && state.deptData.tree) || [];
+  const map = {};
+  if (!expand) {
+    const walk = (nodes) => {
+      (nodes || []).forEach(n => {
+        if ((n.children || []).length) map[n.id] = true;
+        walk(n.children || []);
+      });
+    };
+    walk(tree);
+  }
+  state.orgCollapsed = map;
+  renderMain();
+}
+// AI-GEN-END
 
 // AI-GEN-BEGIN
 function renderHomeOrgTree(nodes, depth=0) {
   if (!nodes || !nodes.length) return '';
+  const collapsed = state.homeOrgCollapsed || {};
   return nodes.map(n => {
+    const kids = n.children || [];
+    const hasKids = kids.length > 0;
+    const isCollapsed = hasKids && !!collapsed[n.id];
     const owner = n.owner_name
       ? `${n.owner_name}${n.owner_username?`（${n.owner_username}）`:''}`
       : '未指定';
@@ -1221,12 +1348,33 @@ function renderHomeOrgTree(nodes, depth=0) {
     const extraTip = extras.length ? ` · 另：${extras.join('、')}` : '';
     return `<div>
       <div class="node">
+        ${hasKids
+          ? `<span class="org-caret" onclick="toggleHomeOrgNode('${n.id}',event)">${isCollapsed?'▸':'▾'}</span>`
+          : `<span class="org-caret empty"></span>`}
         <span><b>${n.name}</b></span>
         <span class="owner">负责人：${owner}${extraTip}</span>
       </div>
-      <div class="kids">${renderHomeOrgTree(n.children||[], depth+1)}</div>
+      ${hasKids && !isCollapsed ? `<div class="kids">${renderHomeOrgTree(kids, depth+1)}</div>` : ''}
     </div>`;
   }).join('');
+}
+function ensureHomeOrgCollapsedInit(tree){
+  if (state.homeOrgCollapsed) return;
+  const map = {};
+  const walk = (nodes, depth) => {
+    (nodes || []).forEach(n => {
+      if ((n.children || []).length && depth >= 1) map[n.id] = true;
+      walk(n.children || [], depth + 1);
+    });
+  };
+  walk(tree, 0);
+  state.homeOrgCollapsed = map;
+}
+function toggleHomeOrgNode(id, ev){
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (!state.homeOrgCollapsed) state.homeOrgCollapsed = {};
+  state.homeOrgCollapsed[id] = !state.homeOrgCollapsed[id];
+  renderMain();
 }
 // AI-GEN-END
 
@@ -1257,6 +1405,8 @@ async function renderOrg(el) {
 
   if (!data.ok) { el.innerHTML = `<div class="ptitle">我的组织</div><div class="warn">${data.error}</div>`; return; }
   state.deptData = data;
+  ensureOrgCollapsedInit(data.tree || []);
+  expandOrgAncestors(data.tree || [], deptId);
   const mode = data.can_manage
     ? (canAllOrg ? '<span class="pill p-blue">全部可管</span>' : '<span class="pill p-orange">可管理下级</span>')
     : '<span class="pill p-gray">只读 · 即时聊天</span>';
@@ -1282,9 +1432,6 @@ async function renderOrg(el) {
         ${showImport?`<button class="btn btn-sm btn-line" onclick="openImport()">导入</button>`:''}
         ${canSetAccountExpire()?`<button class="btn btn-sm btn-line" onclick="openSetExpire()">设置有效期</button>`:''}
         ${showDirect?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('direct')">直接绑定</button>`:''}
-        ${showSync?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="hrPull()">同步组织/人员</button>
-        <button class="btn btn-sm btn-line" onclick="hrPullFull()">全量同步</button>
-        <button class="btn btn-sm btn-line" onclick="hrOrgClear()" style="color:#b42318;border-color:#f3b4b0">清空组织</button>`:''}
       `:''}
     </div>
     ${showSync?`
@@ -1293,29 +1440,35 @@ async function renderOrg(el) {
       <h4>组织同步 · 待初始化 <span class="pill p-orange">${roster.length}</span>
         ${state.leorgSync?`<span class="pill p-gray">${state.leorgSync.last_mode||'-'} · ${state.leorgSync.updated_at||'未同步'}</span>`:''}
       </h4>
-      <div class="note" style="margin-bottom:8px">从 <strong>LeOrg</strong> 同步（幂等 upsert；默认增量，首次/清空后自动全量）。确认用户名后<strong>直接创建</strong>。</div>
+      <div class="note" style="margin-bottom:8px">
+        <strong>增量</strong>：只拉 LeOrg「近期有变更」的员工（快，日常用）。
+        <strong>全量</strong>：重拉全部组织 + 全部在职/试用约九百人（慢，对账用）。
+        两边都会幂等更新，点多次不会重复建人。首次/清空后点增量也会自动先走全量。
+      </div>
       <div class="toolbar">
         <button class="btn btn-sm btn-pri" style="width:auto" onclick="hrPull()">增量同步</button>
         <button class="btn btn-sm btn-line" onclick="hrPullFull()">全量同步</button>
-        <button class="btn btn-sm btn-line" onclick="hrOrgClear()" style="color:#b42318;border-color:#f3b4b0">清空组织</button>
         <button class="btn btn-sm btn-pri" style="width:auto" onclick="hrSyncAll()">全部确认创建</button>
         <button class="btn btn-sm btn-line" onclick="hrSyncSelected()">创建已勾选</button>
+        <!-- 测试用：上线前去掉「清空组织」 -->
+        <button class="btn btn-sm btn-line" onclick="hrOrgClear()" style="color:#b42318;border-color:#f3b4b0" title="仅原型测试用，上线去除">清空组织（测试）</button>
       </div>
       <div style="overflow:auto;margin-top:8px">
         <table>
           <thead><tr>
             <th><input type="checkbox" onchange="hrToggleAll(this.checked)"></th>
-            <th>姓名</th><th>组织</th><th>登录用户名（可编辑）</th><th></th>
+            <th>姓名</th><th>组织</th><th>北森用户ID</th><th>登录用户名（可编辑）</th><th></th>
           </tr></thead>
           <tbody>${roster.length?roster.map(r=>`
             <tr>
               <td><input type="checkbox" class="hr-roster" value="${r.id}" onchange="hrTog(${r.id},this.checked)"></td>
               <td>${r.display_name}</td>
               <td>${r.dept_name||r.dept_id}</td>
+              <td>${r.beisen_user_id?`<code>${r.beisen_user_id}</code>`:'<span class="note">—</span>'}</td>
               <td><input class="hr-uname" data-rid="${r.id}" value="${r.username_preview||''}" style="width:140px;padding:6px 8px;border:1px solid var(--line);border-radius:7px">
                 ${r.will_suffix?' <span class="pill p-orange">建议避重</span>':''}</td>
               <td><button class="btn btn-sm btn-line" onclick="hrSyncOne(${r.id})">确认创建</button></td>
-            </tr>`).join(''):'<tr><td colspan="5" class="note">暂无待同步（可点「从 LeOrg 同步」）</td></tr>'}
+            </tr>`).join(''):'<tr><td colspan="6" class="note">暂无待同步（可点「增量同步」或「全量同步」）</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -1323,6 +1476,11 @@ async function renderOrg(el) {
     </div>`:''}
     <div class="org-layout">
       <div class="org-tree">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+          <span class="note" style="margin:0;flex:1">组织树</span>
+          <button type="button" class="btn btn-sm btn-line" onclick="expandAllOrg(true)">全部展开</button>
+          <button type="button" class="btn btn-sm btn-line" onclick="expandAllOrg(false)">全部收起</button>
+        </div>
         <div class="node ${!deptId?'on':''}" onclick="state.deptFilter='';renderMain()"><b>全部组织</b></div>
         ${renderTreeNodes(data.tree||[])}
       </div>
@@ -1333,13 +1491,13 @@ async function renderOrg(el) {
           <span class="note">当前：${focusName} · ${data.members.length} 人</span>
         </div>
         <div class="card" style="padding:0;overflow:auto">
-          <table>
+          <table class="org-members-table">
             <thead><tr>
               ${data.can_manage?'<th><input type="checkbox" onchange="toggleAll(this.checked)"></th>':''}
               <th>姓名</th><th>账号</th><th>组织</th><th>北森用户ID</th>
               <th style="min-width:220px">关联系统账号</th><th>敏感</th>
-              ${canSetAccountExpire()?'<th>账号有效期</th>':''}
-              <th></th>
+              ${canSetAccountExpire()?'<th class="col-expire">有效期</th>':''}
+              <th class="col-actions">操作</th>
             </tr></thead>
             <tbody>${data.members.map(m => {
               const dname = (data.departments.find(d=>d.id===m.dept_id)||{}).name || m.dept_id;
@@ -1361,26 +1519,24 @@ async function renderOrg(el) {
                 ? m.account_expire
                 : '<span class="pill p-blue">永不过期</span>';
               const manageable = data.manage_dept_ids.includes(m.dept_id);
-              const beisenCell = (data.can_manage && manageable)
-                ? `<input class="beisen-uid" data-uid="${m.id}" value="${m.beisen_user_id||''}"
-                    placeholder="未设置" style="width:110px;padding:5px 8px;border:1px solid var(--line);border-radius:7px"
-                    onchange="saveBeisenUid(${m.id}, this.value)">`
-                : (m.beisen_user_id ? `<code>${m.beisen_user_id}</code>` : '<span class="note">—</span>');
+              const beisenCell = m.beisen_user_id
+                ? `<code title="由 LeOrg 同步写入，不可编辑">${m.beisen_user_id}</code>`
+                : '<span class="note">—</span>';
               // AI-GEN-END
               return `<tr>
                 ${data.can_manage?`<td>${manageable?`<input type="checkbox" ${state.selectedIds.has(m.id)?'checked':''} onchange="togSel(${m.id},this.checked)">`:''}</td>`:''}
-                <td>${m.display_name}${m.person_type==='external'?' <span class="pill p-orange">外部</span>':''}</td>
-                <td><code>${m.username}</code></td>
+                <td style="white-space:nowrap">${m.display_name}${m.person_type==='external'?' <span class="pill p-orange">外部</span>':''}</td>
+                <td style="white-space:nowrap"><code>${m.username}</code></td>
                 <td>${dname}</td>
-                <td>${beisenCell}</td>
+                <td style="white-space:nowrap">${beisenCell}</td>
                 <td>${acctLines}</td>
                 <td>${m.has_sensitive?'<span class="pill p-red">有</span>':'<span class="pill p-gray">无</span>'}</td>
-                ${canSetAccountExpire()?`<td>${expireLabel}</td>`:''}
-                <td>
+                ${canSetAccountExpire()?`<td class="col-expire">${expireLabel}</td>`:''}
+                <td class="col-actions"><div class="row-actions">
                   ${data.can_manage||m.id===state.user.id?`<button class="btn btn-sm btn-line" onclick="showPerm(${m.id})">权限</button>`:''}
                   ${canSetAccountExpire()&&manageable?`<button class="btn btn-sm btn-line" onclick="openSetExpire([${m.id}])">设有效期</button>`:''}
                   ${m.id!==state.user.id?`<button class="btn btn-sm btn-line" onclick="openMsg(${m.id},'${m.display_name}')">聊天</button>`:''}
-                </td>
+                </div></td>
               </tr>`;
             }).join('') || (() => {
               const colSpan = (data.can_manage?7:6) + (canSetAccountExpire()?1:0) + 1;
@@ -1730,11 +1886,17 @@ async function saveChainAll(){
 async function saveChain(){
   return saveChainAll();
 }
-async function decideTodo(id, decision){
+async function decideTodo(id, decision, extra){
+  // AI-GEN-BEGIN
+  const body = { decision, ...(extra || {}) };
   const { data } = await api('/api/todo/'+id+'/decide', {
-    method:'POST', body: JSON.stringify({ decision })
+    method:'POST', body: JSON.stringify(body)
   });
   if (!data.ok) {
+    if (data.need_account_input) {
+      openProvision(id);
+      return toast(data.error || '请录入账号名');
+    }
     if (data.need_manual) {
       toast(data.error);
       state.view = 'sys_accounts';
@@ -1743,10 +1905,49 @@ async function decideTodo(id, decision){
     }
     return toast(data.error);
   }
-  toast(data.message);
+  toast(data.message + (data.account_id!=null ? ` · usa#${data.account_id}` : ''));
+  closeModal('m-provision');
   await enterHome();
-  state.view = 'todo'; state.todoTab = 'done';
+  state.view = 'todo'; state.todoTab = decision==='approved' ? 'done' : 'pending';
   renderSide(); renderMain();
+  // AI-GEN-END
+}
+
+let provisionTodoId = null;
+async function openProvision(todoId){
+  // AI-GEN-BEGIN
+  provisionTodoId = todoId;
+  const { data } = await api('/api/todo/'+todoId);
+  if (!data.ok) return toast(data.error);
+  const t = data.todo || {};
+  const ap = t.applicant || {};
+  const sy = t.system || {};
+  document.getElementById('prov-hint').innerHTML =
+    `申请人 <strong>${ap.display_name||'-'}</strong>（${ap.username||'-'}）· 系统 <strong>${sy.name||'-'}</strong>`
+    + (t.with_sensitive ? ' · <span class="pill p-red">含敏感</span>' : '');
+  document.getElementById('prov-ids').textContent = [
+    `todo_id=${t.id}`,
+    `application_id=${t.application_id??'-'}`,
+    `applicant_id=${t.applicant_id??ap.id??'-'}`,
+    `system_id=${t.system_id??sy.id??'-'}`,
+    `step_key=${t.step_key||'-'}`,
+    `flow_code=${t.flow_code||'-'}`,
+    `create_new=${!!t.create_new}`,
+    `assignee_id=${t.assignee_id??'-'}`,
+  ].join('\n');
+  document.getElementById('prov-account').value = t.suggest_account || '';
+  document.getElementById('prov-remark').value = '';
+  openModal('m-provision');
+  // AI-GEN-END
+}
+async function submitProvision(){
+  // AI-GEN-BEGIN
+  if (!provisionTodoId) return;
+  const account_name = (document.getElementById('prov-account')?.value || '').trim();
+  const remark = (document.getElementById('prov-remark')?.value || '').trim();
+  if (!account_name) return toast('请输入业务系统账号名');
+  await decideTodo(provisionTodoId, 'approved', { account_name, remark });
+  // AI-GEN-END
 }
 function openMsg(uid, name){
   state.msgTo = uid;
@@ -1959,12 +2160,31 @@ function canSetAccountExpire(){
 
 let expireTargetIds = [];
 
-function togExpireNever(on){
-  const inp = document.getElementById('expire-date');
-  if (inp) {
-    inp.disabled = !!on;
-    if (on) inp.value = '';
+function expireDatePlusDays(days){
+  const d = new Date();
+  d.setDate(d.getDate() + Number(days || 0));
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function pickExpirePreset(el){
+  const box = document.getElementById('expire-presets');
+  if (box) box.querySelectorAll('[data-preset]').forEach(n => n.classList.toggle('on', n === el));
+  const preset = el?.dataset?.preset || '90';
+  const date = document.getElementById('expire-date');
+  const wrap = document.getElementById('expire-date-wrap');
+  if (preset === 'never') {
+    if (wrap) wrap.style.display = 'none';
+    if (date) { date.value = ''; date.disabled = true; }
+    return;
   }
+  if (wrap) wrap.style.display = '';
+  if (!date) return;
+  date.disabled = false;
+  if (preset === '90') date.value = expireDatePlusDays(90);
+  else if (!date.value) date.value = expireDatePlusDays(90);
 }
 
 function openSetExpire(ids){
@@ -1973,18 +2193,18 @@ function openSetExpire(ids){
   if (!selected.length) { toast('请先勾选人员，或点行内「设有效期」'); return; }
   expireTargetIds = selected;
   const hint = document.getElementById('expire-hint');
-  if (hint) hint.textContent = `已选 ${selected.length} 人：可指定到期日，或勾选永不过期。`;
-  const never = document.getElementById('expire-never');
-  const date = document.getElementById('expire-date');
-  if (never) never.checked = false;
-  if (date) { date.disabled = false; date.value = ''; }
+  if (hint) hint.textContent = `已选 ${selected.length} 人：可选 90 天、指定日期或永不过期。`;
+  const first = document.querySelector('#expire-presets [data-preset="90"]');
+  if (first) pickExpirePreset(first);
   openModal('m-set-expire');
 }
 
 async function submitSetExpire(){
-  const never = document.getElementById('expire-never')?.checked;
-  const date = document.getElementById('expire-date')?.value || '';
-  if (!never && !date) { toast('请选择有效期或勾选永不过期'); return; }
+  const on = document.querySelector('#expire-presets .on');
+  const preset = on?.dataset?.preset || 'custom';
+  const never = preset === 'never';
+  const date = never ? '' : (document.getElementById('expire-date')?.value || '');
+  if (!never && !date) { toast('请选择有效期或永不过期'); return; }
   const { data } = await api('/api/org/members/account-expire', {
     method: 'POST',
     body: JSON.stringify({
@@ -2852,24 +3072,27 @@ async function hrSyncOne(id){
   renderMain();
 }
 async function hrPull(){
-  toast('正在增量同步…');
+  toast('正在增量同步（只拉有变更的人）…');
   const { data } = await api('/api/hr/sync-pull', { method:'POST', body: JSON.stringify({ mode: 'auto' }) });
   if (!data.ok) return toast(data.error);
   state.leorgSync = data.sync_state || state.leorgSync;
-  toast(data.message);
+  const n = (data.fetched && data.fetched.employees) || 0;
+  const tag = data.mode === 'full' ? '【实际走了全量】' : '【增量】';
+  toast(`${tag} 人员拉取 ${n} 人 · ${data.message}`);
   renderMain();
 }
 async function hrPullFull(){
-  if (!confirm('确认全量同步？将重新拉取全部组织与在职人员（幂等，可重复执行）。')) return;
-  toast('正在全量同步…');
+  if (!confirm('全量同步会重拉全部组织 + 全部在职/试用人员（约九百人），比增量慢。\n可重复执行，不会重复建人。确认？')) return;
+  toast('正在全量同步（拉全部人员）…');
   const { data } = await api('/api/hr/sync-pull', { method:'POST', body: JSON.stringify({ mode: 'full' }) });
   if (!data.ok) return toast(data.error);
   state.leorgSync = data.sync_state || state.leorgSync;
-  toast(data.message);
+  const n = (data.fetched && data.fetched.employees) || 0;
+  toast(`【全量】人员拉取 ${n} 人 · ${data.message}`);
   renderMain();
 }
 async function hrOrgClear(){
-  if (!confirm('确认清空「我的组织」？\n将删除全部部门与普通员工，保留管理演示账号，之后可从 LeOrg 重新同步。')) return;
+  if (!confirm('【仅测试】确认清空「我的组织」？\n将删除全部部门与普通员工，保留管理演示账号。\n上线版本将移除此按钮。')) return;
   const { data } = await api('/api/hr/org-clear', { method:'POST', body: JSON.stringify({ confirm: true }) });
   if (!data.ok) return toast(data.error);
   state.deptFilter = '';
@@ -2940,7 +3163,6 @@ async function submitAdd(){
     username: document.getElementById('add-username').value.trim(),
     phone: document.getElementById('add-phone').value.trim(),
     email: document.getElementById('add-email').value.trim(),
-    beisen_user_id: (document.getElementById('add-beisen-uid')?.value || '').trim(),
     role: document.getElementById('add-role').value,
     dept_id: document.getElementById('add-dept')?.value,
     person_type: state.addPersonType || 'internal',
@@ -2949,20 +3171,6 @@ async function submitAdd(){
   if (!data.ok) return toast(data.error);
   toast(data.message); closeModal('m-add'); renderMain();
 }
-// AI-GEN-BEGIN
-async function saveBeisenUid(uid, value) {
-  const { data } = await api('/api/org/members/' + uid + '/beisen-user-id', {
-    method: 'PATCH',
-    body: JSON.stringify({ beisen_user_id: (value || '').trim() }),
-  });
-  if (!data.ok) return toast(data.error || '保存失败');
-  toast(value ? '北森用户ID已保存' : '已清空北森用户ID');
-  if (state.deptData?.members) {
-    const m = state.deptData.members.find(x => x.id === uid);
-    if (m) m.beisen_user_id = (value || '').trim() || null;
-  }
-}
-// AI-GEN-END
 function openImport(){
   document.getElementById('import-csv').value = '周九,13900000009,zhoujiu@lecoo.com\n吴十,13900000010,wushi@lecoo.com';
   openModal('m-import');
