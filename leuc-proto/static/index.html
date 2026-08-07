@@ -3370,7 +3370,8 @@ async function openProvision(todoId){
   // AI-GEN-BEGIN
   provisionTodoId = todoId;
   provisionPickSelected = null;
-  state.provSelections = {}; // system_id -> {id, account_name, system_id}
+  state.provSelections = {}; // line_key -> {id, account_name, system_id, line_key}
+  state.provPickForLineKey = null;
   state.provPickForSystemId = null;
   const { data } = await api('/api/todo/'+todoId);
   if (!data.ok) return toast(data.error);
@@ -3379,28 +3380,52 @@ async function openProvision(todoId){
   const sy = t.system || {};
   let targets = t.provision_targets || [];
   if (!targets.length) {
-    const sids = (t.meta_obj && t.meta_obj.system_ids) || [];
-    if (sids.length) {
-      targets = sids.map(id => ({ system_id: id, system_name: '系统#'+id, with_sensitive: !!t.with_sensitive }));
+    const items = (t.meta_obj && (t.meta_obj.items || t.meta_obj.lines)) || [];
+    if (items.length) {
+      targets = items.map((it, idx) => ({
+        line_key: String(idx),
+        line_index: idx,
+        system_id: it.system_id || t.system_id || sy.id,
+        system_name: it.system_name || sy.name || ('系统#'+(it.system_id||t.system_id||'')),
+        label: it.system_name || sy.name || ('行'+(idx+1)),
+        with_sensitive: !!(it.with_sensitive ?? t.with_sensitive),
+      })).filter(x => x.system_id);
     } else {
-      targets = [{
-        system_id: t.system_id || sy.id,
-        system_name: sy.name || ('系统#'+(t.system_id||sy.id||'')),
-        with_sensitive: !!t.with_sensitive,
-      }].filter(x => x.system_id);
+      const sids = (t.meta_obj && t.meta_obj.system_ids) || [];
+      if (sids.length) {
+        targets = sids.map((id, i) => ({
+          line_key: String(i),
+          system_id: id,
+          system_name: '系统#'+id,
+          label: '系统#'+id,
+          with_sensitive: !!t.with_sensitive,
+        }));
+      } else {
+        targets = [{
+          line_key: '0',
+          system_id: t.system_id || sy.id,
+          system_name: sy.name || ('系统#'+(t.system_id||sy.id||'')),
+          label: sy.name || ('系统#'+(t.system_id||sy.id||'')),
+          with_sensitive: !!t.with_sensitive,
+        }].filter(x => x.system_id);
+      }
     }
   }
+  targets = targets.map((x, i) => ({
+    ...x,
+    line_key: x.line_key != null ? String(x.line_key) : String(i),
+    label: x.label || x.system_name || ('系统#'+x.system_id),
+  }));
   state.provTargets = targets;
   provisionSystemId = targets[0]?.system_id || t.system_id || sy.id || null;
-  const sysNames = targets.map(x => x.system_name + (x.with_sensitive?'(敏感)':'')).join('、');
+  const lineNames = targets.map(x => (x.label || x.system_name) + (x.with_sensitive?'(敏感)':'')).join('、');
   document.getElementById('prov-hint').innerHTML =
-    `申请人 <strong>${ap.display_name||'-'}</strong>（${ap.username||'-'}）· 待开通 <strong>${targets.length}</strong> 个系统`
-    + (sysNames ? `：${sysNames}` : '')
-    + (t.with_sensitive ? ' · <span class="pill p-red">含敏感</span>' : '')
-    + `<br><span class="note">请为每个系统从「全部账户」中各选一个账号（默认无归属）。</span>`;
+    `申请人 <strong>${ap.display_name||'-'}</strong>（${ap.username||'-'}）· 待开通 <strong>${targets.length}</strong> 个账号`
+    + (lineNames ? `：${lineNames}` : '')
+    + `<br><span class="note">请为每一行申请各选一个账号（同系统多行须选不同账号；默认无归属）。</span>`;
   document.getElementById('prov-ids').textContent = [
     `todo#${t.id} · app#${t.application_id??'-'} · 申请人#${t.applicant_id??ap.id??'-'}`,
-    `systems=${targets.map(x=>x.system_id).join(',')||'-'} · step=${t.step_key||'-'} · ${t.flow_code||'-'}`,
+    `lines=${targets.map(x=>x.line_key+':sys'+x.system_id).join(',')||'-'} · step=${t.step_key||'-'} · ${t.flow_code||'-'}`,
   ].join('\n');
   document.getElementById('prov-target-count').textContent = `${targets.length} 个`;
   document.getElementById('prov-remark').value = '';
@@ -3416,29 +3441,32 @@ function renderProvLines(){
   const sel = state.provSelections || {};
   if (!box) return;
   if (!targets.length) {
-    box.innerHTML = '<div class="note" style="padding:12px">无可开通系统</div>';
+    box.innerHTML = '<div class="note" style="padding:12px">无可开通账号行</div>';
     return;
   }
   box.innerHTML = `<table class="tbl" style="margin:0"><thead><tr>
-    <th style="width:40px">#</th><th>业务系统</th><th>敏感</th><th>开通账号</th><th style="width:100px"></th>
+    <th style="width:40px">#</th><th>申请行</th><th>敏感</th><th>开通账号</th><th style="width:100px"></th>
   </tr></thead><tbody>${targets.map((t,i) => {
-    const picked = sel[t.system_id];
+    const lk = String(t.line_key != null ? t.line_key : i);
+    const picked = sel[lk];
     const label = picked
       ? `${picked.account_name||picked.account_uid||('#'+picked.id)}`
       : '未选择';
+    const title = t.label || t.system_name || ('系统#'+t.system_id);
     return `<tr>
       <td>${i+1}</td>
-      <td><b>${t.system_name||('系统#'+t.system_id)}</b><div class="note">system_id=${t.system_id}</div></td>
+      <td><b>${title}</b><div class="note">system_id=${t.system_id} · line=${lk}</div></td>
       <td>${t.with_sensitive?'<span class="pill p-red">敏感</span>':'—'}</td>
       <td>${picked?`<code>${label}</code>`:`<span class="note">${label}</span>`}</td>
       <td><button type="button" class="btn btn-sm btn-pri" style="width:auto"
-        onclick="openProvAccountPickerFor(${t.system_id})">${picked?'重选':'选择账号'}</button></td>
+        onclick="openProvAccountPickerFor('${lk}',${t.system_id})">${picked?'重选':'选择账号'}</button></td>
     </tr>`;
   }).join('')}</tbody></table>`;
   // AI-GEN-END
 }
-function openProvAccountPickerFor(systemId){
+function openProvAccountPickerFor(lineKey, systemId){
   // AI-GEN-BEGIN
+  state.provPickForLineKey = String(lineKey);
   state.provPickForSystemId = Number(systemId);
   provisionSystemId = Number(systemId);
   return openProvAccountPicker();
@@ -3451,7 +3479,8 @@ async function openProvAccountPicker(){
   document.getElementById('prov-pick-unbound').checked = true;
   document.getElementById('prov-pick-q').value = '';
   provisionPickSelected = null;
-  const cur = (state.provSelections || {})[provisionSystemId];
+  const lk = state.provPickForLineKey;
+  const cur = lk != null ? (state.provSelections || {})[String(lk)] : null;
   if (cur && cur.id) provisionPickSelected = { id: Number(cur.id) };
   openModal('m-prov-pick');
   await loadProvAccountPicker();
@@ -3527,14 +3556,21 @@ function confirmProvAccountPick(){
     toast('该账号已绑定，若非当前申请人将无法开通');
   }
   const sid = Number(state.provPickForSystemId || provisionSystemId);
+  const lk = String(state.provPickForLineKey != null ? state.provPickForLineKey : '0');
+  // 同申请内禁止复用同一池账号
+  const usedElsewhere = Object.entries(state.provSelections || {}).some(([k, v]) =>
+    String(k) !== lk && v && Number(v.id) === Number(acct.id)
+  );
+  if (usedElsewhere) return toast('该账号已用于其它申请行，请另选一个');
   if (!state.provSelections) state.provSelections = {};
-  state.provSelections[sid] = {
+  state.provSelections[lk] = {
     id: Number(acct.id),
     account_name: acct.account_name || '',
     account_uid: acct.account_uid || '',
     system_id: sid,
+    line_key: lk,
   };
-  // 兼容单系统旧字段
+  // 兼容单行旧字段
   if ((state.provTargets||[]).length <= 1) {
     setProvAccountSelection(acct);
   }
@@ -3551,18 +3587,25 @@ async function submitProvision(){
   const sel = state.provSelections || {};
   const provisions = [];
   const missing = [];
+  const seenIds = new Set();
   for (const t of targets) {
-    const p = sel[t.system_id];
-    if (!p || !p.id) { missing.push(t.system_name || ('系统#'+t.system_id)); continue; }
+    const lk = String(t.line_key != null ? t.line_key : provisions.length);
+    const p = sel[lk];
+    const title = t.label || t.system_name || ('系统#'+t.system_id);
+    if (!p || !p.id) { missing.push(title); continue; }
+    if (seenIds.has(Number(p.id))) return toast('存在重复账号选择，请为每行各选不同账号');
+    seenIds.add(Number(p.id));
     provisions.push({
+      line_key: lk,
+      line_index: t.line_index != null ? Number(t.line_index) : Number(lk),
       system_id: Number(t.system_id),
       account_id: Number(p.id),
       account_name: p.account_name || undefined,
     });
   }
-  if (missing.length) return toast('请先为以下系统选择账号：' + missing.join('、'));
+  if (missing.length) return toast('请先为以下申请行选择账号：' + missing.join('、'));
   const payload = { remark, provisions, skipRemarkPrompt: true };
-  // 单系统仍带旧字段，兼容后端
+  // 单行仍带旧字段，兼容后端
   if (provisions.length === 1) {
     payload.account_id = provisions[0].account_id;
     if (provisions[0].account_name) payload.account_name = provisions[0].account_name;

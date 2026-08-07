@@ -1353,6 +1353,45 @@ def provision_account_apply(
     # AI-GEN-END
 
 
+def _match_provision(provisions: list, target: dict) -> dict | None:
+    """匹配某一开通目标行：优先 line_key / line_index，再回退未占用的 system_id。"""
+    # AI-GEN-BEGIN
+    if not isinstance(target, dict):
+        return None
+    lk = target.get("line_key")
+    lk_s = str(lk) if lk is not None else None
+    li = target.get("line_index")
+    sid = target.get("system_id")
+    sid_i = int(sid) if sid not in (None, "") else None
+
+    for p in provisions:
+        if not isinstance(p, dict) or p.get("_used"):
+            continue
+        if lk_s is not None and p.get("line_key") is not None and str(p.get("line_key")) == lk_s:
+            return p
+    if li is not None:
+        for p in provisions:
+            if not isinstance(p, dict) or p.get("_used"):
+                continue
+            if p.get("line_index") is not None and int(p.get("line_index")) == int(li):
+                return p
+    # 旧客户端：仅按 system_id，每条 provision 只能匹配一次
+    if sid_i is not None:
+        for p in provisions:
+            if not isinstance(p, dict) or p.get("_used"):
+                continue
+            if p.get("system_id") in (None, ""):
+                continue
+            if int(p.get("system_id")) != sid_i:
+                continue
+            # 若带了别的 line_key，说明专属于另一行
+            if p.get("line_key") is not None and lk_s is not None and str(p.get("line_key")) != lk_s:
+                continue
+            return p
+    return None
+    # AI-GEN-END
+
+
 def provision_account_apply_multi(
     db,
     application,
@@ -1362,46 +1401,69 @@ def provision_account_apply_multi(
     with_sensitive=False,
     remark=None,
 ):
-    """按多系统逐个开通；provisions=[{system_id, account_id|account_name}]。"""
+    """按申请明细行逐个开通；同系统多行须各选不同池账号。"""
     # AI-GEN-BEGIN
     meta = meta if isinstance(meta, dict) else {}
     targets = get_provision_targets(db, meta, application)
     if not targets:
         return {"ok": False, "error": "无可开通的业务系统"}
-    prov_list = list(provisions or [])
+    prov_list = [dict(p) for p in (provisions or []) if isinstance(p, dict)]
     # 兼容旧单账号入参
     if not prov_list and (meta.get("_single_account_id") or meta.get("_single_account_name")):
         prov_list = [
             {
+                "line_key": targets[0].get("line_key"),
                 "system_id": targets[0]["system_id"],
                 "account_id": meta.get("_single_account_id"),
                 "account_name": meta.get("_single_account_name"),
             }
         ]
-    by_sid = {}
-    for p in prov_list:
-        if not isinstance(p, dict):
+    missing = []
+    matched = []
+    for t in targets:
+        p = _match_provision(prov_list, t)
+        if not p or not (p.get("account_id") or (p.get("account_name") or "").strip()):
+            missing.append(t)
             continue
-        sid = p.get("system_id")
-        if sid in (None, ""):
-            continue
-        by_sid[int(sid)] = p
-    missing = [t for t in targets if int(t["system_id"]) not in by_sid]
+        p["_used"] = True
+        matched.append((t, p))
     if missing:
-        names = "、".join(t["system_name"] for t in missing)
+        names = "、".join(t.get("label") or t.get("system_name") for t in missing)
         return {
             "ok": False,
-            "error": f"请为以下系统选择账号：{names}",
+            "error": f"请为以下申请行选择账号：{names}",
             "need_account_input": True,
             "provision_targets": targets,
+            "missing_line_keys": [t.get("line_key") for t in missing],
             "missing_system_ids": [t["system_id"] for t in missing],
         }
+    # 禁止同一池账号绑定到多行
+    seen_pool = set()
+    for t, p in matched:
+        key = None
+        if p.get("account_id") not in (None, ""):
+            key = ("id", int(p["account_id"]))
+        else:
+            an = (p.get("account_name") or "").strip()
+            if an:
+                key = ("name", int(t["system_id"]), an)
+        if key and key in seen_pool:
+            return {
+                "ok": False,
+                "error": f"「{t.get('label') or t.get('system_name')}」与其它行选择了同一账号，请各选不同账号",
+                "need_account_input": True,
+                "provision_targets": targets,
+            }
+        if key:
+            seen_pool.add(key)
+
     results = []
     parts = []
-    for i, t in enumerate(targets):
+    for t, p in matched:
         sid = int(t["system_id"])
-        p = by_sid[sid]
-        sens = bool(t.get("with_sensitive") if t.get("with_sensitive") is not None else with_sensitive)
+        sens = bool(
+            t.get("with_sensitive") if t.get("with_sensitive") is not None else with_sensitive
+        )
         r = provision_account_apply(
             db,
             application,
@@ -1415,8 +1477,10 @@ def provision_account_apply_multi(
         )
         if not r.get("ok"):
             return r
+        r["line_key"] = t.get("line_key")
+        r["line_label"] = t.get("label")
         results.append(r)
-        parts.append(f"{r.get('system')} / {r.get('account')}")
+        parts.append(f"{t.get('label') or r.get('system')} / {r.get('account')}")
     now = datetime.now().strftime("%Y-%m-%d")
     db.execute(
         "UPDATE applications SET status = 'provisioned', provisioned = 1, updated_at = ? WHERE id = ?",
@@ -1427,15 +1491,15 @@ def provision_account_apply_multi(
         db,
         uid,
         "账号申请已开通",
-        f"已开通 {len(results)} 个系统账号：{'；'.join(parts)}"
+        f"已开通 {len(results)} 个账号：{'；'.join(parts)}"
         + (f"。备注：{remark}" if remark else ""),
     )
     return {
         "ok": True,
         "count": len(results),
         "items": results,
-        "system": parts[0].split(" / ")[0] if parts else None,
-        "account": parts[0].split(" / ")[1] if parts else None,
+        "system": results[0].get("system") if results else None,
+        "account": results[0].get("account") if results else None,
         "message": f"已开通 {len(results)} 个：{'；'.join(parts)}",
         "applicant_id": uid,
         "application_id": application["id"],
@@ -6271,39 +6335,6 @@ def todo_decide(user, tid):
                             or None,
                         }
                     ]
-                # 校验每一行都有账号
-                probe = provision_account_apply_multi(
-                    db,
-                    app_row,
-                    provisions,
-                    meta=meta_pre,
-                    with_sensitive=bool(meta_pre.get("with_sensitive")),
-                    remark=None,
-                )
-                # 上面会真正开通；预检改为纯匹配
-                # 重新用只读匹配，避免半开通 —— 这里改回仅检查
-            if at_owner_effect and meta_pre.get("create_new"):
-                targets = get_provision_targets(db, meta_pre, app_row)
-                provisions = data.get("provisions")
-                if not isinstance(provisions, list):
-                    provisions = []
-                if (
-                    not provisions
-                    and len(targets) == 1
-                    and (
-                        data.get("account_id")
-                        or (data.get("account_name") or "").strip()
-                    )
-                ):
-                    provisions = [
-                        {
-                            "line_key": targets[0].get("line_key"),
-                            "system_id": targets[0]["system_id"],
-                            "account_id": data.get("account_id"),
-                            "account_name": (data.get("account_name") or "").strip()
-                            or None,
-                        }
-                    ]
                 prov_probe = [dict(p) for p in provisions if isinstance(p, dict)]
                 missing = []
                 for t in targets:
@@ -6478,14 +6509,12 @@ def todo_decide(user, tid):
                     if not isinstance(provisions, list) or not provisions:
                         if data.get("account_id") or (data.get("account_name") or "").strip():
                             targets = get_provision_targets(db, meta_fx, app_row)
-                            sid0 = (
-                                targets[0]["system_id"]
-                                if targets
-                                else app_row["system_id"]
-                            )
+                            t0 = targets[0] if targets else None
                             provisions = [
                                 {
-                                    "system_id": sid0,
+                                    "line_key": (t0 or {}).get("line_key"),
+                                    "system_id": (t0 or {}).get("system_id")
+                                    or app_row["system_id"],
                                     "account_id": data.get("account_id"),
                                     "account_name": (data.get("account_name") or "").strip()
                                     or None,
@@ -6769,32 +6798,37 @@ def todo_decide(user, tid):
                 ):
                     provisions = [
                         {
+                            "line_key": targets[0].get("line_key"),
                             "system_id": targets[0]["system_id"],
                             "account_id": account_id,
                             "account_name": account_name or None,
                         }
                     ]
-                covered = {
-                    int(p.get("system_id"))
-                    for p in provisions
-                    if isinstance(p, dict)
-                    and p.get("system_id") not in (None, "")
-                    and (p.get("account_id") or (p.get("account_name") or "").strip())
-                }
-                missing = [t for t in targets if int(t["system_id"]) not in covered]
+                prov_probe = [dict(p) for p in provisions if isinstance(p, dict)]
+                missing = []
+                for t in targets:
+                    p = _match_provision(prov_probe, t)
+                    if not p or not (
+                        p.get("account_id") or (p.get("account_name") or "").strip()
+                    ):
+                        missing.append(t)
+                        continue
+                    p["_used"] = True
                 if missing:
-                    names = "、".join(t["system_name"] for t in missing)
+                    names = "、".join(
+                        t.get("label") or t.get("system_name") for t in missing
+                    )
                     return jsonify(
                         {
                             "ok": False,
-                            "error": f"请为以下系统选择账号后再开通：{names}",
+                            "error": f"请为以下申请行选择账号后再开通：{names}",
                             "need_account_input": True,
                             "todo_id": tid,
                             "application_id": app_id,
                             "applicant_id": app_row["applicant_id"],
                             "system_id": app_row["system_id"],
                             "provision_targets": targets,
-                            "missing_system_ids": [t["system_id"] for t in missing],
+                            "missing_line_keys": [t.get("line_key") for t in missing],
                         }
                     ), 400
                 result = provision_account_apply_multi(
