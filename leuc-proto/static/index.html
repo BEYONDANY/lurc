@@ -1,0 +1,3717 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lecoo 用户中心 LEUC · SQLite 多角色原型</title>
+<style>
+/* AI-GEN-BEGIN */
+:root{
+  --navy:#101838;--ink:#1B2340;--blue:#2E9BFF;--blue-d:#1677E0;
+  --bg:#F2F6FD;--card:#fff;--line:#DDE7F7;--gray:#5A6478;--muted:#8B96AD;
+  --green:#27AE60;--orange:#E67E22;--red:#D64545;--radius:12px;
+  --note:#FFF8E8;--note-b:#F0D9A0;--note-t:#7A5608;
+  font-size:14px;
+}
+*{margin:0;padding:0;box-sizing:border-box;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+body{background:#0B1126;color:var(--ink);min-height:100vh}
+.proto-bar{display:flex;align-items:center;gap:10px;padding:10px 18px;color:#fff;position:sticky;top:0;z-index:50;border-bottom:1px solid #1E2A55;flex-wrap:wrap;background:#0B1126}
+.logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#2E9BFF,#7C5CFF);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px}
+.tag{font-size:11px;color:#8FA3D9;border:1px solid #2A3766;border-radius:20px;padding:2px 10px}
+.role-switch{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.role-switch button{background:#141D42;color:#9FB0D8;border:1px solid #26336A;border-radius:8px;padding:5px 10px;cursor:pointer;font-size:11.5px}
+.role-switch button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.guide{background:linear-gradient(90deg,#FFF7E8,#FFFDF6);border-bottom:1px solid #F5DFB8;padding:10px 18px;font-size:12.5px;color:var(--note-t);line-height:1.7}
+.guide b{color:#B4720A}
+.stage{max-width:1280px;margin:16px auto 24px;border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45);background:#fff}
+.screen{display:none}.screen.show{display:block}
+.panel{display:none}.panel.show{display:block}
+.callout{background:var(--note);border:1px dashed var(--note-b);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--note-t);line-height:1.7;margin:0 0 14px}
+.callout strong{color:#B4720A}
+.login-wrap{display:flex;min-height:680px}
+.login-left{flex:1.05;background:linear-gradient(150deg,#101838,#182352 55%,#1E3A7A);color:#fff;padding:48px;display:flex;flex-direction:column}
+.login-left h1{font-size:28px;margin:72px 0 12px;line-height:1.35}
+.login-left p{color:#AFC3EE;line-height:1.85;font-size:13.5px}
+.login-left .caps{margin-top:auto;display:flex;gap:8px;flex-wrap:wrap}
+.login-left .caps span{font-size:11px;border:1px solid rgba(202,220,252,.35);padding:4px 10px;border-radius:20px;color:#CADCFC}
+.login-right{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:36px 24px;background:#fff}
+.login-card{width:400px}
+.login-card h2{font-size:20px;margin-bottom:4px}
+.sub{color:var(--muted);font-size:12.5px;margin-bottom:14px;line-height:1.6}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12.5px;color:var(--gray);margin-bottom:6px}
+.field input,.field select,.field textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:13.5px;outline:none}
+.field input:focus{border-color:var(--blue)}
+.btn{border:none;border-radius:9px;padding:10px 16px;font-size:13.5px;cursor:pointer}
+.btn-pri{background:linear-gradient(90deg,#1677E0,#2E9BFF);color:#fff;width:100%}
+.btn-line{background:#fff;border:1px solid var(--line);color:var(--ink)}
+.btn-sm{padding:5px 10px;font-size:12px;border-radius:7px}
+.btn-danger{background:var(--red);color:#fff}
+.link-row{display:flex;justify-content:flex-end;margin:0 0 12px}
+.link-row a{font-size:12.5px;color:var(--blue-d);cursor:pointer;text-decoration:none}
+.sso-icons{display:flex;justify-content:center;gap:18px;margin-top:16px;padding-top:14px;border-top:1px dashed var(--line)}
+.sso-icon{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.sso-icon:hover{border-color:var(--blue);box-shadow:0 4px 12px rgba(46,155,255,.18)}
+.sso-icon svg{width:22px;height:22px}
+.sso-tip{text-align:center;font-size:11px;color:var(--muted);margin-top:8px}
+.stepup{display:flex;gap:8px;margin-bottom:10px}
+.stepup div{flex:1;border:1.5px solid var(--line);border-radius:10px;padding:10px 8px;text-align:center;cursor:pointer;font-size:11.5px;color:var(--gray)}
+.stepup div.on{border-color:var(--blue);background:#F3F9FF;color:var(--ink)}
+.stepup b{display:block;font-size:12.5px;margin-bottom:2px;color:var(--ink)}
+.source-bar{display:flex;gap:8px;margin-bottom:14px}
+.source-bar button{flex:1;padding:8px;border-radius:8px;border:1px solid var(--line);background:#F7FAFF;cursor:pointer;font-size:12px;color:var(--gray)}
+.source-bar button.on{border-color:var(--blue);background:#E8F3FF;color:var(--blue-d);font-weight:600}
+.acct-card{border:1.5px solid var(--line);border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.acct-card.on,.acct-card:hover{border-color:var(--blue);background:#F3F9FF}
+.acct-card b{display:block;font-size:13.5px}
+.acct-card span{font-size:11.5px;color:var(--muted)}
+.warn{background:#FCE9E9;border:1px solid #F0C3C3;color:#A33;padding:12px;border-radius:9px;font-size:12.5px;line-height:1.7}
+.okbox{background:#E7F7EE;border:1px solid #B8E6C8;color:#1D8A4E;padding:12px;border-radius:9px;font-size:12.5px;line-height:1.7}
+.note{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.7}
+.demo-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.app{display:flex;min-height:720px;background:var(--bg)}
+.side{width:220px;background:var(--navy);color:#B9C6E8;padding:18px 12px;display:flex;flex-direction:column;flex:none}
+.side .brand{display:flex;align-items:center;gap:9px;padding:6px 8px 18px;color:#fff;font-weight:700}
+.side .brand i{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#2E9BFF,#7C5CFF);display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:12px}
+.side .grp{font-size:10.5px;color:#5F6FA0;margin:14px 12px 6px;letter-spacing:1px}
+.side nav a{display:block;padding:10px 12px;border-radius:8px;cursor:pointer;font-size:13px;margin-bottom:2px;color:#B9C6E8}
+.side nav a.on,.side nav a:hover{background:#1E2B5E;color:#fff}
+.side .me{margin-top:auto;border-top:1px solid #22305F;padding:12px 8px 4px;font-size:12px;color:#DCE5FA;display:flex;gap:9px;align-items:center}
+.avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#2E9BFF,#27AE60);display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px;flex:none}
+.main{flex:1;padding:20px 24px;overflow:auto}
+.ptitle{font-size:18px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cards{display:grid;gap:12px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr 1fr}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.card h4{font-size:13.5px;margin-bottom:10px}
+.pill{display:inline-block;font-size:11px;padding:2px 10px;border-radius:20px}
+.p-green{background:#E7F7EE;color:#1D8A4E}.p-blue{background:#E8F3FF;color:#1677E0}
+.p-orange{background:#FDF1E3;color:#C06A0A}.p-red{background:#FCE9E9;color:#C43D3D}.p-gray{background:#EEF1F7;color:#6B7590}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{color:var(--muted);text-align:left;font-weight:500;padding:9px 10px;border-bottom:1px solid var(--line);background:#FAFCFF}
+td{padding:10px;border-bottom:1px solid #EDF2FB}
+.tabs{display:flex;border-bottom:1px solid var(--line);margin-bottom:12px}
+.tabs div{padding:10px 14px;cursor:pointer;font-size:13px;color:var(--gray);border-bottom:2px solid transparent}
+.tabs div.on{color:var(--blue-d);border-color:var(--blue-d);font-weight:600}
+.sys-block{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+.sys-block .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.sys-block .acct{font-size:12px;color:var(--gray);padding:4px 0;border-top:1px dashed #E8EEF9}
+.kv{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed #E8EEF9;font-size:12.5px}
+.kv .lab{color:var(--muted)}
+/* AI-GEN-BEGIN */
+.sec-grid{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+@media(max-width:900px){.sec-grid{grid-template-columns:1fr}}
+.sec-card .kv:last-child{border-bottom:none}
+.sec-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.sec-status{font-size:12px;color:var(--muted);margin-top:4px}
+.chip-row{display:flex;flex-wrap:wrap;gap:8px;min-height:36px;padding:8px;border:1px dashed var(--line);border-radius:8px;background:#FAFCFF}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:#E8F3FF;color:#1677E0;font-size:12.5px}
+.chip button{border:0;background:transparent;color:#5A6478;cursor:pointer;font-size:14px;line-height:1;padding:0 2px}
+.pick-layout{display:grid;grid-template-columns:220px 1fr;gap:12px;align-items:start}
+@media(max-width:700px){.pick-layout{grid-template-columns:1fr}}
+/* AI-GEN-END */
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar input,.toolbar select{padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px}
+.mask{position:fixed;inset:0;background:rgba(10,16,40,.55);display:none;align-items:center;justify-content:center;z-index:200}
+.mask.show{display:flex}
+.modal{background:#fff;border-radius:14px;width:560px;max-width:92vw;padding:22px;max-height:90vh;overflow:auto}
+.modal h3{font-size:16px;margin-bottom:6px}
+.modal .foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+/* AI-GEN-BEGIN */
+/* 账号申请等复杂表单：接近全屏大面板（优于另开浏览器窗口，保留站内状态） */
+.modal.modal-xl{
+  width:min(1280px,96vw);
+  max-width:96vw;
+  height:min(900px,92vh);
+  max-height:92vh;
+  padding:20px 22px;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  border-radius:16px;
+}
+.modal.modal-xl .callout{flex-shrink:0}
+.modal.modal-xl .field{flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0}
+.modal.modal-xl #bg-lines{
+  flex:1;
+  min-height:280px;
+  max-height:none !important;
+  overflow:auto;
+}
+.modal.modal-xl .foot{flex-shrink:0;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.modal.modal-lg{
+  width:min(960px,94vw);
+  max-width:94vw;
+  max-height:88vh;
+}
+/* AI-GEN-END */
+/* AI-GEN-BEGIN */
+.org-layout{display:grid;grid-template-columns:240px 1fr;gap:14px;align-items:start}
+@media(max-width:900px){.org-layout{grid-template-columns:1fr}}
+.org-tree{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;max-height:70vh;overflow:auto}
+.org-tree .node{padding:6px 8px;border-radius:8px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px;margin:2px 0}
+.org-tree .node:hover{background:#F3F6FF}
+.org-tree .node.on{background:#EEF3FF;color:var(--pri);font-weight:600}
+.org-tree .node .mgmt{font-size:10px;color:#C47A20;border:1px solid #F0D9A8;background:#FFF8EB;border-radius:999px;padding:1px 6px}
+.org-tree .kids{margin-left:14px;border-left:1px dashed #D7E0F5;padding-left:8px}
+.home-org-tree .node{cursor:default}
+.home-org-tree .node:hover{background:#F7F9FC}
+.home-org-tree .owner{margin-left:auto;font-size:12px;color:var(--muted);font-weight:400}
+/* AI-GEN-BEGIN */
+.role-perm-tree .node{cursor:default}
+.role-perm-tree .node:hover{background:#F7F9FC}
+.role-perm-tree .node label{display:inline-flex;align-items:center;gap:6px;cursor:pointer;flex:1;margin:0;font-weight:400}
+.role-perm-tree .grp-title{font-size:12px;color:var(--muted);font-weight:600;padding:8px 8px 4px;margin-top:4px}
+.role-perm-tree .grp-title:first-child{margin-top:0}
+/* AI-GEN-END */
+.org-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+/* 即时聊天 / 右下角提醒 */
+.chat-dock{position:fixed;right:20px;bottom:20px;z-index:260;display:flex;flex-direction:column;align-items:flex-end;gap:10px;pointer-events:none}
+.chat-dock>*{pointer-events:auto}
+.notify-stack{display:flex;flex-direction:column;gap:8px;width:min(360px,92vw)}
+.notify-card{background:#fff;border-radius:12px;padding:12px 14px;box-shadow:0 12px 40px rgba(16,24,56,.22);border:1px solid #E4EAF8;animation:nIn .28s ease;cursor:pointer;position:relative;overflow:hidden}
+.notify-card.sys{border-color:#F0B429;background:linear-gradient(135deg,#FFFBF0,#FFF8E6);box-shadow:0 12px 40px rgba(200,140,20,.28)}
+.notify-card.sys::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:#F0B429}
+.notify-card.chat{border-color:#C9D7FF}
+.notify-card .nt{font-size:11px;color:#6B7AA8;margin-bottom:2px}
+.notify-card.sys .nt{color:#B07A10;font-weight:700}
+.notify-card .nb{font-size:13px;color:#1A2540;line-height:1.45}
+.notify-card .nx{position:absolute;right:8px;top:6px;border:0;background:transparent;color:#8FA0C0;cursor:pointer;font-size:14px}
+@keyframes nIn{from{opacity:0;transform:translateY(16px) scale(.96)}to{opacity:1;transform:none}}
+.chat-fab{width:52px;height:52px;border-radius:50%;border:0;background:linear-gradient(135deg,#2F6BFF,#1B4FD6);color:#fff;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 8px 24px rgba(47,107,255,.4)}
+.chat-fab .badge{position:absolute;top:-4px;right:-4px;background:#E5484D;color:#fff;font-size:10px;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.chat-fab-wrap{position:relative}
+.chat-panel{width:min(380px,94vw);height:min(520px,70vh);background:#fff;border-radius:16px;box-shadow:0 16px 48px rgba(16,24,56,.28);display:none;flex-direction:column;overflow:hidden;border:1px solid #DDE5F7}
+.chat-panel.show{display:flex}
+.chat-hd{padding:12px 14px;background:#1A2540;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.chat-hd b{font-size:14px}
+.chat-hd button{border:0;background:rgba(255,255,255,.12);color:#fff;border-radius:8px;padding:4px 8px;cursor:pointer;font-size:12px}
+.chat-body{flex:1;display:flex;min-height:0}
+.chat-peers{width:118px;border-right:1px solid #E8EEF8;overflow:auto;background:#F7F9FE}
+.chat-peers .p{padding:10px 8px;cursor:pointer;font-size:12px;border-bottom:1px solid #EEF2FA}
+.chat-peers .p.on{background:#EEF3FF;color:var(--pri);font-weight:600}
+.chat-peers .p .u{color:#E5484D;font-size:10px;font-weight:700}
+.chat-peers .p.sys{color:#B07A10}
+.chat-main{flex:1;display:flex;flex-direction:column;min-width:0}
+.chat-msgs{flex:1;overflow:auto;padding:12px;background:#F4F7FC}
+.chat-bubble{max-width:85%;margin:6px 0;padding:8px 11px;border-radius:12px;font-size:12.5px;line-height:1.45;word-break:break-word}
+.chat-bubble.me{margin-left:auto;background:#2F6BFF;color:#fff;border-bottom-right-radius:4px}
+.chat-bubble.them{background:#fff;border:1px solid #E4EAF8;border-bottom-left-radius:4px}
+.chat-bubble.sys{background:linear-gradient(135deg,#FFF8E6,#FFE8A3);border:1px solid #F0D080;color:#6A4A00;width:100%;max-width:100%;border-radius:10px}
+.chat-bubble .meta{font-size:10px;opacity:.75;margin-bottom:3px}
+.chat-input{display:flex;gap:6px;padding:10px;border-top:1px solid #E8EEF8}
+.chat-input input{flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px}
+.chat-input button{padding:8px 12px;border:0;border-radius:8px;background:var(--pri);color:#fff;cursor:pointer;font-size:12px}
+/* AI-GEN-END */
+.toast{position:fixed;right:24px;bottom:24px;background:#101838;color:#fff;padding:12px 16px;border-radius:10px;font-size:12.5px;z-index:300;display:none;max-width:360px}
+.toast.show{display:block;bottom:90px}
+.footer-tip{max-width:1280px;margin:0 auto 32px;color:#5F6FA0;font-size:11.5px;text-align:center;line-height:1.8}
+@media(max-width:900px){.login-wrap,.app,.g2,.g3{flex-direction:column;grid-template-columns:1fr}.side{width:100%}}
+/* AI-GEN-END */
+</style>
+</head>
+<body>
+<!-- AI-GEN-BEGIN -->
+<div class="proto-bar">
+  <div class="logo">L</div>
+  <b>Lecoo 用户中心 LEUC</b>
+  <span class="tag">SQLite 多角色原型</span>
+  <span class="tag" id="bar-source">来源：直登 LEUC</span>
+  <a class="tag" href="/demo/home" style="text-decoration:none;color:#A8D9C4;border-color:#2A5544">业务系统导航</a>
+  <a class="tag" href="/demo/oa" style="text-decoration:none;color:#F5D48A;border-color:#5A4A20">OA单据</a>
+  <div class="role-switch" id="role-switch"><span style="font-size:11px;color:#6B7AA8">快速切换角色</span></div>
+</div>
+
+<div class="screen show" id="sc-login">
+  <div class="guide">
+    <b>登录</b>：错 ≥1 次需图片验证码；≥10 次再校验绑定手机/邮箱。支持忘记密码。
+    直登 LEUC 不选账号。业务系统请从 <a href="/demo/home">业务系统导航</a> 选择 OA / 来酷ERP / 北森等发起 LEUC 登录。
+  </div>
+  <div class="stage">
+    <div class="login-wrap">
+      <div class="login-left">
+        <h1>Lecoo 用户中心<br>LEUC</h1>
+        <p>账号为姓名拼音全拼。全员可看「我的组织」；员工只读+即时聊天；上级可管下级；系统消息右下角弹出提醒。</p>
+        <div class="caps"><span>错≥10次验证</span><span>忘记密码</span><span>拼音账号</span><span>我的组织</span></div>
+      </div>
+      <div class="login-right">
+        <div class="login-card">
+          <div class="panel show" id="lp-form">
+            <h2 id="login-title">登录 LEUC</h2>
+            <div class="sub" id="login-sub">进入个人中心</div>
+            <div class="source-bar">
+              <button type="button" class="on" id="src-leuc" onclick="setSource('leuc')">直登 LEUC</button>
+            </div>
+            <div class="callout" id="source-tip"><strong>当前：直登 LEUC</strong></div>
+            <div class="note" style="margin:0 0 14px">业务系统联合登录请打开：<a href="/demo/home">业务系统导航</a>（来酷ERP / OA / 北森等）</div>
+            <div class="field"><label>账号</label><input id="username" value="zhangsan" onchange="refreshRisk()"></div>
+            <div class="field"><label>密码</label><input id="password" type="password" value="123456"></div>
+            <!-- AI-GEN-BEGIN -->
+            <div id="captcha-block" style="display:none">
+              <div class="callout"><strong>图片验证码</strong>：密码错误 ≥1 次后须填写（点击图片可刷新）</div>
+              <div class="field"><label>验证码</label>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input id="captcha_code" placeholder="图中字符" style="flex:1;text-transform:uppercase">
+                  <img id="captcha-img" alt="验证码" title="点击刷新"
+                    onclick="refreshCaptcha()"
+                    style="height:44px;border-radius:8px;border:1px solid var(--line);cursor:pointer;background:#F2F6FD">
+                </div>
+                <div class="note" id="captcha-hint" style="margin:6px 0 0"></div>
+              </div>
+            </div>
+            <div id="verify-block" style="display:none">
+              <div class="callout"><strong>二次验证</strong>：密码错误 ≥10 次，须填写<strong>与账号绑定一致</strong>的手机或邮箱，并输入验证码（演示 <b>888888</b>）。张三手机 <b>13800000001</b> / 邮箱 <b>zhangsan@lecoo.com</b></div>
+              <div class="stepup" id="vchan">
+                <div class="on" data-c="phone" onclick="pickChan(this)"><b>手机</b>验证</div>
+                <div data-c="email" onclick="pickChan(this)"><b>邮箱</b>验证</div>
+              </div>
+              <div class="field"><label id="verify-contact-lab">绑定手机号</label>
+                <input id="verify_contact" placeholder="须与账号绑定手机一致"></div>
+              <div class="field"><label>短信/邮箱验证码</label><input id="verify_code" placeholder="888888"></div>
+            </div>
+            <!-- AI-GEN-END -->
+            <div class="link-row"><a onclick="showPanel('lp-forgot')">忘记密码？</a></div>
+            <button class="btn btn-pri" onclick="doLogin()">登录</button>
+            <div class="sso-icons">
+              <button class="sso-icon" title="飞书" onclick="toast('飞书授权（演示）')" aria-label="飞书">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5" fill="#3370FF"/><rect x="13" y="3" width="8" height="8" rx="1.5" fill="#00D6B9"/><rect x="3" y="13" width="8" height="8" rx="1.5" fill="#FFC60A"/><rect x="13" y="13" width="8" height="8" rx="1.5" fill="#F54A45"/></svg>
+              </button>
+              <button class="sso-icon" title="企业微信" onclick="toast('企微授权（演示）')" aria-label="企微">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#07C160"/><path d="M7.5 13.2c.2-2.2 2.2-3.8 4.5-3.8s4.3 1.6 4.5 3.8c.1.4-.2.8-.6.8H8.1c-.4 0-.7-.4-.6-.8z" fill="#fff"/></svg>
+              </button>
+            </div>
+            <div class="sso-tip">飞书 / 企业微信（仅 Icon）</div>
+            <div class="demo-row">
+              <button class="btn btn-sm btn-line" onclick="failToN(1)">模拟错误1次</button>
+              <button class="btn btn-sm btn-line" onclick="failToN(10)">模拟错误10次</button>
+              <button class="btn btn-sm btn-line" onclick="resetRisk()">重置风控</button>
+            </div>
+            <div class="note" id="risk-text">风控：失败 0 次</div>
+          </div>
+
+          <div class="panel" id="lp-forgot">
+            <!-- AI-GEN-BEGIN -->
+            <h2>忘记密码</h2>
+            <div class="sub">仅支持绑定<strong>手机号</strong>或<strong>邮箱</strong>找回（演示验证码 666666）。张三：13800000001 / zhangsan@lecoo.com</div>
+            <div class="stepup" id="fchan">
+              <div class="on" data-c="phone" onclick="pickFChan(this)"><b>手机</b>找回</div>
+              <div data-c="email" onclick="pickFChan(this)"><b>邮箱</b>找回</div>
+            </div>
+            <div class="field"><label id="fg-contact-lab">手机号</label>
+              <input id="fg-contact" value="13800000001" placeholder="请输入绑定手机号"></div>
+            <div class="field"><label>验证码</label>
+              <div style="display:flex;gap:8px">
+                <input id="fg-code" placeholder="666666" style="flex:1">
+                <button class="btn btn-sm btn-line" type="button" onclick="sendResetCode()">发送验证码</button>
+              </div>
+            </div>
+            <div class="field"><label>新密码</label><input id="fg-pass" type="password" value="123456"></div>
+            <button class="btn btn-pri" onclick="doResetPwd()">重置密码</button>
+            <button class="btn btn-line" style="width:100%;margin-top:8px" onclick="showPanel('lp-form')">返回登录</button>
+            <!-- AI-GEN-END -->
+          </div>
+
+          <div class="panel" id="lp-select">
+            <h2>选择 ERP 业务账号</h2>
+            <div class="sub">该 O 系统下有多个业务账号，请选择。</div>
+            <div id="acct-list"></div>
+            <button class="btn btn-pri" onclick="confirmAcct()">进入 ERP</button>
+            <button class="btn btn-line" style="width:100%;margin-top:8px" onclick="showPanel('lp-form')">返回</button>
+          </div>
+          <div class="panel" id="lp-noperm">
+            <h2>无法进入系统</h2>
+            <div class="warn" id="noperm-msg"><strong>无法使用 LEUC 登录</strong></div>
+            <button class="btn btn-pri" onclick="showPanel('lp-form')">返回登录</button>
+          </div>
+          <div class="panel" id="lp-erp-ok">
+            <h2>OIDC 授权完成</h2>
+            <div class="okbox" id="erp-ok-msg">即将回调业务系统</div>
+            <button class="btn btn-pri" id="btn-oidc-go" onclick="goOidcRedirect()">前往回调地址</button>
+            <button class="btn btn-line" style="width:100%;margin-top:8px" onclick="enterHome()">进入 LEUC 个人中心</button>
+            <button class="btn btn-line" style="width:100%;margin-top:8px" onclick="apiLogout();showPanel('lp-form')">退出</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="sc-home">
+  <div class="guide"><b>个人中心</b>：待办 / 自助申请 / 我的组织；右下角即时聊天，系统消息会弹出并带提示音。</div>
+  <div class="stage">
+    <div class="app">
+      <div class="side">
+        <div class="brand"><i>L</i>LEUC</div>
+        <nav id="side-nav"></nav>
+        <div class="me">
+          <div class="avatar" id="me-av">?</div>
+          <div><div id="me-name">-</div><div style="color:#8FA3D9;font-size:11px" id="me-role">-</div></div>
+        </div>
+      </div>
+      <div class="main" id="main-views"></div>
+    </div>
+  </div>
+</div>
+
+<div class="footer-tip">
+  账号：xuhaohao / maning / wujinzhi / gaojia / changmingming · 密码 123456<br>
+  管理：chenchao / sunli / zhangcai / zhaomin·liufang·huangwei<br>
+  登录验证码 888888 · 找回密码 666666 · 启动 <code>cd leuc-proto && python3 app.py</code>
+</div>
+<div class="toast" id="toast"></div>
+
+<!-- AI-GEN-BEGIN -->
+<div class="mask" id="m-sec"><div class="modal" style="max-width:420px">
+  <h3 id="sec-modal-title">安全管理</h3>
+  <div class="note" id="sec-modal-hint" style="margin-bottom:12px"></div>
+  <div id="sec-modal-body"></div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-sec')">取消</button>
+    <button class="btn btn-pri" style="width:auto" id="sec-modal-ok" onclick="submitSecModal()">确定</button>
+  </div>
+</div></div>
+<!-- AI-GEN-END -->
+
+<div class="mask" id="m-add"><div class="modal">
+  <!-- AI-GEN-BEGIN -->
+  <h3>手动添加人员</h3>
+  <div class="callout">先建人并确认登录用户名；再建绑定。外部人员不可绑定「禁止外部登录」的系统（如北森/飞书）。</div>
+  <div class="field"><label>人员类型</label>
+    <div class="stepup" id="add-ptype">
+      <div class="on" data-t="internal" onclick="pickPersonType(this)"><b>内部</b>正式员工</div>
+      <div data-t="external" onclick="pickPersonType(this)"><b>外部</b>外包/协作</div>
+    </div>
+  </div>
+  <div class="field"><label>姓名</label><input id="add-name" oninput="previewUser()" placeholder="如：周九"></div>
+  <div class="field"><label>登录用户名（可编辑确认）</label><input id="add-username" placeholder="默认姓名拼音，可改"></div>
+  <div class="note" id="add-user-hint" style="margin-top:-6px;margin-bottom:10px"></div>
+  <div class="field"><label>手机</label><input id="add-phone"></div>
+  <div class="field"><label>邮箱</label><input id="add-email"></div>
+  <div class="field"><label>角色</label>
+    <select id="add-role">
+      <option value="employee_a">普通员工</option>
+      <option value="dept_owner">组织负责人</option>
+      <option value="hr_specialist">人事专员</option>
+    </select>
+  </div>
+  <div class="field" id="add-dept-wrap" style="display:none"><label>部门</label><select id="add-dept"></select></div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-add')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitAdd()">确认创建</button>
+  </div>
+  <!-- AI-GEN-END -->
+</div></div>
+
+<div class="mask" id="m-import"><div class="modal">
+  <h3>导入人员</h3>
+  <div class="sub">CSV：姓名,手机,邮箱,角色(可选)。账号按拼音自动生成。</div>
+  <div class="field"><label>内容</label>
+    <textarea id="import-csv" rows="8" placeholder="姓名,手机,邮箱&#10;周九,13900000009,zhoujiu@lecoo.com&#10;吴十,13900000010,wushi@lecoo.com"></textarea>
+  </div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-import')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitImport()">导入</button>
+  </div>
+</div></div>
+
+<!-- AI-GEN-BEGIN -->
+<div class="mask" id="m-add-sys"><div class="modal" style="max-width:560px">
+  <h3>添加登录系统</h3>
+  <div class="callout">添加到「可登录系统」目录；账号申请读取此列表。仅<strong>超级管理员</strong>可添加并指定多名<strong>系统管理员</strong>。</div>
+  <div class="field"><label>系统名称</label><input id="sys-name" placeholder="如：客服系统"></div>
+  <div class="field"><label>code</label><input id="sys-code" placeholder="cs"></div>
+  <div class="field"><label>client_id（可空自动生成）</label><input id="sys-client" placeholder="client_cs"></div>
+  <div class="field"><label>回调地址 redirect_uri</label><input id="sys-cb" value="http://127.0.0.1:5055/oidc/callback?app=cs"></div>
+  <div class="field"><label>准入方式</label>
+    <div class="stepup" id="sys-mode">
+      <div data-m="open" onclick="pickSysMode(this)"><b>全员登录</b>无需开通</div>
+      <div class="on" data-m="apply" onclick="pickSysMode(this)"><b>需账号绑定</b>绑定后可登录</div>
+    </div>
+  </div>
+  <div class="field"><label><input type="checkbox" id="sys-forbid-ext"> 禁止外部人员登录</label>
+    <div class="note">默认不勾选；北森/飞书等建议开启</div>
+  </div>
+  <div class="field"><label>系统管理员（可多选）</label>
+    <div id="sys-owners-box" style="max-height:140px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
+  </div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-add-sys')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitAddSys()">保存</button>
+  </div>
+</div></div>
+<!-- AI-GEN-END -->
+
+<!-- AI-GEN-BEGIN -->
+<div class="mask" id="m-set-expire"><div class="modal" style="max-width:440px">
+  <h3>设置账号有效期</h3>
+  <div class="callout" id="expire-hint">为已选人员设置有效期，或勾选永不过期。</div>
+  <div class="field"><label>有效期至</label><input type="date" id="expire-date"></div>
+  <div class="field"><label><input type="checkbox" id="expire-never" onchange="togExpireNever(this.checked)"> 永不过期</label></div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-set-expire')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitSetExpire()">保存</button>
+  </div>
+</div></div>
+<!-- AI-GEN-END -->
+
+<!-- AI-GEN-BEGIN -->
+<div class="mask" id="m-batch-grant"><div class="modal modal-xl">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-shrink:0">
+    <div>
+      <h3 id="bg-title" style="margin:0">账号/权限申请</h3>
+    </div>
+    <button type="button" class="btn btn-sm btn-line" style="width:auto" onclick="closeModal('m-batch-grant')" title="关闭">关闭</button>
+  </div>
+  <div class="callout" id="bg-hint" style="margin-top:10px">点「新建一行」，在明细中下拉选择人员与业务系统。同一人可多行、同一系统可重复选。</div>
+  <div class="field" style="margin-top:8px">
+    <div class="toolbar" style="justify-content:space-between;margin-bottom:8px;flex-shrink:0">
+      <label style="margin:0">申请明细</label>
+      <button type="button" class="btn btn-sm btn-pri" style="width:auto" onclick="addBindLine()">新建一行</button>
+    </div>
+    <div id="bg-lines" style="overflow:auto;border:1px solid #DDE7F7;border-radius:8px;padding:0">
+      <div class="note" style="padding:12px">点击「新建一行」开始填写</div>
+    </div>
+  </div>
+  <div class="foot" id="bg-foot">
+    <button class="btn btn-line" onclick="closeModal('m-batch-grant')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitAccountBind('apply')">提交账号/权限申请</button>
+  </div>
+</div></div>
+
+<div class="mask" id="m-pick-people" style="z-index:220"><div class="modal modal-lg">
+  <h3 id="pick-people-title">按组织筛选人员</h3>
+  <div class="callout" id="pick-people-hint">左侧组织树筛选，右侧点选一人填入当前明细行。</div>
+  <div class="pick-layout">
+    <div class="org-tree" id="pick-tree" style="max-height:min(520px,58vh)"></div>
+    <div>
+      <div class="toolbar">
+        <input id="pick-q" placeholder="搜索姓名/账号/手机" style="flex:1" onkeydown="if(event.key==='Enter')loadPickPeople()">
+        <button class="btn btn-sm btn-line" onclick="loadPickPeople()">查询</button>
+      </div>
+      <div id="pick-members" style="max-height:min(480px,52vh);overflow:auto;border:1px solid #DDE7F7;border-radius:8px"></div>
+    </div>
+  </div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-pick-people')">关闭</button>
+  </div>
+</div></div>
+
+<!-- AI-GEN-BEGIN -->
+<div class="mask" id="m-pick-perms" style="z-index:230"><div class="modal modal-lg">
+  <h3 id="pick-perm-title">选择权限</h3>
+  <div class="callout">勾选需要申请的权限（可多选）。树节点均可勾选。</div>
+  <div class="toolbar" style="margin-bottom:8px">
+    <button type="button" class="btn btn-sm btn-line" onclick="pickPermExpandAll(true)">全部展开</button>
+    <button type="button" class="btn btn-sm btn-line" onclick="pickPermExpandAll(false)">全部收起</button>
+    <span class="note" id="pick-perm-count">已选 0</span>
+  </div>
+  <div class="org-tree" id="pick-perm-tree" style="max-height:min(520px,58vh);overflow:auto;border:1px solid #DDE7F7;border-radius:8px;padding:8px"></div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-pick-perms')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="confirmPickPerms()">确定</button>
+  </div>
+</div></div>
+<!-- AI-GEN-END -->
+
+<div class="mask" id="m-msg"><div class="modal">
+  <h3>发即时消息</h3>
+  <div class="note" id="msg-to">收件人：-</div>
+  <div class="field"><label>内容</label><textarea id="msg-body" rows="4" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit" placeholder="输入消息…"></textarea></div>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-msg')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitMsg()">发送</button>
+  </div>
+</div></div>
+<div class="chat-dock" id="chat-dock">
+  <div class="notify-stack" id="notify-stack"></div>
+  <div class="chat-panel" id="chat-panel">
+    <div class="chat-hd">
+      <b id="chat-title">即时聊天</b>
+      <div>
+        <button type="button" onclick="demoSysNotify()" title="演示系统提醒">演示系统消息</button>
+        <button type="button" onclick="toggleChat(false)">收起</button>
+      </div>
+    </div>
+    <div class="chat-body">
+      <div class="chat-peers" id="chat-peers"></div>
+      <div class="chat-main">
+        <div class="chat-msgs" id="chat-msgs"><div class="note" style="padding:12px">选择左侧会话</div></div>
+        <div class="chat-input" id="chat-input-bar">
+          <input id="chat-text" placeholder="输入消息，回车发送" onkeydown="if(event.key==='Enter')sendChatLine()">
+          <button type="button" onclick="sendChatLine()">发送</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="chat-fab-wrap" id="chat-fab-wrap" style="display:none">
+    <button class="chat-fab" type="button" onclick="toggleChat(true)">聊天<span class="badge" id="chat-badge" style="display:none">0</span></button>
+  </div>
+</div>
+<div class="mask" id="m-sa-import"><div class="modal">
+  <h3>导入子系统账号</h3>
+  <div class="callout">格式：账号名,姓名,手机,邮箱,itcode（首行可为表头）</div>
+  <textarea id="sa-import-csv" rows="8" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit"></textarea>
+  <div class="foot">
+    <button class="btn btn-line" onclick="closeModal('m-sa-import')">取消</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitSaImport()">导入</button>
+  </div>
+</div></div>
+<div class="mask" id="m-perm"><div class="modal">
+  <h3 id="perm-title">分系统权限</h3>
+  <div id="perm-body"></div>
+  <div class="foot"><button class="btn btn-line" onclick="closeModal('m-perm')">关闭</button></div>
+</div></div>
+
+<script>
+// AI-GEN-BEGIN
+const state = {
+  source: 'leuc',
+  risk: { fail_count: 0, need_verify: false },
+  verifyChannel: 'phone',
+  forgotChannel: 'phone',
+  pendingAccounts: [],
+  selectedAccountId: null,
+  home: null,
+  deptData: null,
+  user: null,
+  view: 'home',
+  selectedIds: new Set(),
+};
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    ...opts,
+  });
+  const data = await res.json().catch(() => ({}));
+  return { res, data };
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._tm); t._tm = setTimeout(() => t.classList.remove('show'), 2400);
+}
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('show'));
+  document.getElementById('sc-' + name).classList.add('show');
+}
+function showPanel(id) {
+  ['lp-form','lp-forgot','lp-select','lp-noperm','lp-erp-ok'].forEach(p => {
+    document.getElementById(p).classList.toggle('show', p === id);
+  });
+}
+function openModal(id){ document.getElementById(id).classList.add('show'); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('.mask').forEach(m => m.addEventListener('click', e => { if (e.target===m) m.classList.remove('show'); }));
+
+function setSource(src) {
+  state.source = src;
+  document.getElementById('src-leuc').classList.toggle('on', src==='leuc');
+  document.getElementById('bar-source').textContent = src==='leuc' ? '来源：直登 LEUC' : '来源：OIDC 联合登录';
+  document.getElementById('login-title').textContent = src==='leuc' ? '登录 LEUC' : 'OIDC · 使用 LEUC 登录';
+  document.getElementById('login-sub').textContent = src==='leuc'
+    ? '进入个人中心（不选账号）'
+    : `业务系统 ${(state.oidcSystem&&state.oidcSystem.name)||''} 授权登录中`;
+  const tip = document.getElementById('source-tip');
+  if (tip) {
+    tip.innerHTML = src==='leuc'
+      ? '<strong>当前：直登 LEUC</strong> — 认证成功后进入个人中心。'
+      : `<strong>当前：OIDC</strong> — ${(state.oidcSystem&&state.oidcSystem.name)||''}（Authorization Code + PKCE）。多账号需选择。`;
+  }
+}
+function pickChan(el) {
+  document.querySelectorAll('#vchan div').forEach(d => d.classList.remove('on'));
+  el.classList.add('on'); state.verifyChannel = el.dataset.c;
+  const lab = document.getElementById('verify-contact-lab');
+  const inp = document.getElementById('verify_contact');
+  if (state.verifyChannel === 'email') {
+    if (lab) lab.textContent = '绑定邮箱';
+    if (inp) inp.placeholder = '须与账号绑定邮箱一致';
+  } else {
+    if (lab) lab.textContent = '绑定手机号';
+    if (inp) inp.placeholder = '须与账号绑定手机一致';
+  }
+}
+function pickFChan(el) {
+  document.querySelectorAll('#fchan div').forEach(d => d.classList.remove('on'));
+  el.classList.add('on'); state.forgotChannel = el.dataset.c;
+  const lab = document.getElementById('fg-contact-lab');
+  const inp = document.getElementById('fg-contact');
+  if (state.forgotChannel === 'email') {
+    if (lab) lab.textContent = '邮箱';
+    if (inp) { inp.placeholder = '请输入绑定邮箱'; inp.value = 'zhangsan@lecoo.com'; }
+  } else {
+    if (lab) lab.textContent = '手机号';
+    if (inp) { inp.placeholder = '请输入绑定手机号'; inp.value = '13800000001'; }
+  }
+}
+function syncRiskUI() {
+  const r = state.risk || { fail_count:0, need_captcha:false, need_verify:false };
+  let tip = `风控：失败 ${r.fail_count||0} 次`;
+  if (r.need_captcha) tip += ' · 需图片验证码';
+  if (r.need_verify) tip += ' · 需手机/邮箱验证';
+  document.getElementById('risk-text').textContent = tip;
+  const cap = document.getElementById('captcha-block');
+  const ver = document.getElementById('verify-block');
+  if (cap) cap.style.display = r.need_captcha ? 'block' : 'none';
+  if (ver) ver.style.display = r.need_verify ? 'block' : 'none';
+  if (r.need_captcha) refreshCaptcha();
+}
+async function refreshCaptcha(){
+  const u = document.getElementById('username')?.value.trim() || '';
+  const img = document.getElementById('captcha-img');
+  const hint = document.getElementById('captcha-hint');
+  if (!img) return;
+  const { data } = await api('/api/captcha?format=json&username=' + encodeURIComponent(u) + '&_=' + Date.now());
+  if (!data.ok) return;
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(data.svg || '');
+  if (hint) hint.textContent = `演示联调码：${data.code}（点击图片可刷新）`;
+  const inp = document.getElementById('captcha_code');
+  if (inp) inp.value = data.code || '';
+}
+async function refreshRisk() {
+  const u = document.getElementById('username').value.trim();
+  const { data } = await api('/api/risk?username=' + encodeURIComponent(u));
+  if (data.ok) { state.risk = data.risk; syncRiskUI(); }
+}
+async function failToN(n) {
+  const u = document.getElementById('username').value.trim();
+  const { data } = await api('/api/risk/set', { method:'POST', body: JSON.stringify({ username:u, fail_count:n }) });
+  state.risk = data.risk; syncRiskUI();
+  if (n >= 10) toast('已设失败 10 次：需图片验证码 + 绑定手机/邮箱 + 888888');
+  else toast(`已设失败 ${n} 次：需填写图片验证码后登录`);
+}
+async function failTo10(){ return failToN(10); }
+async function resetRisk() {
+  const u = document.getElementById('username').value.trim();
+  await api('/api/risk/reset', { method:'POST', body: JSON.stringify({ username:u }) });
+  await refreshRisk(); toast('风控已重置');
+}
+
+async function doLogin() {
+  const body = {
+    username: document.getElementById('username').value.trim(),
+    password: document.getElementById('password').value,
+    captcha: document.getElementById('captcha_code')?.value || '',
+    verify_channel: state.verifyChannel,
+    verify_contact: document.getElementById('verify_contact')?.value || '',
+    verify_code: document.getElementById('verify_code')?.value || '',
+    source: state.source,
+  };
+  const { data } = await api('/api/login', { method:'POST', body: JSON.stringify(body) });
+  if (data.risk) { state.risk = data.risk; syncRiskUI(); }
+  else if (data.refresh_captcha) refreshCaptcha();
+  if (!data.ok) {
+    if (data.flow === 'no_permission') {
+      document.getElementById('noperm-msg').innerHTML = `<strong>当前登录账号无权限登录</strong><br>目标：${data.system||''}`;
+      showPanel('lp-noperm'); return;
+    }
+    if (data.refresh_captcha || data.need_captcha) refreshCaptcha();
+    toast(data.error || '登录失败'); return;
+  }
+  state.user = data.user;
+  if (data.flow === 'leuc_home') return enterHome();
+  if (data.flow === 'select_account') {
+    state.pendingAccounts = data.accounts;
+    state.selectedAccountId = data.accounts[0]?.id || null;
+    renderAccts(); showPanel('lp-select'); return;
+  }
+  if (data.flow === 'oidc_redirect' || data.flow === 'erp_enter') {
+    state.oidcRedirect = data.redirect_uri;
+    document.getElementById('erp-ok-msg').innerHTML =
+      `已授权 <b>${(data.system&&data.system.name)||''}</b> · 业务账号 <b>${data.account.account_name}</b>` +
+      (data.auto ? ' · 单账号自动' : '') +
+      (data.redirect_uri ? `<br><span style="font-size:12px">回调：${data.redirect_uri}</span>` : '');
+    showPanel('lp-erp-ok');
+  }
+}
+function goOidcRedirect(){
+  if (state.oidcRedirect) location.href = state.oidcRedirect;
+  else toast('无回调地址');
+}
+function renderAccts() {
+  document.getElementById('acct-list').innerHTML = state.pendingAccounts.map(a => `
+    <div class="acct-card ${a.id===state.selectedAccountId?'on':''}" onclick="state.selectedAccountId=${a.id};renderAccts()">
+      <div><b>${a.account_name}</b><span>${a.account_label||''} ${a.has_sensitive?'· 敏感':''}</span></div>
+      ${a.is_default?'<span class="pill p-blue">默认</span>':''}
+    </div>`).join('');
+}
+async function confirmAcct() {
+  const { data } = await api('/api/login/select-account', { method:'POST', body: JSON.stringify({ account_id: state.selectedAccountId }) });
+  if (!data.ok) return toast(data.error||'失败');
+  state.oidcRedirect = data.redirect_uri;
+  document.getElementById('erp-ok-msg').innerHTML =
+    `已授权 <b>${(data.system&&data.system.name)||''}</b> · 业务账号 <b>${data.account.account_name}</b>` +
+    (data.redirect_uri ? `<br><span style="font-size:12px">回调：${data.redirect_uri}</span>` : '');
+  showPanel('lp-erp-ok');
+}
+async function sendResetCode() {
+  const { data } = await api('/api/password/forgot/send', {
+    method:'POST', body: JSON.stringify({
+      contact: document.getElementById('fg-contact').value.trim(),
+      channel: state.forgotChannel
+    })
+  });
+  toast(data.message || data.error || '');
+  if (data.demo_code) document.getElementById('fg-code').value = data.demo_code;
+}
+async function doResetPwd() {
+  const { data } = await api('/api/password/forgot/reset', {
+    method:'POST',
+    body: JSON.stringify({
+      contact: document.getElementById('fg-contact').value.trim(),
+      channel: state.forgotChannel,
+      code: document.getElementById('fg-code').value.trim(),
+      new_password: document.getElementById('fg-pass').value,
+    })
+  });
+  if (!data.ok) return toast(data.error||'失败');
+  toast(data.message); document.getElementById('username').value = data.username; showPanel('lp-form');
+}
+
+async function enterHome() {
+  const { data } = await api('/api/home');
+  if (!data.ok) { toast(data.error||'请先登录'); showScreen('login'); return; }
+  state.home = data; state.user = data.user; state.view = 'home';
+  document.getElementById('me-av').textContent = (data.user.display_name||'?')[0];
+  document.getElementById('me-name').textContent = data.user.display_name;
+  document.getElementById('me-role').textContent = `${data.user.role_label} · ${data.user.username}`;
+  document.getElementById('chat-fab-wrap').style.display = 'block';
+  renderSide(); renderMain(); showScreen('home'); markRoleBtn(data.user.username);
+  startChatPoll();
+  // 登录后若有未读系统消息，立即右下角提醒一次
+  setTimeout(async () => {
+    const { data: peers } = await api('/api/chat/peers');
+    const sys = (peers.peers||[]).find(p => p.peer_id===0 && p.unread>0);
+    if (sys) {
+      pushNotifyCard({
+        msg_type:'system', from_user_id:0, from_name:'系统',
+        body: sys.last_body || '您有新的系统消息'
+      });
+    }
+  }, 600);
+}
+
+function renderSide() {
+  const menus = state.user.menus || [];
+  // AI-GEN-BEGIN
+  const groups = [
+    {
+      name: '个人',
+      items: [
+        { id: 'home', label: '个人中心首页' },
+        { id: 'security', label: '安全管理' },
+        { id: 'todo', label: '我的待办' },
+        { id: 'apply', label: '自助申请' },
+      ],
+    },
+    {
+      name: '组织',
+      items: [
+        { id: 'my_org', label: '我的组织' },
+      ],
+    },
+    {
+      name: '业务系统',
+      items: [
+        { id: 'my_systems', label: '业务系统管理' },
+        { id: 'sys_accounts', label: '系统账号管理' },
+      ],
+    },
+    {
+      name: '系统设置',
+      items: [
+        { id: 'admin_sensitive', label: '敏感审批链' },
+        { id: 'admin_roles', label: '角色与权限' },
+      ],
+    },
+  ];
+  let html = '';
+  groups.forEach(g => {
+    const visible = g.items.filter(i => menus.includes(i.id));
+    if (!visible.length) return;
+    html += `<div class="grp">${g.name}</div>`;
+    visible.forEach(i => {
+      html += `<a class="${state.view===i.id?'on':''}" onclick="nav('${i.id}')">${i.label}</a>`;
+    });
+  });
+  html += `<div class="grp">会话</div><a onclick="apiLogout()">退出登录</a>`;
+  // AI-GEN-END
+  document.getElementById('side-nav').innerHTML = html;
+}
+function nav(id){ state.view=id; renderSide(); renderMain(); }
+
+async function renderMain() {
+  const h = state.home, u = state.user, el = document.getElementById('main-views');
+  if (state.view === 'home') {
+    const isMgr = ['dept_owner','hr_specialist','super_admin'].includes(u.role);
+    // AI-GEN-BEGIN
+    el.innerHTML = `
+      <div class="ptitle">个人中心 <span class="pill p-blue">${u.role_label}</span> <span class="pill p-gray">${u.username}</span></div>
+      <div class="cards ${isMgr?'g3':'g2'}">
+        <div class="card"><h4>我可登录的系统及账号</h4>
+          ${h.systems.length? h.systems.map(s=>`
+            <div class="sys-block"><div class="hd"><b>${s.name}</b>
+              <span>${s.has_sensitive_any?'<span class="pill p-red">含敏感</span> ':''}<span class="pill p-blue">${s.account_count} 账号</span></span></div>
+              ${s.accounts.map(a=>`<div class="acct">· ${a.account_name} · ${a.perm_summary||''}
+                ${a.can_login?'':' · <span class="pill p-gray">不可登录</span>'}
+                ${a.has_sensitive?' · <span class="pill p-red">敏感</span>':''}</div>`).join('')}
+            </div>`).join('') : '<div class="note">暂无</div>'}
+        </div>
+        <div class="card"><h4>我的待办</h4>
+          <div class="kv"><span class="lab">待处理</span><b>${h.todos.pending.length}</b></div>
+          <div class="kv"><span class="lab">已完成</span><b>${h.todos.done.length}</b></div>
+          <div class="kv"><span class="lab">发起</span><b>${h.todos.initiated.length}</b></div>
+          <button class="btn btn-sm btn-line" style="margin-top:8px" onclick="nav('todo')">查看</button>
+        </div>
+        ${isMgr?`<div class="card"><h4>我的组织</h4>
+          <p class="note">${u.role==='hr_specialist'?'人事可管全部组织、同步与授权。':'可管理负责范围及下级。'}</p>
+          <button class="btn btn-sm btn-line" onclick="nav('my_org')">进入</button></div>`:''}
+      </div>
+      <div class="card" style="margin-top:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+          <h4 style="margin:0">组织架构</h4>
+          <span class="note">仅组织节点与负责人，不含全员名单</span>
+        </div>
+        <div class="org-tree home-org-tree" style="max-height:360px;border:0;padding:0;background:transparent">
+          ${renderHomeOrgTree(h.org_tree||[]) || '<div class="note">暂无组织数据</div>'}
+        </div>
+        <button class="btn btn-sm btn-line" style="margin-top:12px" onclick="nav('my_org')">查看完整组织与人员</button>
+      </div>`;
+    // AI-GEN-END
+    return;
+  }
+  if (state.view === 'security') {
+    // AI-GEN-BEGIN
+    const faceOk = !!u.face_enrolled;
+    const hasPwd = true;
+    el.innerHTML = `<div class="ptitle">安全管理</div>
+      <div class="callout">管理登录密码、手机/邮箱改绑、账号有效期（只读，延期走申请）、人脸/指纹与 SSO。改绑验证码演示 <strong>888888</strong>。</div>
+      <div class="sec-grid">
+        <div class="card sec-card">
+          <h4>登录密码</h4>
+          <div class="kv"><span class="lab">状态</span><b>${hasPwd?'已设置':'未设置'}</b></div>
+          <div class="kv"><span class="lab">密码有效期</span><b>${u.password_expire||'-'}</b></div>
+          <div class="sec-actions">
+            <button class="btn btn-sm btn-pri" style="width:auto" onclick="openSecPwd()">修改密码</button>
+          </div>
+        </div>
+        <div class="card sec-card">
+          <h4>手机 / 邮箱</h4>
+          <div class="kv"><span class="lab">手机</span><b>${u.phone||'<span class="pill p-gray">未绑定</span>'}</b></div>
+          <div class="kv"><span class="lab">邮箱</span><b>${u.email||'<span class="pill p-gray">未绑定</span>'}</b></div>
+          <div class="sec-actions">
+            <button class="btn btn-sm btn-pri" style="width:auto" onclick="openSecContact('phone')">${u.phone?'改绑手机':'添加手机'}</button>
+            <button class="btn btn-sm btn-line" onclick="openSecContact('email')">${u.email?'改绑邮箱':'添加邮箱'}</button>
+          </div>
+        </div>
+        <div class="card sec-card">
+          <h4>账号有效期</h4>
+          <div class="kv"><span class="lab">当前有效期</span><b>${u.account_expire||'<span class="pill p-blue">永不过期</span>'}</b></div>
+          <div class="sec-status">不可自行修改；临近到期请走「自助申请 → 账号延期」（直属审批，默认 +90 天）。</div>
+          <div class="sec-actions">
+            <button class="btn btn-sm btn-pri" style="width:auto" onclick="goApplyAccountExtend()">申请账号延期</button>
+          </div>
+        </div>
+        <div class="card sec-card">
+          <h4>人脸 / 指纹</h4>
+          <div class="kv"><span class="lab">人脸</span><b>${faceOk?`<span class="pill p-green">已录入</span>`:`<span class="pill p-gray">未录入</span>`}</b></div>
+          <div class="sec-status">${faceOk&&u.face_enrolled_at?('录入于 '+u.face_enrolled_at):''}</div>
+          <div class="kv"><span class="lab">指纹</span>
+            <b>${(u.fingerprints&&u.fingerprints.length)?`<span class="pill p-green">${u.fingerprints.length} 枚</span>`:`<span class="pill p-gray">未录入</span>`}</b></div>
+          <div class="sec-status" style="margin-top:6px">
+            ${(u.fingerprints&&u.fingerprints.length)?u.fingerprints.map(f=>`
+              <div class="kv" style="padding:4px 0">
+                <span>${f.label}<span class="note"> · ${f.enrolled_at||''}</span></span>
+                <button class="btn btn-sm btn-line" onclick="secBio('fingerprint','delete',${f.id})">删除</button>
+              </div>`).join(''):'<span class="note">可录入多枚（最多 10）</span>'}
+          </div>
+          <div class="sec-actions">
+            ${faceOk
+              ? `<button class="btn btn-sm btn-line" onclick="secBio('face','delete')">删除人脸</button>`
+              : `<button class="btn btn-sm btn-pri" style="width:auto" onclick="secBio('face','enroll')">录入人脸</button>`}
+            <button class="btn btn-sm btn-pri" style="width:auto" onclick="openEnrollFingerprint()">录入指纹</button>
+          </div>
+        </div>
+        <div class="card sec-card" style="grid-column:1/-1">
+          <h4>SSO 绑定</h4>
+          <div class="kv"><span class="lab">飞书</span>
+            <b>${u.feishu_bound?'<span class="pill p-green">已绑定</span>':'<span class="pill p-gray">未绑定</span>'}</b></div>
+          <div class="kv"><span class="lab">企业微信</span>
+            <b>${u.wecom_bound?'<span class="pill p-green">已绑定</span>':'<span class="pill p-gray">未绑定</span>'}</b></div>
+          <div class="sec-actions">
+            ${u.feishu_bound
+              ? `<button class="btn btn-sm btn-line" onclick="secSso('feishu','unbind')">解绑飞书</button>`
+              : `<button class="btn btn-sm btn-pri" style="width:auto" onclick="secSso('feishu','bind')">绑定飞书</button>`}
+            ${u.wecom_bound
+              ? `<button class="btn btn-sm btn-line" onclick="secSso('wecom','unbind')">解绑企业微信</button>`
+              : `<button class="btn btn-sm btn-pri" style="width:auto" onclick="secSso('wecom','bind')">绑定企业微信</button>`}
+          </div>
+        </div>
+      </div>`;
+    // AI-GEN-END
+    return;
+  }
+  if (state.view === 'todo') {
+    const cur = state.todoTab || 'pending';
+    const labels = {pending:'待处理',done:'已完成',initiated:'发起'};
+    const list = h.todos[cur]||[];
+    el.innerHTML = `<div class="ptitle">我的待办</div>
+      <div class="callout">账号延期/账号关闭由上级审批。敏感开通与关闭走<strong>直属→一级→财务</strong>；开通通过后自动生效，关闭同理。</div>
+      <div class="tabs">${['pending','done','initiated'].map(t=>`<div class="${t===cur?'on':''}" onclick="state.todoTab='${t}';renderMain()">${labels[t]} (${h.todos[t].length})</div>`).join('')}</div>
+      <div class="card" style="padding:0;overflow:hidden"><table>
+        <thead><tr><th>事项</th><th>类型</th><th>状态</th><th>时间</th><th></th></tr></thead>
+        <tbody>${list.length?list.map(t=>`<tr>
+          <td>${t.title}${t.step_order?` <span class="pill p-orange">第${t.step_order}步</span>`:''}</td>
+          <td>${t.todo_type}</td><td>${t.status}</td><td>${t.created_at}</td>
+          <td>${cur==='pending'?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="decideTodo(${t.id},'approved')">通过</button>
+            <button class="btn btn-sm btn-line" onclick="decideTodo(${t.id},'rejected')">驳回</button>`:''}</td>
+        </tr>`).join(''):'<tr><td colspan="5" class="note">暂无</td></tr>'}
+        </tbody></table></div>`; return;
+  }
+  if (state.view === 'apply') {
+    // AI-GEN-BEGIN
+    el.innerHTML = `<div class="ptitle">自助申请</div>
+      <div class="callout">
+        本入口<strong>仅可申请本人</strong>。<br>
+        <strong>账号延期</strong>：直属审批。<br>
+        <strong>账号、权限申请</strong>：选业务系统与权限；含敏感项须勾选，审批走直属→一级→财务；账号绑定由系统负责人确认。<br>
+        <strong>账号、权限关闭</strong>：选择本人系统账号与要关闭的权限。
+      </div>
+      <div class="cards g3">
+        <div class="card"><h4>账号延期</h4><p class="note">延长账号有效期 90 天 · 直属审批</p>
+          <button class="btn btn-sm btn-pri" style="width:auto" onclick="submitApply('account_extend')">申请</button></div>
+        <div class="card"><h4>账号、权限申请</h4><p class="note">选系统与权限；敏感可勾选 · 仅本人</p>
+          <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('apply')">去申请</button></div>
+        <div class="card"><h4>账号、权限关闭</h4><p class="note">关闭本人账号或敏感权限</p>
+          <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountPermClose()">去关闭</button></div>
+      </div>`;
+    // AI-GEN-END
+    return;
+  }
+  if (state.view === 'my_org' || state.view === 'my_dept') { await renderOrg(el); return; }
+  if (state.view === 'my_systems' || state.view === 'admin_systems') {
+    await loadAdminSystems(el, '业务系统管理'); return;
+  }
+  if (state.view === 'sys_accounts' || state.view === 'sys_acct_overview') { await renderSysAccounts(el); return; }
+  if (state.view === 'oa_forms') { location.href = '/demo/oa'; return; }
+  if (state.view === 'admin_sensitive') {
+    await renderSensitiveConfig(el); return;
+  }
+  if (state.view === 'admin_roles' || state.view === 'admin_perms') {
+    await renderAdminRoles(el); return;
+  }
+}
+
+
+// AI-GEN-BEGIN
+function hasBtn(id){
+  const u = state.user || {};
+  const btns = u.buttons || u.caps || [];
+  return btns.includes(id);
+}
+
+async function renderAdminRoles(el){
+  // AI-GEN-BEGIN
+  el.innerHTML = `<div class="ptitle">角色与权限</div><div class="note">加载中…</div>`;
+  const { data } = await api('/api/admin/roles');
+  if (!data.ok) { el.innerHTML = `<div class="ptitle">角色与权限</div><div class="warn">${data.error||'无权'}</div>`; return; }
+  state.roleAdmin = data;
+  const focus = state.roleFocus || (data.roles[0] && data.roles[0].role) || 'super_admin';
+  state.roleFocus = focus;
+  const cur = (data.roles||[]).find(r => r.role === focus) || data.roles[0];
+  const menuSet = new Set(cur?.menus || []);
+  const btnSet = new Set(cur?.caps || []);
+  const allBtns = data.all_buttons || data.all_caps || [];
+  const btnGroups = {};
+  allBtns.forEach(b => {
+    const mid = b.menu || '_other';
+    if (!btnGroups[mid]) btnGroups[mid] = [];
+    btnGroups[mid].push(b);
+  });
+  const groupOrder = [];
+  const menusByGroup = {};
+  (data.all_menus || []).forEach(m => {
+    const g = m.group || '其他';
+    if (!menusByGroup[g]) { menusByGroup[g] = []; groupOrder.push(g); }
+    menusByGroup[g].push(m);
+  });
+  const canConfig = hasBtn('config_roles') || state.user?.role === 'super_admin';
+  const canAssign = hasBtn('role_assign') || canConfig;
+  const dis = canConfig ? '' : 'disabled';
+  const treeHtml = groupOrder.map(g => {
+    const menus = menusByGroup[g] || [];
+    const menuNodes = menus.map(m => {
+      const kids = btnGroups[m.id] || [];
+      const hasKids = kids.length > 0;
+      const btnNodes = kids.map(b => `
+        <div class="node leaf">
+          <span style="width:14px;display:inline-block"></span>
+          <label>
+            <input type="checkbox" class="role-btn" value="${b.id}" data-menu="${m.id}"
+              ${btnSet.has(b.id)?'checked':''} ${dis}
+              onchange="onRoleBtnToggle('${m.id}', this.checked)">
+            <span>${b.label}</span>
+            <span class="pill p-orange">按钮</span>
+          </label>
+        </div>`).join('');
+      return `
+        <div class="node ${hasKids?'':'leaf'}">
+          ${hasKids
+            ? `<span style="width:14px;color:var(--muted)">▾</span>`
+            : `<span style="width:14px;display:inline-block"></span>`}
+          <label>
+            <input type="checkbox" class="role-menu" value="${m.id}"
+              ${menuSet.has(m.id)?'checked':''} ${dis}
+              onchange="onRoleMenuToggle('${m.id}', this.checked)">
+            <b>${m.label}</b>
+            <span class="pill p-blue">菜单</span>
+          </label>
+        </div>
+        ${hasKids ? `<div class="kids" data-menu-kids="${m.id}">${btnNodes}</div>` : ''}`;
+    }).join('');
+    return `<div class="grp-title">${g}</div>${menuNodes}`;
+  }).join('');
+  el.innerHTML = `
+    <div class="ptitle">角色与权限 <span class="pill p-blue">可配置</span>
+      <span class="pill p-gray">菜单 + 按钮</span></div>
+    <div class="callout">树形勾选<strong>菜单</strong>与<strong>按钮</strong>；勾选菜单会自动勾选其下全部按钮，取消菜单会一并取消。保存后该角色人员立刻按配置生效。
+      当前账号：菜单 ${(state.user?.menus||[]).map(m=>`<span class="pill p-blue" style="margin:1px">${m}</span>`).join('')||'无'}；
+      按钮 ${(state.user?.buttons||state.user?.caps||[]).map(c=>`<span class="pill p-orange" style="margin:1px">${c}</span>`).join('')||'无'}。</div>
+    <div class="org-layout">
+      <div class="org-tree" style="max-height:70vh">
+        ${(data.roles||[]).map(r => `
+          <div class="node ${r.role===focus?'on':''}" onclick="state.roleFocus='${r.role}';renderMain()">
+            <b>${r.label}</b>
+            <span class="note">${r.user_count} 人 · ${(r.menus||[]).length}菜 · ${(r.caps||[]).length}钮</span>
+          </div>`).join('')}
+      </div>
+      <div>
+        <div class="card">
+          <h4>${cur?.label || ''} <code>${cur?.role || ''}</code></h4>
+          <div class="field"><label>权限树 <span class="note">蓝=菜单 · 橙=按钮</span></label>
+            <div class="org-tree role-perm-tree" style="max-height:56vh;border:1px solid #DDE7F7;padding:8px">
+              ${treeHtml || '<div class="note">暂无菜单目录</div>'}
+            </div>
+          </div>
+          ${canConfig?`<div class="foot" style="justify-content:flex-start">
+            <button class="btn btn-pri" style="width:auto" onclick="saveRoleConfig('${cur?.role||''}')">保存配置</button>
+          </div>`:'<div class="note">无「配置角色」按钮权限，仅可查看</div>'}
+        </div>
+        ${canAssign?`<div class="card" style="margin-top:12px">
+          <h4>给人分配角色</h4>
+          <div class="toolbar">
+            <input id="role-assign-q" placeholder="搜索姓名/账号" style="width:180px">
+            <button class="btn btn-sm btn-line" onclick="searchRoleAssign()">查询</button>
+          </div>
+          <div id="role-assign-box" class="note">输入关键字查询通讯录人员后分配</div>
+        </div>`:''}
+      </div>
+    </div>`;
+  // AI-GEN-END
+}
+
+// AI-GEN-BEGIN
+function onRoleMenuToggle(menuId, checked){
+  document.querySelectorAll(`.role-btn[data-menu="${menuId}"]`).forEach(cb => {
+    cb.checked = checked;
+  });
+}
+function onRoleBtnToggle(menuId, checked){
+  if (!checked) return;
+  const menuCb = document.querySelector(`.role-menu[value="${menuId}"]`);
+  if (menuCb) menuCb.checked = true;
+}
+// AI-GEN-END
+
+async function saveRoleConfig(role){
+  if (!role) return;
+  if (!hasBtn('config_roles') && state.user?.role !== 'super_admin') return toast('无权配置');
+  const menus = [...document.querySelectorAll('.role-menu:checked')].map(i => i.value);
+  const caps = [...document.querySelectorAll('.role-btn:checked')].map(i => i.value);
+  const { data } = await api('/api/admin/roles/'+role+'/config', {
+    method:'POST', body: JSON.stringify({ menus, caps })
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  const me = await api('/api/me');
+  if (me.data?.ok) { state.user = me.data.user; renderSide(); }
+  renderMain();
+}
+
+async function searchRoleAssign(){
+  const q = (document.getElementById('role-assign-q')?.value || '').trim();
+  const box = document.getElementById('role-assign-box');
+  if (!box) return;
+  if (!q) { box.innerHTML = '<span class="note">请输入关键字</span>'; return; }
+  const { data } = await api('/api/org/overview?q='+encodeURIComponent(q));
+  if (!data.ok) return toast(data.error);
+  const roles = (state.roleAdmin?.roles||[]).filter(r => !['employee_a','employee_b'].includes(r.role));
+  const members = (data.members||[]).slice(0, 30);
+  box.innerHTML = members.length ? `<table>
+    <thead><tr><th>姓名</th><th>账号</th><th>当前角色</th><th>分配</th></tr></thead>
+    <tbody>${members.map(m => `
+      <tr>
+        <td>${m.display_name}</td><td><code>${m.username}</code></td>
+        <td>${m.role_label||m.role||''}</td>
+        <td>
+          <select id="role-pick-${m.id}" style="min-width:120px">
+            ${roles.map(r => `<option value="${r.role}" ${r.role===(m.role||'employee')?'selected':''}>${r.label}</option>`).join('')}
+          </select>
+          <button class="btn btn-sm btn-line" onclick="assignUserRole(${m.id})">保存</button>
+        </td>
+      </tr>`).join('')}
+    </tbody></table>` : '<span class="note">无匹配人员</span>';
+}
+
+async function assignUserRole(uid){
+  const sel = document.getElementById('role-pick-'+uid);
+  const role = sel?.value;
+  if (!role) return;
+  const { data } = await api('/api/admin/users/'+uid+'/role', {
+    method:'POST', body: JSON.stringify({ role })
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  searchRoleAssign();
+}
+// AI-GEN-END
+
+function renderTreeNodes(nodes, depth=0) {
+  if (!nodes || !nodes.length) return '';
+  return nodes.map(n => {
+    const on = String(state.deptFilter||'') === String(n.id);
+    return `<div>
+      <div class="node ${on?'on':''}" onclick="state.deptFilter='${n.id}';renderMain()">
+        <span>${'·'.repeat(Math.min(depth,1))}${n.name}</span>
+        ${n.can_manage?'<span class="mgmt">可管</span>':''}
+      </div>
+      <div class="kids">${renderTreeNodes(n.children||[], depth+1)}</div>
+    </div>`;
+  }).join('');
+}
+
+// AI-GEN-BEGIN
+function renderHomeOrgTree(nodes, depth=0) {
+  if (!nodes || !nodes.length) return '';
+  return nodes.map(n => {
+    const owner = n.owner_name
+      ? `${n.owner_name}${n.owner_username?`（${n.owner_username}）`:''}`
+      : '未指定';
+    const extras = (n.extra_owners||[]).map(e => e.display_name).filter(Boolean);
+    const extraTip = extras.length ? ` · 另：${extras.join('、')}` : '';
+    return `<div>
+      <div class="node">
+        <span><b>${n.name}</b></span>
+        <span class="owner">负责人：${owner}${extraTip}</span>
+      </div>
+      <div class="kids">${renderHomeOrgTree(n.children||[], depth+1)}</div>
+    </div>`;
+  }).join('');
+}
+// AI-GEN-END
+
+async function renderOrg(el) {
+  el.innerHTML = `<div class="ptitle">我的组织</div><div class="note">加载中…</div>`;
+  const q = state.deptQ || '';
+  const deptId = state.deptFilter || '';
+  // AI-GEN-BEGIN
+  const canAllOrg = hasBtn('manage_all_org') || ['hr_specialist','super_admin'].includes(state.user.role);
+  const showSync = hasBtn('org_sync') || canAllOrg;
+  const showAdd = hasBtn('org_add');
+  const showImport = hasBtn('org_import');
+  const showDirect = hasBtn('direct_bind');
+  // AI-GEN-END
+  let url = '/api/org/overview?q=' + encodeURIComponent(q);
+  if (deptId) url += '&dept_id=' + deptId;
+  const reqs = [api(url)];
+  if (showSync) {
+    reqs.push(api('/api/hr/sync-roster?status=pending'));
+    reqs.push(api('/api/leorg/status'));
+  }
+  const results = await Promise.all(reqs);
+  const { data } = results[0];
+  const syncData = showSync ? results[1].data : null;
+  if (showSync && results[2] && results[2].data) {
+    state.leorgSync = results[2].data.sync_state || null;
+  }
+
+  if (!data.ok) { el.innerHTML = `<div class="ptitle">我的组织</div><div class="warn">${data.error}</div>`; return; }
+  state.deptData = data;
+  const mode = data.can_manage
+    ? (canAllOrg ? '<span class="pill p-blue">全部可管</span>' : '<span class="pill p-orange">可管理下级</span>')
+    : '<span class="pill p-gray">只读 · 即时聊天</span>';
+  const focusName = deptId
+    ? ((data.departments.find(d=>String(d.id)===String(deptId))||{}).name || deptId)
+    : '全部';
+  const roster = (syncData && syncData.ok) ? (syncData.roster || []) : [];
+  el.innerHTML = `
+    <div class="ptitle">我的组织 ${mode}
+      ${data.unread_messages?`<span class="pill p-red">未读 ${data.unread_messages}</span>`:''}</div>
+    <div class="callout">${data.can_manage
+      ? (canAllOrg
+        ? '<strong>可管全部组织</strong>：按角色按钮权限显示添加/导入/同步/直接绑定/代人申请/有效期。'
+        : '<strong>可管本级及下级</strong>：按角色按钮权限显示操作。' +
+          (canSetAccountExpire() ? ' 已开通<strong>设置账号有效期</strong>。' : ''))
+      : '<strong>全员</strong>：可查看组织、即时聊天；「账号申请」默认为本人。'}</div>
+    <div class="org-actions">
+      <button class="btn btn-sm btn-line" onclick="openInbox()">即时聊天</button>
+      <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('apply')">账号、权限申请</button>
+      ${canApplyForOthers()?`<button class="btn btn-sm btn-line" onclick="openAccountBind('apply_for')">代人申请账号/权限</button>`:''}
+      ${data.can_manage?`
+        ${showAdd?`<button class="btn btn-sm btn-line" onclick="openAdd()">添加人员</button>`:''}
+        ${showImport?`<button class="btn btn-sm btn-line" onclick="openImport()">导入</button>`:''}
+        ${canSetAccountExpire()?`<button class="btn btn-sm btn-line" onclick="openSetExpire()">设置有效期</button>`:''}
+        ${showDirect?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('direct')">直接绑定</button>`:''}
+        ${showSync?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="hrPull()">同步组织/人员</button>
+        <button class="btn btn-sm btn-line" onclick="hrPullFull()">全量同步</button>
+        <button class="btn btn-sm btn-line" onclick="hrOrgClear()" style="color:#b42318;border-color:#f3b4b0">清空组织</button>`:''}
+      `:''}
+    </div>
+    ${showSync?`
+    <div class="card" style="margin-bottom:14px">
+      <!-- AI-GEN-BEGIN -->
+      <h4>组织同步 · 待初始化 <span class="pill p-orange">${roster.length}</span>
+        ${state.leorgSync?`<span class="pill p-gray">${state.leorgSync.last_mode||'-'} · ${state.leorgSync.updated_at||'未同步'}</span>`:''}
+      </h4>
+      <div class="note" style="margin-bottom:8px">从 <strong>LeOrg</strong> 同步（幂等 upsert；默认增量，首次/清空后自动全量）。确认用户名后<strong>直接创建</strong>。</div>
+      <div class="toolbar">
+        <button class="btn btn-sm btn-pri" style="width:auto" onclick="hrPull()">增量同步</button>
+        <button class="btn btn-sm btn-line" onclick="hrPullFull()">全量同步</button>
+        <button class="btn btn-sm btn-line" onclick="hrOrgClear()" style="color:#b42318;border-color:#f3b4b0">清空组织</button>
+        <button class="btn btn-sm btn-pri" style="width:auto" onclick="hrSyncAll()">全部确认创建</button>
+        <button class="btn btn-sm btn-line" onclick="hrSyncSelected()">创建已勾选</button>
+      </div>
+      <div style="overflow:auto;margin-top:8px">
+        <table>
+          <thead><tr>
+            <th><input type="checkbox" onchange="hrToggleAll(this.checked)"></th>
+            <th>姓名</th><th>组织</th><th>登录用户名（可编辑）</th><th></th>
+          </tr></thead>
+          <tbody>${roster.length?roster.map(r=>`
+            <tr>
+              <td><input type="checkbox" class="hr-roster" value="${r.id}" onchange="hrTog(${r.id},this.checked)"></td>
+              <td>${r.display_name}</td>
+              <td>${r.dept_name||r.dept_id}</td>
+              <td><input class="hr-uname" data-rid="${r.id}" value="${r.username_preview||''}" style="width:140px;padding:6px 8px;border:1px solid var(--line);border-radius:7px">
+                ${r.will_suffix?' <span class="pill p-orange">建议避重</span>':''}</td>
+              <td><button class="btn btn-sm btn-line" onclick="hrSyncOne(${r.id})">确认创建</button></td>
+            </tr>`).join(''):'<tr><td colspan="5" class="note">暂无待同步（可点「从 LeOrg 同步」）</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+      <!-- AI-GEN-END -->
+    </div>`:''}
+    <div class="org-layout">
+      <div class="org-tree">
+        <div class="node ${!deptId?'on':''}" onclick="state.deptFilter='';renderMain()"><b>全部组织</b></div>
+        ${renderTreeNodes(data.tree||[])}
+      </div>
+      <div>
+        <div class="toolbar">
+          <input id="dept-q" value="${q}" placeholder="搜索姓名/账号/手机/邮箱" style="width:200px">
+          <button class="btn btn-sm btn-line" onclick="state.deptQ=document.getElementById('dept-q').value;renderMain()">查询</button>
+          <span class="note">当前：${focusName} · ${data.members.length} 人</span>
+        </div>
+        <div class="card" style="padding:0;overflow:auto">
+          <table>
+            <thead><tr>
+              ${data.can_manage?'<th><input type="checkbox" onchange="toggleAll(this.checked)"></th>':''}
+              <th>姓名</th><th>账号</th><th>组织</th>
+              <th style="min-width:220px">关联系统账号</th><th>敏感</th>
+              ${canSetAccountExpire()?'<th>账号有效期</th>':''}
+              <th></th>
+            </tr></thead>
+            <tbody>${data.members.map(m => {
+              const dname = (data.departments.find(d=>d.id===m.dept_id)||{}).name || m.dept_id;
+              // AI-GEN-BEGIN
+              const acctLines = (m.systems||[]).flatMap(s =>
+                (s.accounts||[]).map(a => {
+                  const perm = a.perm_summary || a.account_label || '—';
+                  const flags = [
+                    a.can_login ? '' : '<span class="pill p-gray">不可登录</span>',
+                    a.has_sensitive ? '<span class="pill p-red">敏感</span>' : '',
+                  ].filter(Boolean).join(' ');
+                  return `<div style="margin:2px 0;line-height:1.45;font-size:12.5px">
+                    <b>${s.name}</b> / <code>${a.account_name}</code>
+                    <div class="note" style="margin:0">权限：${perm} ${flags}</div>
+                  </div>`;
+                })
+              ).join('') || '<span class="note">无关联账号</span>';
+              const expireLabel = m.account_expire
+                ? m.account_expire
+                : '<span class="pill p-blue">永不过期</span>';
+              // AI-GEN-END
+              const manageable = data.manage_dept_ids.includes(m.dept_id);
+              return `<tr>
+                ${data.can_manage?`<td>${manageable?`<input type="checkbox" ${state.selectedIds.has(m.id)?'checked':''} onchange="togSel(${m.id},this.checked)">`:''}</td>`:''}
+                <td>${m.display_name}${m.person_type==='external'?' <span class="pill p-orange">外部</span>':''}</td>
+                <td><code>${m.username}</code></td>
+                <td>${dname}</td>
+                <td>${acctLines}</td>
+                <td>${m.has_sensitive?'<span class="pill p-red">有</span>':'<span class="pill p-gray">无</span>'}</td>
+                ${canSetAccountExpire()?`<td>${expireLabel}</td>`:''}
+                <td>
+                  ${data.can_manage||m.id===state.user.id?`<button class="btn btn-sm btn-line" onclick="showPerm(${m.id})">权限</button>`:''}
+                  ${canSetAccountExpire()&&manageable?`<button class="btn btn-sm btn-line" onclick="openSetExpire([${m.id}])">设有效期</button>`:''}
+                  ${m.id!==state.user.id?`<button class="btn btn-sm btn-line" onclick="openMsg(${m.id},'${m.display_name}')">聊天</button>`:''}
+                </td>
+              </tr>`;
+            }).join('') || (() => {
+              const colSpan = (data.can_manage?6:5) + (canSetAccountExpire()?1:0) + 1;
+              return `<tr><td colspan="${colSpan}" class="note">无人员</td></tr>`;
+            })()}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function openOrgHrGrant(){ return openAccountBind('direct'); }
+
+// AI-GEN-BEGIN
+let secModalMode = null;
+let secModalChannel = null;
+
+function applySecUser(u){
+  if (!u) return;
+  state.user = u;
+  if (state.home) state.home.user = u;
+}
+
+async function refreshSecView(){
+  const { data } = await api('/api/me');
+  if (data.ok) applySecUser(data.user);
+  if (state.view === 'security') renderMain();
+}
+
+function openSecPwd(){
+  secModalMode = 'password';
+  document.getElementById('sec-modal-title').textContent = '修改密码';
+  document.getElementById('sec-modal-hint').textContent = '请输入旧密码与新密码（至少 6 位）。';
+  document.getElementById('sec-modal-body').innerHTML = `
+    <div class="field"><label>旧密码</label><input id="sec-old-pwd" type="password" autocomplete="current-password"></div>
+    <div class="field"><label>新密码</label><input id="sec-new-pwd" type="password" autocomplete="new-password"></div>
+    <div class="field"><label>确认新密码</label><input id="sec-new-pwd2" type="password" autocomplete="new-password"></div>`;
+  openModal('m-sec');
+}
+
+function openSecContact(channel){
+  secModalMode = 'contact';
+  secModalChannel = channel;
+  const label = channel === 'phone' ? '手机' : '邮箱';
+  const cur = channel === 'phone' ? (state.user.phone||'') : (state.user.email||'');
+  document.getElementById('sec-modal-title').textContent = cur ? `改绑${label}` : `添加${label}`;
+  document.getElementById('sec-modal-hint').textContent = `向新${label}发送验证码，演示码 888888。当前：${cur||'未绑定'}`;
+  document.getElementById('sec-modal-body').innerHTML = `
+    <div class="field"><label>新${label}</label><input id="sec-contact-val" placeholder="${channel==='phone'?'13800000099':'new@lecoo.com'}" value=""></div>
+    <div class="field"><label>验证码</label>
+      <div style="display:flex;gap:8px">
+        <input id="sec-contact-code" placeholder="888888" style="flex:1">
+        <button class="btn btn-sm btn-line" type="button" onclick="sendSecContactCode()">发送验证码</button>
+      </div>
+    </div>`;
+  openModal('m-sec');
+}
+
+async function goApplyAccountExtend(){
+  state.view = 'apply';
+  renderMain();
+  toast('请在下方「账号延期」提交申请');
+}
+
+async function sendSecContactCode(){
+  const value = (document.getElementById('sec-contact-val').value||'').trim();
+  if (!value) return toast('请先填写新联系方式');
+  const { data } = await api('/api/security/contact/send', {
+    method:'POST', body: JSON.stringify({ channel: secModalChannel, value })
+  });
+  toast(data.message || data.error || '已发送');
+}
+
+async function submitSecModal(){
+  if (secModalMode === 'password') {
+    const old_password = document.getElementById('sec-old-pwd').value||'';
+    const new_password = document.getElementById('sec-new-pwd').value||'';
+    const new2 = document.getElementById('sec-new-pwd2').value||'';
+    if (new_password !== new2) return toast('两次新密码不一致');
+    const { data } = await api('/api/security/password', {
+      method:'POST', body: JSON.stringify({ old_password, new_password })
+    });
+    if (!data.ok) return toast(data.error||'失败');
+    applySecUser(data.user); closeModal('m-sec'); toast(data.message); renderMain();
+    return;
+  }
+  if (secModalMode === 'contact') {
+    const value = (document.getElementById('sec-contact-val').value||'').trim();
+    const code = (document.getElementById('sec-contact-code').value||'').trim();
+    const { data } = await api('/api/security/contact/bind', {
+      method:'POST', body: JSON.stringify({ channel: secModalChannel, value, code })
+    });
+    if (!data.ok) return toast(data.error||'失败');
+    applySecUser(data.user); closeModal('m-sec'); toast(data.message); renderMain();
+    return;
+  }
+  if (secModalMode === 'fingerprint') {
+    const label = (document.getElementById('sec-fp-label').value||'').trim();
+    toast('演示：模拟指纹采集…');
+    const { data } = await api('/api/security/bio', {
+      method:'POST', body: JSON.stringify({ kind:'fingerprint', action:'enroll', label })
+    });
+    if (!data.ok) return toast(data.error||'失败');
+    applySecUser(data.user); closeModal('m-sec'); toast(data.message); renderMain();
+    return;
+  }
+  if (secModalMode === 'perm_close') {
+    return submitPermClose();
+  }
+  if (secModalMode === 'sys_owners') {
+    return submitSysOwners();
+  }
+  if (secModalMode === 'perm_import') {
+    return submitPermImport();
+  }
+  if (secModalMode === 'perm_add') {
+    return submitPermAdd();
+  }
+}
+
+async function openEnrollFingerprint(){
+  const n = (state.user.fingerprints||[]).length;
+  if (n >= 10) return toast('最多录入 10 枚指纹');
+  secModalMode = 'fingerprint';
+  document.getElementById('sec-modal-title').textContent = '录入指纹';
+  document.getElementById('sec-modal-hint').textContent = '可录入多枚。名称可选，如「右手拇指」；留空则自动编号。';
+  document.getElementById('sec-modal-body').innerHTML = `
+    <div class="field"><label>指纹名称</label>
+      <input id="sec-fp-label" placeholder="如：右手拇指（可选）" value=""></div>`;
+  openModal('m-sec');
+}
+
+async function secBio(kind, action, fingerprintId){
+  const label = kind === 'face' ? '人脸' : '指纹';
+  if (action === 'delete') {
+    const tip = kind === 'fingerprint' && fingerprintId
+      ? '确认删除该枚指纹？'
+      : `确认删除已录入的${label}？`;
+    if (!confirm(tip)) return;
+  }
+  if (action === 'enroll') toast(`演示：模拟${label}采集…`);
+  const body = { kind, action };
+  if (kind === 'fingerprint' && fingerprintId) body.fingerprint_id = fingerprintId;
+  const { data } = await api('/api/security/bio', {
+    method:'POST', body: JSON.stringify(body)
+  });
+  if (!data.ok) return toast(data.error||'失败');
+  applySecUser(data.user); toast(data.message); renderMain();
+}
+
+async function secSso(provider, action){
+  const label = provider === 'feishu' ? '飞书' : '企业微信';
+  if (action === 'unbind' && !confirm(`确认解绑${label}？`)) return;
+  const { data } = await api('/api/security/sso', {
+    method:'POST', body: JSON.stringify({ provider, action })
+  });
+  if (!data.ok) return toast(data.error||'失败');
+  applySecUser(data.user); toast(data.message); renderMain();
+}
+// AI-GEN-END
+
+async function submitApply(type, system_name){
+  const { data } = await api('/api/apply/submit', {
+    method:'POST', body: JSON.stringify({ type, days:90, system_name: system_name||'' })
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  await enterHome();
+  state.view = 'todo'; state.todoTab = 'initiated';
+  renderSide(); renderMain();
+}
+async function loadSensCatalog(){
+  const sel = document.getElementById('sens-perm');
+  if (!sel) return;
+  const { data } = await api('/api/sensitive/catalog');
+  if (!data.ok) { sel.innerHTML = '<option value="">加载失败</option>'; return; }
+  state.sensCatalog = data.items || [];
+  sel.innerHTML = '<option value="">请选择敏感权限项</option>' +
+    state.sensCatalog.map(i => `<option value="${i.id}">${i.system_name} · ${i.perm_name}</option>`).join('');
+  document.getElementById('sens-chain-hint').textContent =
+    '审批链：直属 → 一级 → 财务（张财）；申请人=审批人时跳过；通过后自动开通。';
+}
+// AI-GEN-BEGIN
+async function submitExternal(){
+  const remark = prompt('外部人员申请说明（可选）','外包协作账号');
+  if (remark === null) return;
+  const { data } = await api('/api/apply/submit', {
+    method:'POST', body: JSON.stringify({ type:'external', remark: remark || '外部人员' })
+  });
+  if (!data.ok) return toast(data.error);
+  const chain = (data.chain||[]).map(s => `${s.order}.${s.label}(${s.assignee})`).join(' → ');
+  toast(data.message + (chain?`｜${chain}`:''));
+  await enterHome();
+  state.view = 'todo'; state.todoTab = 'initiated';
+  renderSide(); renderMain();
+}
+// AI-GEN-END
+async function submitSensitive(){
+  const id = document.getElementById('sens-perm')?.value;
+  if (!id) return toast('请选择敏感权限项');
+  const { data } = await api('/api/apply/submit', {
+    method:'POST', body: JSON.stringify({ type:'sensitive', perm_def_id: Number(id) })
+  });
+  if (!data.ok) return toast(data.error);
+  const chain = (data.chain||[]).map(s => `${s.order}.${s.label}(${s.assignee})`).join(' → ');
+  toast(data.message + (chain?`｜${chain}`:''));
+  await enterHome();
+  state.view = 'todo'; state.todoTab = 'initiated';
+  renderSide(); renderMain();
+}
+async function renderSensitiveConfig(el, opts={}){
+  // AI-GEN-BEGIN
+  el.innerHTML = `<div class="ptitle">敏感审批链</div><div class="note">加载中…</div>`;
+  if (!opts.keepLocal || !state.sensConfig) {
+    const { data } = await api('/api/sensitive/config');
+    if (!data.ok) { el.innerHTML = `<div class="ptitle">敏感审批链</div><div class="warn">${data.error}</div>`; return; }
+    state.sensConfig = data;
+    state.sensOverrides = (data.overrides || []).map(o => ({...o}));
+  }
+  const data = state.sensConfig;
+  const chain = data.chain || [];
+  const stepOf = (key) => chain.find(c => c.step_key === key) || {};
+  const direct = stepOf('direct_leader');
+  const level1 = stepOf('level1_leader');
+  const finance = stepOf('finance');
+  const ovRows = (key) => (state.sensOverrides||[]).filter(o => o.step_key === key);
+  const renderOv = (key) => {
+    const rows = ovRows(key);
+    if (!rows.length) return '<div class="note">暂无部门特例（未配置则动态解析）</div>';
+    return `<table><thead><tr><th>申请人所属部门</th><th>指定审批人</th><th></th></tr></thead><tbody>
+      ${rows.map((o,i)=>`<tr>
+        <td>${o.dept_name||('部门#'+o.dept_id)}</td>
+        <td>${o.assignee_name||''} <span class="note">${o.assignee_username||''}</span></td>
+        <td><button class="btn btn-sm btn-line" onclick="removeSensOverride('${key}',${o.dept_id})">删除</button></td>
+      </tr>`).join('')}</tbody></table>`;
+  };
+  el.innerHTML = `
+    <div class="ptitle">敏感审批链 <span class="pill p-red">超管</span></div>
+    <div class="callout">${data.note||''}</div>
+    <div class="card" style="margin-bottom:14px">
+      <h4>各系统「是否有敏感权限」一览</h4>
+      <div class="note">该开关在「业务系统管理」中设置；与审批链无关。</div>
+      <table><thead><tr><th>系统</th><th>code</th><th>敏感能力</th></tr></thead>
+        <tbody>${(data.systems||[]).map(s=>`<tr>
+          <td>${s.name}</td><td><code>${s.code}</code></td>
+          <td>${s.has_sensitive?'<span class="pill p-red">有</span>':'<span class="pill p-gray">无</span>'}</td>
+        </tr>`).join('')}</tbody></table>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <h4>审批链（flow=sensitive）</h4>
+      <div class="note">直属/一级：默认动态解析（本部门负责人 → 上一级部门负责人）；可按部门指定人，仅对本部门生效。财务：全局固定人。</div>
+
+      <div style="margin:12px 0;padding:12px;border:1px solid #E3EAF8;border-radius:10px">
+        <div class="toolbar" style="margin:0 0 8px">
+          <b>1. 直属领导</b>
+          <span class="pill p-blue">默认动态</span>
+          <label style="font-size:12px;margin-left:auto"><input type="checkbox" id="ch-direct-on" ${direct.enabled!==0?'checked':''}> 启用</label>
+        </div>
+        ${renderOv('direct_leader')}
+        <button class="btn btn-sm btn-line" style="width:auto;margin-top:8px" onclick="openSensOverridePick('direct_leader')">添加部门特例</button>
+      </div>
+
+      <div style="margin:12px 0;padding:12px;border:1px solid #E3EAF8;border-radius:10px">
+        <div class="toolbar" style="margin:0 0 8px">
+          <b>2. 一级领导</b>
+          <span class="pill p-blue">默认动态</span>
+          <label style="font-size:12px;margin-left:auto"><input type="checkbox" id="ch-level1-on" ${level1.enabled!==0?'checked':''}> 启用</label>
+        </div>
+        ${renderOv('level1_leader')}
+        <button class="btn btn-sm btn-line" style="width:auto;margin-top:8px" onclick="openSensOverridePick('level1_leader')">添加部门特例</button>
+      </div>
+
+      <div style="margin:12px 0;padding:12px;border:1px solid #E3EAF8;border-radius:10px">
+        <div class="toolbar" style="margin:0 0 8px">
+          <b>3. 财务</b>
+          <span class="pill p-orange">固定人</span>
+          <label style="font-size:12px;margin-left:auto"><input type="checkbox" id="ch-finance-on" ${finance.enabled!==0?'checked':''}> 启用</label>
+        </div>
+        <div class="toolbar">
+          <span id="finance-assignee-label">${finance.assignee_name||'未指定'} <span class="note">${finance.assignee_username||''}</span></span>
+          <input type="hidden" id="finance-assignee-id" value="${finance.assignee_user_id||''}">
+          <button class="btn btn-sm btn-line" style="width:auto" onclick="openFinancePick()">组织筛选</button>
+        </div>
+      </div>
+
+      <button class="btn btn-sm btn-pri" style="width:auto;margin-top:8px" onclick="saveChainAll()">保存审批链</button>
+    </div>`;
+  // AI-GEN-END
+}
+async function openSensOverridePick(stepKey){
+  // AI-GEN-BEGIN
+  state.pickMode = 'sens_override';
+  state.pickSensStep = stepKey;
+  state.pickOnSelect = null;
+  state.pickForLineKey = null;
+  state.pickDept = state.pickDept || '';
+  document.getElementById('pick-people-title').textContent = '部门特例 · 选部门与审批人';
+  document.getElementById('pick-people-hint').textContent =
+    '先点左侧「申请人所属部门」，再点右侧审批人。特例仅对该部门生效，不影响子部门。';
+  document.getElementById('pick-q').value = state.pickQ || '';
+  await loadPickPeople();
+  openModal('m-pick-people');
+  // AI-GEN-END
+}
+async function openFinancePick(){
+  // AI-GEN-BEGIN
+  state.pickMode = 'finance';
+  state.pickSensStep = null;
+  state.pickOnSelect = null;
+  state.pickForLineKey = null;
+  state.pickDept = state.pickDept || '';
+  document.getElementById('pick-people-title').textContent = '选择财务审批人';
+  document.getElementById('pick-people-hint').textContent = '左侧组织树筛选，右侧点选财务审批人。';
+  document.getElementById('pick-q').value = state.pickQ || '';
+  await loadPickPeople();
+  openModal('m-pick-people');
+  // AI-GEN-END
+}
+function removeSensOverride(stepKey, deptId){
+  // AI-GEN-BEGIN
+  state.sensOverrides = (state.sensOverrides||[]).filter(
+    o => !(o.step_key===stepKey && String(o.dept_id)===String(deptId))
+  );
+  const el = document.getElementById('main-views');
+  if (el) renderSensitiveConfig(el, { keepLocal: true });
+  // AI-GEN-END
+}
+async function saveChainAll(){
+  // AI-GEN-BEGIN
+  const steps = [
+    { step_key:'direct_leader', step_label:'直属领导', assignee_user_id:null, enabled: !!document.getElementById('ch-direct-on')?.checked },
+    { step_key:'level1_leader', step_label:'一级领导', assignee_user_id:null, enabled: !!document.getElementById('ch-level1-on')?.checked },
+    { step_key:'finance', step_label:'财务', assignee_user_id: document.getElementById('finance-assignee-id')?.value ? Number(document.getElementById('finance-assignee-id').value) : null, enabled: !!document.getElementById('ch-finance-on')?.checked },
+  ];
+  const { data } = await api('/api/sensitive/config/chain', { method:'POST', body: JSON.stringify({ steps }) });
+  if (!data.ok) return toast(data.error);
+  const ov = (state.sensOverrides||[]).map(o => ({
+    step_key: o.step_key, dept_id: o.dept_id, assignee_user_id: o.assignee_user_id
+  }));
+  const { data: d2 } = await api('/api/sensitive/config/overrides', { method:'POST', body: JSON.stringify({ overrides: ov }) });
+  if (!d2.ok) return toast(d2.error);
+  toast('审批链与部门特例已保存');
+  renderMain();
+  // AI-GEN-END
+}
+async function saveChain(){
+  return saveChainAll();
+}
+async function decideTodo(id, decision){
+  const { data } = await api('/api/todo/'+id+'/decide', {
+    method:'POST', body: JSON.stringify({ decision })
+  });
+  if (!data.ok) {
+    if (data.need_manual) {
+      toast(data.error);
+      state.view = 'sys_accounts';
+      renderSide(); renderMain();
+      return;
+    }
+    return toast(data.error);
+  }
+  toast(data.message);
+  await enterHome();
+  state.view = 'todo'; state.todoTab = 'done';
+  renderSide(); renderMain();
+}
+function openMsg(uid, name){
+  state.msgTo = uid;
+  state.chatPeer = { id: uid, name };
+  toggleChat(true);
+  openChatPeer(uid, name);
+}
+async function submitMsg(){
+  const body = document.getElementById('msg-body').value.trim();
+  if (!body) return toast('请输入内容');
+  const { data } = await api('/api/chat/send', {
+    method:'POST',
+    body: JSON.stringify({
+      to_user_id: state.msgTo,
+      title: '即时聊天',
+      body,
+      msg_type: 'chat',
+    })
+  });
+  if (!data.ok) return toast(data.error);
+  toast('已发送'); closeModal('m-msg');
+  toggleChat(true);
+  await openChatPeer(state.msgTo, state.chatPeer?.name || '');
+}
+async function openInbox(){
+  toggleChat(true);
+  await refreshChatPeers();
+  const sys = (state.chatPeers||[]).find(p => p.peer_id === 0);
+  if (sys) await openChatPeer(0, '系统消息');
+  else if ((state.chatPeers||[]).length) {
+    const p = state.chatPeers[0];
+    await openChatPeer(p.peer_id, p.peer_name);
+  }
+}
+
+function playNotifySound(isSystem){
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    if (!state._audioCtx) state._audioCtx = new Ctx();
+    const ctx = state._audioCtx;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    if (isSystem) {
+      o.type = 'square';
+      o.frequency.setValueAtTime(880, ctx.currentTime);
+      o.frequency.setValueAtTime(1175, ctx.currentTime + 0.12);
+      o.frequency.setValueAtTime(1319, ctx.currentTime + 0.24);
+      g.gain.setValueAtTime(0.0001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+      o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.46);
+    } else {
+      o.type = 'sine';
+      o.frequency.value = 740;
+      g.gain.setValueAtTime(0.0001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+      o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.23);
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function pushNotifyCard(msg){
+  const stack = document.getElementById('notify-stack');
+  if (!stack) return;
+  const isSys = msg.msg_type === 'system' || msg.from_user_id === 0;
+  const el = document.createElement('div');
+  el.className = 'notify-card ' + (isSys ? 'sys' : 'chat');
+  const from = isSys ? '系统消息' : (msg.from_name || '同事');
+  el.innerHTML = `<button class="nx" type="button">×</button>
+    <div class="nt">${isSys ? '⚡ 系统即时提醒' : '💬 ' + from}</div>
+    <div class="nb">${(msg.body||'').slice(0,80)}</div>`;
+  el.querySelector('.nx').onclick = (e) => { e.stopPropagation(); el.remove(); };
+  el.onclick = async () => {
+    el.remove();
+    toggleChat(true);
+    await openChatPeer(isSys ? 0 : msg.from_user_id, from);
+  };
+  stack.prepend(el);
+  playNotifySound(isSys);
+  setTimeout(() => { if (el.parentNode) el.remove(); }, isSys ? 10000 : 6000);
+}
+
+function toggleChat(show){
+  const panel = document.getElementById('chat-panel');
+  const fab = document.getElementById('chat-fab-wrap');
+  if (!panel) return;
+  if (show) {
+    panel.classList.add('show');
+    refreshChatPeers();
+  } else {
+    panel.classList.remove('show');
+  }
+  if (fab && state.user) fab.style.display = 'block';
+}
+
+async function refreshChatPeers(){
+  const { data } = await api('/api/chat/peers');
+  if (!data.ok) return;
+  state.chatPeers = data.peers || [];
+  const box = document.getElementById('chat-peers');
+  if (!box) return;
+  const unreadTotal = state.chatPeers.reduce((s,p)=>s+(p.unread||0),0);
+  const badge = document.getElementById('chat-badge');
+  if (badge) {
+    if (unreadTotal > 0) { badge.style.display='flex'; badge.textContent = unreadTotal > 99 ? '99+' : unreadTotal; }
+    else badge.style.display='none';
+  }
+  box.innerHTML = state.chatPeers.map(p => `
+    <div class="p ${p.peer_id===0?'sys':''} ${state.chatPeerId===p.peer_id?'on':''}"
+      onclick="openChatPeer(${p.peer_id}, '${(p.peer_name||'').replace(/'/g,'')}')">
+      ${p.peer_name}${p.unread?`<span class="u"> ${p.unread}</span>`:''}
+      <div class="note" style="margin:2px 0 0;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(p.last_body||'').slice(0,18)}</div>
+    </div>`).join('') || '<div class="note" style="padding:8px">暂无会话</div>';
+}
+
+async function openChatPeer(peerId, name){
+  state.chatPeerId = peerId;
+  document.getElementById('chat-title').textContent = name || (peerId===0?'系统消息':'聊天');
+  const bar = document.getElementById('chat-input-bar');
+  if (bar) bar.style.display = peerId === 0 ? 'none' : 'flex';
+  const { data } = await api('/api/chat/list?peer_id=' + peerId);
+  const box = document.getElementById('chat-msgs');
+  if (!data.ok) { box.innerHTML = `<div class="warn">${data.error}</div>`; return; }
+  const msgs = data.messages || [];
+  box.innerHTML = msgs.length ? msgs.map(m => {
+    const isSys = m.msg_type === 'system' || m.from_user_id === 0;
+    const me = !isSys && m.from_user_id === state.user.id;
+    const cls = isSys ? 'sys' : (me ? 'me' : 'them');
+    return `<div class="chat-bubble ${cls}"><div class="meta">${isSys?'系统':(me?'我':(m.peer_name||''))} · ${m.created_at||''}</div>${m.body}</div>`;
+  }).join('') : '<div class="note" style="padding:8px">暂无消息，打个招呼吧</div>';
+  box.scrollTop = box.scrollHeight;
+  await refreshChatPeers();
+}
+
+async function sendChatLine(){
+  if (!state.chatPeerId || state.chatPeerId === 0) return toast('请选择同事会话');
+  const input = document.getElementById('chat-text');
+  const body = (input.value || '').trim();
+  if (!body) return;
+  const { data } = await api('/api/chat/send', {
+    method:'POST', body: JSON.stringify({ to_user_id: state.chatPeerId, body, title:'即时聊天' })
+  });
+  if (!data.ok) return toast(data.error);
+  input.value = '';
+  await openChatPeer(state.chatPeerId, document.getElementById('chat-title').textContent);
+}
+
+async function demoSysNotify(){
+  const { data } = await api('/api/chat/system-notify', {
+    method:'POST',
+    body: JSON.stringify({ to_user_id: state.user.id, title:'系统通知', body:'这是一条演示系统即时提醒：审批/授权结果会以同样方式右下角弹出并播放提示音。' })
+  });
+  if (!data.ok) return toast(data.error || '无权限发系统消息（可用人事/超管演示）');
+  // 自己给自己发：poll 会拉到
+  await pollChat(true);
+}
+
+async function startChatPoll(){
+  if (state._chatPollTimer) clearInterval(state._chatPollTimer);
+  state.chatSinceId = state.chatSinceId || 0;
+  // 对齐游标
+  const { data } = await api('/api/chat/poll?since_id=' + state.chatSinceId);
+  if (data.ok) state.chatSinceId = data.max_id || state.chatSinceId;
+  state._chatPollTimer = setInterval(() => pollChat(false), 2500);
+}
+
+async function pollChat(forcePopup){
+  if (!state.user) return;
+  const { data } = await api('/api/chat/poll?since_id=' + (state.chatSinceId || 0));
+  if (!data.ok) return;
+  const msgs = data.messages || [];
+  if (msgs.length) {
+    state.chatSinceId = data.max_id;
+    for (const m of msgs) {
+      if (forcePopup || document.getElementById('sc-home')?.classList.contains('show')) {
+        pushNotifyCard(m);
+      }
+    }
+    refreshChatPeers();
+    if (state.chatPeerId != null && document.getElementById('chat-panel')?.classList.contains('show')) {
+      const cur = msgs.find(m =>
+        (m.msg_type==='system' && state.chatPeerId===0) ||
+        (m.from_user_id === state.chatPeerId)
+      );
+      if (cur) openChatPeer(state.chatPeerId, document.getElementById('chat-title').textContent);
+    }
+  } else if (data.max_id) {
+    state.chatSinceId = Math.max(state.chatSinceId || 0, data.max_id);
+  }
+}
+
+async function renderDept(el) { return renderOrg(el); }
+
+async function openHrGrant(){ return openAccountBind('direct'); }
+
+// AI-GEN-BEGIN
+// AI-GEN-BEGIN
+function canApplyForOthers(){
+  return hasBtn('proxy_apply') || !!state.user?.can_proxy_apply;
+}
+
+function canSetAccountExpire(){
+  return hasBtn('set_account_expire') || !!state.user?.can_set_account_expire
+    || !!state.deptData?.can_set_account_expire;
+}
+// AI-GEN-END
+
+let expireTargetIds = [];
+
+function togExpireNever(on){
+  const inp = document.getElementById('expire-date');
+  if (inp) {
+    inp.disabled = !!on;
+    if (on) inp.value = '';
+  }
+}
+
+function openSetExpire(ids){
+  if (!canSetAccountExpire()) { toast('未开通设置账号有效期权限'); return; }
+  const selected = ids && ids.length ? ids : [...(state.selectedIds||[])];
+  if (!selected.length) { toast('请先勾选人员，或点行内「设有效期」'); return; }
+  expireTargetIds = selected;
+  const hint = document.getElementById('expire-hint');
+  if (hint) hint.textContent = `已选 ${selected.length} 人：可指定到期日，或勾选永不过期。`;
+  const never = document.getElementById('expire-never');
+  const date = document.getElementById('expire-date');
+  if (never) never.checked = false;
+  if (date) { date.disabled = false; date.value = ''; }
+  openModal('m-set-expire');
+}
+
+async function submitSetExpire(){
+  const never = document.getElementById('expire-never')?.checked;
+  const date = document.getElementById('expire-date')?.value || '';
+  if (!never && !date) { toast('请选择有效期或勾选永不过期'); return; }
+  const { data } = await api('/api/org/members/account-expire', {
+    method: 'POST',
+    body: JSON.stringify({
+      user_ids: expireTargetIds,
+      never_expire: !!never,
+      account_expire: never ? null : date,
+    }),
+  });
+  if (!data.ok) { toast(data.error || '设置失败'); return; }
+  closeModal('m-set-expire');
+  toast(`已更新 ${data.updated} 人` + (never ? '（永不过期）' : `（至 ${date}）`));
+  state.selectedIds = new Set();
+  renderMain();
+}
+// AI-GEN-END
+
+async function openAccountBind(mode){
+  // apply=本人；apply_for=代人；direct=直接绑定
+  if (mode === 'apply_for' && !canApplyForOthers()) {
+    return toast('当前账号未开通「代人申请」权限');
+  }
+  state._bindMode = mode;
+  const selfOnly = mode === 'apply';
+  const forOthers = mode === 'apply_for';
+  state.bindDraft = {
+    mode: mode === 'direct' ? 'direct' : 'apply',
+    peoplePool: [],
+    lines: [],
+    systems: [],
+    boundByUser: {},
+    selfOnly,
+    _lineSeq: 1,
+  };
+  if (selfOnly) {
+    state.bindDraft.peoplePool = [{
+      id: state.user.id,
+      display_name: state.user.display_name,
+      username: state.user.username,
+      person_type: state.user.person_type || 'internal',
+      dept_id: state.user.dept_id,
+    }];
+  }
+  document.getElementById('bg-title').textContent =
+    mode === 'direct' ? '直接绑定' : (forOthers ? '代人申请账号/权限' : '账号/权限申请');
+  document.getElementById('bg-hint').textContent = mode === 'direct'
+    ? '点「新建一行」，在行内下拉选择人员与业务系统后直接绑定。同一人可多行、同一系统可重复。'
+    : (forOthers
+      ? '代人申请：先选人员与业务系统，再单选已绑定账号申请权限；无账号或不选时可勾「新建账号」。'
+      : '本人申请：先选业务系统，再单选该系统已绑定账号；无账号或不选时可勾「新建账号」。不勾新建则必须选账号。');
+  const { data } = await api('/api/bind/systems');
+  if (!data.ok) return toast(data.error);
+  state.bindDraft.systems = (data.systems || []).filter(s => s.access_mode !== 'open');
+  await ensureBindPeoplePool();
+  const pre = forOthers || mode === 'direct' ? [...(state.selectedIds||[])] : [];
+  for (const id of pre) {
+    if (forOthers && id === state.user.id) continue;
+    const p = state.bindDraft.peoplePool.find(x => x.id === id);
+    if (p) {
+      state.bindDraft.lines.push({
+        key: state.bindDraft._lineSeq++,
+        uid: p.id,
+        system_id: '',
+        account_id: '',
+        create_new: false,
+        with_sensitive: false,
+        perm_ids: [],
+      });
+    }
+  }
+  if (!state.bindDraft.lines.length) addBindLine(false);
+  for (const ln of state.bindDraft.lines) {
+    if (ln.uid) await ensureBoundAccounts(ln.uid);
+  }
+  renderBindLines();
+  const foot = document.getElementById('bg-foot');
+  if (mode === 'direct') {
+    foot.innerHTML = `<button class="btn btn-line" onclick="closeModal('m-batch-grant')">取消</button>
+      <button class="btn btn-pri" style="width:auto" onclick="submitAccountBind('direct')">直接绑定</button>`;
+  } else {
+    foot.innerHTML = `<button class="btn btn-line" onclick="closeModal('m-batch-grant')">取消</button>
+      <button class="btn btn-pri" style="width:auto" onclick="submitAccountBind('apply')">${forOthers?'提交代人申请':'提交账号/权限申请'}</button>`;
+  }
+  openModal('m-batch-grant');
+}
+
+async function ensureBindPeoplePool(){
+  if (state.bindDraft.selfOnly) return;
+  const { data } = await api('/api/org/overview');
+  if (!data.ok) return;
+  const manageIds = new Set(data.manage_dept_ids || []);
+  const role = state.user?.role;
+  const map = new Map((state.bindDraft.peoplePool || []).map(p => [p.id, p]));
+  for (const m of data.members || []) {
+    // 代人申请：组织负责人仅本组织可管范围；人事/超管/人员开通看全部
+    if (role === 'dept_owner' && !manageIds.has(m.dept_id)) continue;
+    if (m.id === state.user.id && state._bindMode === 'apply_for') continue;
+    map.set(m.id, {
+      id: m.id,
+      display_name: m.display_name,
+      username: m.username,
+      person_type: m.person_type || 'internal',
+      dept_id: m.dept_id,
+    });
+  }
+  state.bindDraft.peoplePool = [...map.values()];
+  state.bindDraft._deptMap = Object.fromEntries(
+    (data.departments || []).map(d => [d.id, d.name])
+  );
+}
+
+function personOptionsHtml(selectedUid){
+  const pool = state.bindDraft.peoplePool || [];
+  const opts = ['<option value="">请选择人员</option>'].concat(
+    pool.map(p => {
+      const dept = (state.bindDraft._deptMap || {})[p.dept_id] || '';
+      const ext = p.person_type === 'external' ? '·外部' : '';
+      const sel = String(p.id) === String(selectedUid) ? 'selected' : '';
+      return `<option value="${p.id}" ${sel}>${p.display_name}（${p.username}）${ext}${dept?' · '+dept:''}</option>`;
+    })
+  );
+  return opts.join('');
+}
+
+function systemOptionsHtml(selectedSid, personType){
+  const list = state.bindDraft.systems || [];
+  const opts = ['<option value="">请选择业务系统</option>'].concat(
+    list.map(s => {
+      const blocked = personType === 'external' && s.forbid_external;
+      const sel = String(s.id) === String(selectedSid) ? 'selected' : '';
+      const tag = s.forbid_external ? ' ·禁外部' : '';
+      return `<option value="${s.id}" ${sel} ${blocked?'disabled':''}>${s.name}${tag}${blocked?'（外部不可选）':''}</option>`;
+    })
+  );
+  return opts.join('');
+}
+
+function permSummaryHtml(ln, s){
+  // AI-GEN-BEGIN
+  if (!s) return '<span class="note">先选系统</span>';
+  const perms = s.permissions || [];
+  if (!perms.length) return '<span class="note">无可选权限</span>';
+  const selected = (ln.perm_ids || []).map(id => perms.find(p => p.id === Number(id))).filter(Boolean);
+  const label = selected.length
+    ? (selected.map(p => p.perm_name).slice(0, 2).join('、') + (selected.length > 2 ? ` 等${selected.length}项` : ''))
+    : '点击选择权限';
+  return `<button type="button" class="btn btn-sm btn-line" style="width:100%;text-align:left;white-space:normal;height:auto;line-height:1.35;padding:8px 10px"
+    onclick="openPickPerms(${ln.key})">${label}</button>
+    <div class="note" style="margin-top:4px">${selected.length ? '已选 '+selected.length+' 项' : '树状多选'}</div>`;
+  // AI-GEN-END
+}
+
+function sensCellHtml(ln, s){
+  // AI-GEN-BEGIN
+  if (!s) return '<span class="note">—</span>';
+  if (!s.has_sensitive) {
+    return `<label class="note" style="opacity:.45;cursor:not-allowed" title="该业务系统未开启敏感权限">
+      <input type="checkbox" disabled> 不可选
+    </label>`;
+  }
+  // 已选业务账号且该账号已有敏感 → 显示已有、不可再申请
+  if (ln.account_id && !ln.create_new) {
+    const acct = ((state.bindDraft.boundByUser || {})[ln.uid] || [])
+      .find(a => Number(a.id) === Number(ln.account_id));
+    if (acct && acct.has_sensitive) {
+      return `<span class="pill p-red" title="该业务账号已具备敏感权限">已有</span>`;
+    }
+  }
+  return `<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px">
+    <input type="checkbox" ${ln.with_sensitive ? 'checked' : ''}
+      onchange="toggleBindLineSens(${ln.key}, this.checked)">
+    <span>申请敏感 <span class="pill p-red">开</span></span>
+  </label>`;
+  // AI-GEN-END
+}
+
+function boundAccountsForLine(ln){
+  // AI-GEN-BEGIN
+  if (!ln || !ln.uid || !ln.system_id || ln.create_new) return [];
+  const cache = (state.bindDraft.boundByUser || {})[ln.uid] || [];
+  const allow = new Set((state.bindDraft.systems || []).map(s => Number(s.id)));
+  return cache.filter(a =>
+    allow.has(Number(a.system_id)) && Number(a.system_id) === Number(ln.system_id)
+  );
+  // AI-GEN-END
+}
+
+function boundAccountOptionsHtml(ln){
+  // AI-GEN-BEGIN
+  if (!ln.uid) return '<option value="">请先选人员</option>';
+  if (!ln.system_id) return '<option value="">请先选业务系统</option>';
+  if (ln.create_new) return '<option value="">新建账号无需选择</option>';
+  const list = boundAccountsForLine(ln);
+  if (!list.length) return '<option value="">该系统暂无已绑定账号</option>';
+  const opts = ['<option value="">请选择业务系统账号</option>'].concat(
+    list.map(a => {
+      const sel = String(a.id) === String(ln.account_id) ? 'selected' : '';
+      const tag = a.can_login ? '' : ' ·不可登录';
+      const label = a.account_label ? `${a.account_name}（${a.account_label}）` : a.account_name;
+      return `<option value="${a.id}" ${sel}>${label}${tag}</option>`;
+    })
+  );
+  return opts.join('');
+  // AI-GEN-END
+}
+
+async function ensureBoundAccounts(uid){
+  // AI-GEN-BEGIN
+  if (!uid) return [];
+  if (!state.bindDraft.boundByUser) state.bindDraft.boundByUser = {};
+  if (state.bindDraft.boundByUser[uid]) return state.bindDraft.boundByUser[uid];
+  const { data } = await api('/api/bind/user-bound-accounts?user_id=' + uid);
+  if (!data.ok) { toast(data.error || '加载已绑定账号失败'); return []; }
+  state.bindDraft.boundByUser[uid] = data.accounts || [];
+  return state.bindDraft.boundByUser[uid];
+  // AI-GEN-END
+}
+
+function renderBindLines(){
+  const lines = state.bindDraft.lines || [];
+  const box = document.getElementById('bg-lines');
+  if (!lines.length) {
+    box.innerHTML = '<div class="note" style="padding:12px">点击「新建一行」开始填写</div>';
+    return;
+  }
+  const poolMap = Object.fromEntries((state.bindDraft.peoplePool||[]).map(p => [p.id, p]));
+  const sysMap = Object.fromEntries((state.bindDraft.systems||[]).map(s => [s.id, s]));
+  const selfOnly = !!state.bindDraft.selfOnly;
+  const isApply = state.bindDraft.mode !== 'direct';
+  box.innerHTML = `<table>
+    <thead><tr>
+      <th style="width:40px">#</th>
+      <th style="min-width:180px">人员</th>
+      <th style="min-width:160px">业务系统</th>
+      ${isApply?`<th style="min-width:200px">业务系统账号</th><th style="min-width:88px">新建账号</th>`:''}
+      <th style="min-width:180px">权限</th>
+      <th style="min-width:110px">敏感权限</th>
+      <th style="width:72px"></th>
+    </tr></thead>
+    <tbody>${lines.map((ln, i) => {
+      const p = poolMap[ln.uid];
+      const s = sysMap[ln.system_id];
+      const boundList = isApply ? boundAccountsForLine({ ...ln, create_new: false }) : [];
+      const acctDisabled = !ln.system_id || !!ln.create_new;
+      const noBound = !!ln.system_id && !boundList.length;
+      return `<tr>
+        <td>${i+1}</td>
+        <td>
+          <select style="width:100%;min-width:160px" ${selfOnly?'disabled':''}
+            onchange="changeBindLinePerson(${ln.key}, this.value)">
+            ${personOptionsHtml(ln.uid)}
+          </select>
+          ${selfOnly?'':`<button type="button" class="btn btn-sm btn-line" style="margin-top:4px"
+            onclick="openPickPeopleForLine(${ln.key})">组织筛选</button>`}
+        </td>
+        <td>
+          <select style="width:100%;min-width:140px"
+            onchange="changeBindLineSystem(${ln.key}, this.value)">
+            ${systemOptionsHtml(ln.system_id, p && p.person_type)}
+          </select>
+        </td>
+        ${isApply?`
+        <td>
+          <select style="width:100%;min-width:180px" ${acctDisabled?'disabled':''}
+            onchange="changeBindLineAccount(${ln.key}, this.value)">
+            ${boundAccountOptionsHtml(ln)}
+          </select>
+          <div class="note" style="margin-top:4px">${
+            !ln.system_id ? '先选业务系统'
+            : (ln.create_new ? '已选新建'
+            : (noBound ? '无已绑定账号，可勾新建' : '仅已绑定 · 单选'))
+          }</div>
+        </td>
+        <td>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;${!ln.system_id?'opacity:.45':''}">
+            <input type="checkbox" ${ln.create_new?'checked':''} ${!ln.system_id?'disabled':''}
+              onchange="toggleBindLineCreateNew(${ln.key}, this.checked)">
+            新建
+          </label>
+        </td>`:''}
+        <td style="min-width:160px">${permSummaryHtml(ln, s)}</td>
+        <td>${sensCellHtml(ln, s)}</td>
+        <td><button class="btn btn-sm btn-line" onclick="removeBindLine(${ln.key})">移除</button></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+function addBindLine(rerender=true){
+  if (!state.bindDraft._lineSeq) state.bindDraft._lineSeq = 1;
+  const defaultUid = state.bindDraft.selfOnly && state.bindDraft.peoplePool[0]
+    ? state.bindDraft.peoplePool[0].id
+    : '';
+  state.bindDraft.lines.push({
+    key: state.bindDraft._lineSeq++,
+    uid: defaultUid,
+    system_id: '',
+    account_id: '',
+    create_new: false,
+    perm_ids: [],
+    with_sensitive: false,
+  });
+  if (defaultUid) ensureBoundAccounts(defaultUid).then(() => { if (rerender) renderBindLines(); });
+  else if (rerender) renderBindLines();
+}
+
+async function changeBindLinePerson(key, uid){
+  const ln = (state.bindDraft.lines||[]).find(x => x.key === key);
+  if (!ln) return;
+  ln.uid = uid ? Number(uid) : '';
+  ln.account_id = '';
+  ln.with_sensitive = false;
+  ln.perm_ids = [];
+  // 若当前系统对外部禁用则清空
+  const p = (state.bindDraft.peoplePool||[]).find(x => x.id === ln.uid);
+  const s = (state.bindDraft.systems||[]).find(x => x.id === ln.system_id);
+  if (p && p.person_type === 'external' && s && s.forbid_external) {
+    ln.system_id = '';
+  }
+  if (ln.uid) await ensureBoundAccounts(ln.uid);
+  renderBindLines();
+}
+
+function changeBindLineAccount(key, aid){
+  // AI-GEN-BEGIN
+  const ln = (state.bindDraft.lines||[]).find(x => x.key === key);
+  if (!ln) return;
+  if (!ln.system_id) return toast('请先选择业务系统');
+  ln.account_id = aid ? Number(aid) : '';
+  if (ln.account_id) ln.create_new = false;
+  // 账号已有敏感则不可再勾选申请
+  const acct = ((state.bindDraft.boundByUser||{})[ln.uid]||[])
+    .find(a => Number(a.id) === Number(ln.account_id));
+  if (acct && acct.has_sensitive) ln.with_sensitive = false;
+  renderBindLines();
+  // AI-GEN-END
+}
+
+function toggleBindLineCreateNew(key, on){
+  // AI-GEN-BEGIN
+  const ln = (state.bindDraft.lines||[]).find(x => x.key === key);
+  if (!ln) return;
+  if (!ln.system_id) return toast('请先选择业务系统');
+  ln.create_new = !!on;
+  if (ln.create_new) ln.account_id = '';
+  renderBindLines();
+  // AI-GEN-END
+}
+
+function changeBindLineSystem(key, sid){
+  const ln = (state.bindDraft.lines||[]).find(x => x.key === key);
+  if (!ln) return;
+  ln.system_id = sid ? Number(sid) : '';
+  ln.account_id = '';
+  ln.create_new = false;
+  ln.perm_ids = [];
+  ln.with_sensitive = false;
+  // 该系统无已绑定账号时，默认勾选新建，便于继续申请
+  if (ln.system_id && ln.uid) {
+    const list = boundAccountsForLine(ln);
+    if (!list.length) ln.create_new = true;
+  }
+  renderBindLines();
+}
+
+function toggleBindLinePerm(key, permId, on){
+  // AI-GEN-BEGIN
+  const ln = (state.bindDraft.lines||[]).find(x => x.key === key);
+  if (!ln) return;
+  if (!ln.perm_ids) ln.perm_ids = [];
+  const id = Number(permId);
+  if (on) { if (!ln.perm_ids.includes(id)) ln.perm_ids.push(id); }
+  else ln.perm_ids = ln.perm_ids.filter(x => x !== id);
+  // AI-GEN-END
+}
+
+function openPickPerms(key){
+  // AI-GEN-BEGIN
+  const ln = (state.bindDraft.lines||[]).find(x => x.key === key);
+  if (!ln || !ln.system_id) return toast('请先选择业务系统');
+  const s = (state.bindDraft.systems||[]).find(x => x.id === ln.system_id);
+  if (!s) return toast('业务系统不存在');
+  if (!(s.permissions||[]).length) return toast('该系统暂无权限目录');
+  state.pickPermLineKey = key;
+  state.pickPermIds = new Set((ln.perm_ids || []).map(Number));
+  state.pickPermCollapsed = {};
+  document.getElementById('pick-perm-title').textContent = `选择权限 · ${s.name}`;
+  renderPickPermTree();
+  openModal('m-pick-perms');
+  // AI-GEN-END
+}
+
+function pickPermExpandAll(expand){
+  // AI-GEN-BEGIN
+  const ln = (state.bindDraft.lines||[]).find(x => x.key === state.pickPermLineKey);
+  const s = ln && (state.bindDraft.systems||[]).find(x => x.id === ln.system_id);
+  const perms = (s && s.permissions) || [];
+  const collapsed = {};
+  if (!expand) {
+    perms.forEach(p => {
+      if (perms.some(x => x.parent_id === p.id)) collapsed[p.id] = true;
+    });
+  }
+  state.pickPermCollapsed = collapsed;
+  renderPickPermTree();
+  // AI-GEN-END
+}
+
+function togglePickPermNode(id){
+  // AI-GEN-BEGIN
+  const c = state.pickPermCollapsed || (state.pickPermCollapsed = {});
+  c[id] = !c[id];
+  renderPickPermTree();
+  // AI-GEN-END
+}
+
+function togglePickPermCheck(id, on){
+  // AI-GEN-BEGIN
+  if (!state.pickPermIds) state.pickPermIds = new Set();
+  const n = Number(id);
+  if (on) state.pickPermIds.add(n);
+  else state.pickPermIds.delete(n);
+  const el = document.getElementById('pick-perm-count');
+  if (el) el.textContent = `已选 ${state.pickPermIds.size}`;
+  // AI-GEN-END
+}
+
+function renderPickPermTree(){
+  // AI-GEN-BEGIN
+  const box = document.getElementById('pick-perm-tree');
+  const countEl = document.getElementById('pick-perm-count');
+  const ln = (state.bindDraft.lines||[]).find(x => x.key === state.pickPermLineKey);
+  const s = ln && (state.bindDraft.systems||[]).find(x => x.id === ln.system_id);
+  const perms = (s && s.permissions) || [];
+  if (countEl) countEl.textContent = `已选 ${(state.pickPermIds||new Set()).size}`;
+  if (!perms.length) {
+    box.innerHTML = '<div class="note" style="padding:8px">暂无权限项</div>';
+    return;
+  }
+  const byParent = {};
+  perms.forEach(p => {
+    const k = p.parent_id == null ? 'root' : String(p.parent_id);
+    (byParent[k] = byParent[k] || []).push(p);
+  });
+  const selected = state.pickPermIds || new Set();
+  const collapsed = state.pickPermCollapsed || {};
+  const walk = (pid, depth) => {
+    const key = pid == null ? 'root' : String(pid);
+    return (byParent[key] || []).map(p => {
+      const hasKids = (byParent[String(p.id)] || []).length > 0;
+      const isCollapsed = !!collapsed[p.id];
+      return `
+        <div class="node ${hasKids?'':'leaf'}" style="padding-left:${6+depth*14}px;display:flex;align-items:center;gap:6px"
+          onclick="event.stopPropagation()">
+          ${hasKids
+            ? `<span style="width:14px;cursor:pointer;color:var(--muted)" onclick="togglePickPermNode(${p.id})">${isCollapsed?'▸':'▾'}</span>`
+            : `<span style="width:14px;display:inline-block"></span>`}
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;flex:1;margin:0">
+            <input type="checkbox" ${selected.has(p.id)?'checked':''}
+              onchange="togglePickPermCheck(${p.id}, this.checked)">
+            <b>${p.perm_name}</b>
+            <code class="note">${p.perm_code||''}</code>
+          </label>
+        </div>
+        ${hasKids && !isCollapsed ? `<div class="kids">${walk(p.id, depth+1)}</div>` : ''}
+      `;
+    }).join('');
+  };
+  box.innerHTML = walk(null, 0) || '<div class="note" style="padding:8px">暂无权限项</div>';
+  // AI-GEN-END
+}
+
+function confirmPickPerms(){
+  // AI-GEN-BEGIN
+  const ln = (state.bindDraft.lines||[]).find(x => x.key === state.pickPermLineKey);
+  if (!ln) return closeModal('m-pick-perms');
+  ln.perm_ids = [...(state.pickPermIds || [])];
+  closeModal('m-pick-perms');
+  renderBindLines();
+  // AI-GEN-END
+}
+
+function removeBindLine(key){
+  state.bindDraft.lines = (state.bindDraft.lines||[]).filter(ln => ln.key !== key);
+  renderBindLines();
+}
+
+function toggleBindLineSens(key, on){
+  const ln = (state.bindDraft.lines||[]).find(x => x.key === key);
+  if (ln) ln.with_sensitive = !!on;
+}
+
+async function openPickPeopleForLine(key){
+  if (state.bindDraft?.selfOnly) return;
+  // AI-GEN-BEGIN
+  state.pickMode = 'bind_line';
+  state.pickSensStep = null;
+  state.pickOnSelect = null;
+  state.pickForLineKey = key;
+  state.pickDept = state.pickDept || '';
+  state.pickQ = state.pickQ || '';
+  document.getElementById('pick-people-title').textContent = '按组织筛选人员';
+  document.getElementById('pick-people-hint').textContent = '左侧组织树筛选，右侧点选一人填入当前明细行。';
+  document.getElementById('pick-q').value = state.pickQ;
+  await loadPickPeople();
+  openModal('m-pick-people');
+  // AI-GEN-END
+}
+
+function renderPickTree(nodes, depth=0){
+  return (nodes||[]).map(n => `
+    <div class="node ${String(state.pickDept)===String(n.id)?'on':''}" style="padding-left:${8+depth*10}px"
+      onclick="state.pickDept='${n.id}';loadPickPeople()">
+      ${n.name}${n.can_manage?'<span class="mgmt">管</span>':''}
+    </div>
+    ${n.children && n.children.length ? `<div class="kids">${renderPickTree(n.children, depth+1)}</div>` : ''}
+  `).join('');
+}
+
+async function loadPickPeople(){
+  state.pickQ = (document.getElementById('pick-q')?.value || '').trim();
+  let url = '/api/org/overview?q=' + encodeURIComponent(state.pickQ || '');
+  if (state.pickDept) url += '&dept_id=' + state.pickDept;
+  const { data } = await api(url);
+  if (!data.ok) return toast(data.error);
+  state.pickData = data;
+  document.getElementById('pick-tree').innerHTML = `
+    <div class="node ${!state.pickDept?'on':''}" onclick="state.pickDept='';loadPickPeople()"><b>全部组织</b></div>
+    ${renderPickTree(data.tree||[])}`;
+  const members = data.members || [];
+  document.getElementById('pick-members').innerHTML = members.length ? `<table>
+    <thead><tr><th>姓名</th><th>账号</th><th>组织</th><th></th></tr></thead>
+    <tbody>${members.map(m => {
+      const dname = (data.departments.find(d=>d.id===m.dept_id)||{}).name || '';
+      return `<tr>
+        <td>${m.display_name}${m.person_type==='external'?' <span class="pill p-orange">外部</span>':''}</td>
+        <td>${m.username}</td>
+        <td>${dname}</td>
+        <td><button class="btn btn-sm btn-pri" style="width:auto" onclick="pickPersonIntoLine(${m.id})">选择</button></td>
+      </tr>`;
+    }).join('')}</tbody></table>` : '<div class="note" style="padding:12px">当前组织下无匹配人员</div>';
+}
+
+async function pickPersonIntoLine(uid){
+  // AI-GEN-BEGIN
+  const members = state.pickData?.members || [];
+  const m = members.find(x => x.id === uid);
+  if (!m) return toast('人员不存在');
+  const depts = state.pickData?.departments || [];
+  const deptName = (depts.find(d => String(d.id)===String(state.pickDept))||{}).name || '';
+
+  if (state.pickMode === 'finance') {
+    const el = document.getElementById('finance-assignee-id');
+    const lab = document.getElementById('finance-assignee-label');
+    if (el) el.value = m.id;
+    if (lab) lab.innerHTML = `${m.display_name} <span class="note">${m.username||''}</span>`;
+    const fin = (state.sensConfig?.chain||[]).find(c => c.step_key==='finance');
+    if (fin) {
+      fin.assignee_user_id = m.id;
+      fin.assignee_name = m.display_name;
+      fin.assignee_username = m.username;
+    }
+    closeModal('m-pick-people');
+    state.pickMode = null;
+    toast(`财务审批人：${m.display_name}`);
+    return;
+  }
+  if (state.pickMode === 'sens_override') {
+    if (!state.pickDept) return toast('请先在左侧选择申请人所属部门');
+    const stepKey = state.pickSensStep;
+    state.sensOverrides = (state.sensOverrides||[]).filter(
+      o => !(o.step_key===stepKey && String(o.dept_id)===String(state.pickDept))
+    );
+    state.sensOverrides.push({
+      step_key: stepKey,
+      dept_id: Number(state.pickDept),
+      dept_name: deptName || ('部门#'+state.pickDept),
+      assignee_user_id: m.id,
+      assignee_name: m.display_name,
+      assignee_username: m.username,
+    });
+    closeModal('m-pick-people');
+    state.pickMode = null;
+    state.pickSensStep = null;
+    toast(`已添加特例：${deptName||state.pickDept} → ${m.display_name}`);
+    const el = document.getElementById('main-views');
+    if (el) renderSensitiveConfig(el, { keepLocal: true });
+    return;
+  }
+
+  const key = state.pickForLineKey;
+  const pool = state.bindDraft.peoplePool || [];
+  if (!pool.find(p => p.id === m.id)) {
+    pool.push({
+      id: m.id,
+      display_name: m.display_name,
+      username: m.username,
+      person_type: m.person_type || 'internal',
+      dept_id: m.dept_id,
+    });
+    state.bindDraft.peoplePool = pool;
+  }
+  if (state.pickData?.departments) {
+    state.bindDraft._deptMap = Object.fromEntries(
+      state.pickData.departments.map(d => [d.id, d.name])
+    );
+  }
+  const ln = (state.bindDraft.lines||[]).find(x => x.key === key);
+  if (ln) {
+    ln.uid = m.id;
+    ln.account_id = '';
+    ln.with_sensitive = false;
+    ln.perm_ids = [];
+    const s = (state.bindDraft.systems||[]).find(x => x.id === ln.system_id);
+    if (m.person_type === 'external' && s && s.forbid_external) ln.system_id = '';
+  }
+  closeModal('m-pick-people');
+  state.pickForLineKey = null;
+  state.pickMode = null;
+  if (ln && ln.uid) await ensureBoundAccounts(ln.uid);
+  renderBindLines();
+  toast(`已选择 ${m.display_name}`);
+  // AI-GEN-END
+}
+
+async function submitAccountBind(mode){
+  // AI-GEN-BEGIN
+  const lines = state.bindDraft?.lines || [];
+  if (!lines.length) return toast('请先新建一行');
+  const isApply = mode !== 'direct';
+  for (const ln of lines) {
+    if (!ln.uid) return toast('请为每一行选择人员');
+    if (isApply) {
+      if (!ln.create_new && !ln.account_id) {
+        return toast('请选择业务系统账号，或勾选「新建账号」');
+      }
+    }
+    if (!ln.system_id) return toast('请为每一行选择业务系统');
+  }
+  const msgs = [];
+  if (mode === 'direct') {
+    const items = lines.map(ln => ({
+      leuc_user_id: Number(ln.uid),
+      system_id: Number(ln.system_id),
+    }));
+    const { data } = await api('/api/bind/direct', { method:'POST', body: JSON.stringify({ items }) });
+    if (!data.ok) return toast(data.error);
+    msgs.push(data.message);
+  } else {
+    // 仅「新建账号」走账号绑定申请；已绑定账号只走权限/敏感
+    const newItems = lines.filter(ln => ln.create_new).map(ln => ({
+      leuc_user_id: Number(ln.uid),
+      system_id: Number(ln.system_id),
+      create_new: true,
+      with_sensitive: !!(ln.with_sensitive && (state.bindDraft.systems||[]).find(x => x.id === ln.system_id)?.has_sensitive),
+    }));
+    if (newItems.length) {
+      const { data } = await api('/api/bind/apply', { method:'POST', body: JSON.stringify({ items: newItems }) });
+      if (!data.ok) return toast(data.error);
+      msgs.push(data.message);
+    }
+  }
+  for (const ln of lines) {
+    // 新建账号已带敏感时，不再重复提交敏感申请
+    if (ln.create_new && mode !== 'direct') continue;
+    const s = (state.bindDraft.systems||[]).find(x => x.id === ln.system_id);
+    const perms = (s && s.permissions) || [];
+    for (const pid of (ln.perm_ids || [])) {
+      const p = perms.find(x => x.id === Number(pid));
+      if (!p) continue;
+      const r = await api('/api/apply/submit', {
+        method:'POST',
+        body: JSON.stringify({
+          type:'normal_perm',
+          system_name: s?.name,
+          remark: p.perm_name,
+          for_user_id: ln.uid,
+          account_id: ln.account_id || null,
+        })
+      });
+      if (r.data?.ok) msgs.push(r.data.message);
+      else if (r.data?.error) msgs.push(r.data.error);
+    }
+    if (ln.with_sensitive && s && s.has_sensitive) {
+      const acct = ((state.bindDraft.boundByUser||{})[ln.uid]||[])
+        .find(a => Number(a.id) === Number(ln.account_id));
+      if (acct && acct.has_sensitive) continue;
+      const r = await api('/api/apply/submit', {
+        method:'POST',
+        body: JSON.stringify({
+          type:'sensitive',
+          system_id: Number(ln.system_id),
+          for_user_id: ln.uid,
+          account_id: ln.account_id || null,
+        })
+      });
+      if (r.data?.ok) msgs.push(r.data.message);
+      else if (r.data?.error) msgs.push(r.data.error);
+    }
+  }
+  if (!msgs.length) return toast('请至少勾选「新建账号」，或选择权限/敏感权限');
+  toast(msgs[0] + (msgs.length > 1 ? '｜' + msgs[1] : ''));
+  closeModal('m-batch-grant');
+  state.selectedIds.clear();
+  state.bindDraft = null;
+  state._bindMode = null;
+  renderMain();
+  // AI-GEN-END
+}
+// AI-GEN-END
+
+// AI-GEN-BEGIN
+async function openAccountPermClose(){
+  // AI-GEN-BEGIN
+  const { data } = await api('/api/apply/my-accounts');
+  if (!data.ok) return toast(data.error);
+  const accounts = data.accounts || [];
+  if (!accounts.length) return toast('暂无关联系统账号');
+  state.closeDraft = { accounts, selectedAcct: accounts[0].id, close_login: false, perm_ids: [] };
+  const modal = document.querySelector('#m-sec .modal');
+  if (modal) modal.style.maxWidth = '640px';
+  document.getElementById('sec-modal-title').textContent = '账号、权限关闭';
+  document.getElementById('sec-modal-hint').textContent = '仅本人。先选系统账号，再勾选要关闭的权限；敏感权限走长链审批。也可仅关闭登录。';
+  renderPermCloseBody();
+  secModalMode = 'perm_close';
+  openModal('m-sec');
+  // AI-GEN-END
+}
+function renderPermCloseBody(){
+  const d = state.closeDraft;
+  if (!d) return;
+  const acct = (d.accounts||[]).find(a => a.id === d.selectedAcct) || d.accounts[0];
+  if (acct && d.selectedAcct !== acct.id) d.selectedAcct = acct.id;
+  const perms = ((acct && acct.permissions) || []).filter(p => p.perm_code && !['biz_root','kj_root','hr_root'].includes(p.perm_code));
+  const selected = new Set((d.perm_ids||[]).map(Number));
+  const sysSens = !!(acct && (acct.sys_has_sensitive || acct.has_sensitive));
+  document.getElementById('sec-modal-body').innerHTML = `
+    <div class="kv"><span class="lab">系统账号</span>
+      <select style="min-width:220px" onchange="changeCloseAcct(this.value)">
+        ${(d.accounts||[]).map(a => `<option value="${a.id}" ${a.id===acct.id?'selected':''}>${a.system_name} / ${a.account_name}${a.has_sensitive?' ·含敏感':''}</option>`).join('')}
+      </select>
+    </div>
+    <div class="kv" style="margin-top:8px"><span class="lab">关闭登录</span>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+        <input type="checkbox" ${d.close_login?'checked':''} ${acct && acct.can_login?'':'disabled'}
+          onchange="state.closeDraft.close_login=this.checked">
+        ${acct && acct.can_login ? '关闭本账号登录能力' : '当前已不可登录'}
+      </label>
+    </div>
+    <div style="margin-top:12px"><b>选择要关闭的权限</b>
+      <div class="note">${sysSens?'本系统含敏感权限，勾选敏感项后走直属→一级→财务':''}</div>
+      <div style="max-height:220px;overflow:auto;margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px">
+        ${perms.length ? perms.map(p => {
+          const sens = !!p.is_sensitive;
+          const disabled = sens && !sysSens && !acct.has_sensitive ? 'disabled' : '';
+          return `<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:4px 0;${disabled?'opacity:.4':''}">
+            <input type="checkbox" ${selected.has(p.id)?'checked':''} ${disabled}
+              onchange="toggleClosePerm(${p.id},this.checked)">
+            ${p.perm_name}${sens?' <span class="pill p-red">敏感</span>':' <span class="pill p-gray">普通</span>'}
+          </label>`;
+        }).join('') : '<div class="note">该系统暂无权限目录项</div>'}
+      </div>
+    </div>`;
+}
+function changeCloseAcct(id){
+  state.closeDraft.selectedAcct = Number(id);
+  state.closeDraft.perm_ids = [];
+  state.closeDraft.close_login = false;
+  renderPermCloseBody();
+}
+function toggleClosePerm(pid, on){
+  const id = Number(pid);
+  if (!state.closeDraft.perm_ids) state.closeDraft.perm_ids = [];
+  if (on) { if (!state.closeDraft.perm_ids.includes(id)) state.closeDraft.perm_ids.push(id); }
+  else state.closeDraft.perm_ids = state.closeDraft.perm_ids.filter(x => x !== id);
+}
+async function submitPermClose(){
+  // AI-GEN-BEGIN
+  const d = state.closeDraft;
+  if (!d || !d.selectedAcct) return toast('请选择系统账号');
+  const acct = (d.accounts||[]).find(a => a.id === d.selectedAcct);
+  if (!acct) return toast('账号不存在');
+  const permIds = d.perm_ids || [];
+  if (!d.close_login && !permIds.length) return toast('请勾选关闭登录或至少一项权限');
+  const msgs = [];
+  if (d.close_login) {
+    const r = await api('/api/apply/submit', {
+      method:'POST', body: JSON.stringify({ type:'account_close', account_id: acct.id })
+    });
+    msgs.push(r.data?.message || r.data?.error || '');
+  }
+  const perms = acct.permissions || [];
+  let anySens = false;
+  for (const pid of permIds) {
+    const p = perms.find(x => x.id === Number(pid));
+    if (!p) continue;
+    if (p.is_sensitive) anySens = true;
+    else {
+      const r = await api('/api/apply/submit', {
+        method:'POST', body: JSON.stringify({
+          type:'normal_perm',
+          system_name: acct.system_name,
+          remark: '关闭权限：' + p.perm_name,
+          for_user_id: state.user.id
+        })
+      });
+      msgs.push(r.data?.message || r.data?.error || '');
+    }
+  }
+  if (anySens) {
+    const r = await api('/api/apply/submit', {
+      method:'POST', body: JSON.stringify({ type:'sensitive_close', account_id: acct.id })
+    });
+    msgs.push(r.data?.message || r.data?.error || '');
+  }
+  const modal = document.querySelector('#m-sec .modal');
+  if (modal) modal.style.maxWidth = '';
+  closeModal('m-sec');
+  toast(msgs.filter(Boolean)[0] || '已提交');
+  state.closeDraft = null;
+  state.view = 'todo'; state.todoTab = 'initiated';
+  renderSide(); renderMain();
+  // AI-GEN-END
+}
+async function openAccountClose(){ return openAccountPermClose(); }
+async function openSensitiveClose(){ return openAccountPermClose(); }
+// AI-GEN-END
+
+function hrTog(id, on){ if (!state.hrSelected) state.hrSelected = new Set(); if(on) state.hrSelected.add(id); else state.hrSelected.delete(id); }
+function hrToggleAll(on){
+  document.querySelectorAll('.hr-roster').forEach(el => {
+    el.checked = on;
+    hrTog(Number(el.value), on);
+  });
+}
+function hrCollectUsernameMap(ids){
+  const map = {};
+  document.querySelectorAll('.hr-uname').forEach(el => {
+    const rid = el.dataset.rid;
+    if (!ids || ids.includes(Number(rid))) map[rid] = el.value.trim();
+  });
+  return map;
+}
+async function hrSyncAll(){
+  const map = hrCollectUsernameMap();
+  const { data } = await api('/api/hr/sync-init', { method:'POST', body: JSON.stringify({ username_map: map }) });
+  if (!data.ok) return toast(data.error);
+  toast(data.message + '：' + (data.created||[]).map(c => c.username).join(', '));
+  state.hrSelected = new Set();
+  renderMain();
+}
+async function hrSyncSelected(){
+  const ids = [...(state.hrSelected||[])];
+  if (!ids.length) return toast('请先勾选');
+  const map = hrCollectUsernameMap(ids);
+  const { data } = await api('/api/hr/sync-init', { method:'POST', body: JSON.stringify({ roster_ids: ids, username_map: map }) });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  state.hrSelected = new Set();
+  renderMain();
+}
+async function hrSyncOne(id){
+  const map = hrCollectUsernameMap([id]);
+  const { data } = await api('/api/hr/sync-init', { method:'POST', body: JSON.stringify({ roster_ids: [id], username_map: map }) });
+  if (!data.ok) return toast(data.error);
+  toast(`${data.created[0].display_name} → ${data.created[0].username}`);
+  renderMain();
+}
+async function hrPull(){
+  toast('正在增量同步…');
+  const { data } = await api('/api/hr/sync-pull', { method:'POST', body: JSON.stringify({ mode: 'auto' }) });
+  if (!data.ok) return toast(data.error);
+  state.leorgSync = data.sync_state || state.leorgSync;
+  toast(data.message);
+  renderMain();
+}
+async function hrPullFull(){
+  if (!confirm('确认全量同步？将重新拉取全部组织与在职人员（幂等，可重复执行）。')) return;
+  toast('正在全量同步…');
+  const { data } = await api('/api/hr/sync-pull', { method:'POST', body: JSON.stringify({ mode: 'full' }) });
+  if (!data.ok) return toast(data.error);
+  state.leorgSync = data.sync_state || state.leorgSync;
+  toast(data.message);
+  renderMain();
+}
+async function hrOrgClear(){
+  if (!confirm('确认清空「我的组织」？\n将删除全部部门与普通员工，保留管理演示账号，之后可从 LeOrg 重新同步。')) return;
+  const { data } = await api('/api/hr/org-clear', { method:'POST', body: JSON.stringify({ confirm: true }) });
+  if (!data.ok) return toast(data.error);
+  state.deptFilter = '';
+  state.leorgSync = null;
+  toast(data.message);
+  renderMain();
+}
+
+function togSel(id, on){ if(on) state.selectedIds.add(id); else state.selectedIds.delete(id); }
+function toggleAll(on){ (state.deptData?.members||[]).forEach(m => { if(on) state.selectedIds.add(m.id); else state.selectedIds.delete(m.id); }); renderMain(); }
+
+async function showPerm(uid) {
+  const { data } = await api('/api/member/' + uid + '/permissions');
+  if (!data.ok) return toast(data.error);
+  document.getElementById('perm-title').textContent = `${data.user.display_name}（${data.user.username}）· 关联系统账号与权限`;
+  document.getElementById('perm-body').innerHTML = data.systems.map(s => `
+    <div class="sys-block"><div class="hd"><b>${s.name}</b>
+      ${s.has_sensitive_any?'<span class="pill p-red">含敏感</span>':''}</div>
+      ${s.accounts.map(a=>`<div class="acct">
+        <code>${a.account_name}</code>${a.account_label?` · ${a.account_label}`:''}<br>
+        权限：${a.perm_summary||'—'}
+        · 可登录：${a.can_login?'是':'否'} · 敏感：${a.has_sensitive?'是':'否'}
+      </div>`).join('')}
+    </div>`).join('') || '<div class="note">无关联系统账号</div>';
+  openModal('m-perm');
+}
+
+async function openAdd(){
+  state.addPersonType = 'internal';
+  document.querySelectorAll('#add-ptype div').forEach(d => d.classList.toggle('on', d.dataset.t==='internal'));
+  document.getElementById('add-name').value='';
+  document.getElementById('add-username').value='';
+  document.getElementById('add-user-hint').textContent='';
+  document.getElementById('add-phone').value='';
+  document.getElementById('add-email').value='';
+  if (!state.deptData?.departments?.length) {
+    const { data } = await api('/api/org/overview');
+    if (data.ok) state.deptData = data;
+  }
+  const manageIds = state.deptData?.manage_dept_ids || [];
+  const depts = (state.deptData?.departments||[]).filter(d => manageIds.includes(d.id));
+  if (depts.length) {
+    document.getElementById('add-dept-wrap').style.display='block';
+    document.getElementById('add-dept').innerHTML = depts.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+  } else document.getElementById('add-dept-wrap').style.display='none';
+  openModal('m-add');
+}
+function pickPersonType(el){
+  document.querySelectorAll('#add-ptype div').forEach(d => d.classList.remove('on'));
+  el.classList.add('on');
+  state.addPersonType = el.dataset.t;
+}
+async function previewUser(){
+  const name = document.getElementById('add-name').value.trim();
+  if (!name) { document.getElementById('add-username').value=''; document.getElementById('add-user-hint').textContent=''; return; }
+  const { data } = await api('/api/username/preview', { method:'POST', body: JSON.stringify({ display_name:name }) });
+  if (data.ok) {
+    document.getElementById('add-username').value = data.username;
+    document.getElementById('add-user-hint').textContent =
+      data.username!==data.pinyin_base ? `拼音 ${data.pinyin_base} 已占用，已建议 ${data.username}，仍可改` : '可编辑确认后创建';
+  }
+}
+async function submitAdd(){
+  const body = {
+    display_name: document.getElementById('add-name').value.trim(),
+    username: document.getElementById('add-username').value.trim(),
+    phone: document.getElementById('add-phone').value.trim(),
+    email: document.getElementById('add-email').value.trim(),
+    role: document.getElementById('add-role').value,
+    dept_id: document.getElementById('add-dept')?.value,
+    person_type: state.addPersonType || 'internal',
+  };
+  const { data } = await api('/api/dept/members', { method:'POST', body: JSON.stringify(body) });
+  if (!data.ok) return toast(data.error);
+  toast(data.message); closeModal('m-add'); renderMain();
+}
+function openImport(){
+  document.getElementById('import-csv').value = '周九,13900000009,zhoujiu@lecoo.com\n吴十,13900000010,wushi@lecoo.com';
+  openModal('m-import');
+}
+async function submitImport(){
+  const { data } = await api('/api/dept/members/import', {
+    method:'POST',
+    body: JSON.stringify({ csv: document.getElementById('import-csv').value, dept_id: state.deptFilter || undefined })
+  });
+  if (!data.ok) return toast(data.error);
+  toast(`已导入 ${data.count} 人：` + data.created.map(c=>c.username).join(', '));
+  closeModal('m-import'); renderMain();
+}
+async function batchAct(action){
+  const ids = [...state.selectedIds];
+  if (!ids.length) return toast('请先勾选人员');
+  const system_code = action==='mark_sensitive' ? 'laiku_erp' : 'oa';
+  const { data } = await api('/api/dept/members/batch', {
+    method:'POST', body: JSON.stringify({ user_ids: ids, action, system_code })
+  });
+  if (!data.ok) return toast(data.error);
+  toast(`已更新 ${data.updated} 人`); state.selectedIds.clear(); renderMain();
+}
+
+async function loadAdminSystems(el, title){
+  // AI-GEN-BEGIN
+  el.innerHTML = `<div class="ptitle">${title}</div><div class="note">加载中…</div>`;
+  const { data } = await api('/api/my-systems');
+  if (!data.ok) { el.innerHTML = `<div class="ptitle">${title}</div><div class="warn">${data.error}</div>`; return; }
+  state.adminSystems = data.systems || [];
+  state.ownerCandidates = data.owner_candidates || [];
+  state.isSysSuper = !!data.is_super;
+  const viewMode = state.sysPermView || 'list';
+  const permQ = (state.sysPermQ || '').trim().toLowerCase();
+  const focusId = state.sysFocusId || (state.adminSystems[0] && state.adminSystems[0].id);
+  const focus = state.adminSystems.find(s => String(s.id)===String(focusId)) || state.adminSystems[0];
+  const allPerms = (focus && focus.permissions) || [];
+  const filterPerm = (p) => {
+    if (!permQ) return true;
+    const hay = `${p.perm_code||''} ${p.perm_name||''} ${p.description||''}`.toLowerCase();
+    return hay.includes(permQ);
+  };
+  const filtered = allPerms.filter(filterPerm);
+  const parentName = (pid) => {
+    const p = allPerms.find(x => x.id === pid);
+    return p ? p.perm_name : '—';
+  };
+  const matchSelfOrDesc = (p) => {
+    if (!permQ) return true;
+    if (filterPerm(p)) return true;
+    const kids = allPerms.filter(x => x.parent_id === p.id);
+    return kids.some(matchSelfOrDesc);
+  };
+  const buildPermOrgTree = (perms) => {
+    const byParent = {};
+    (perms||[]).forEach(p => {
+      const k = p.parent_id == null ? 'root' : String(p.parent_id);
+      (byParent[k] = byParent[k] || []).push(p);
+    });
+    const collapsed = state.sysPermCollapsed || {};
+    const walk = (pid, depth) => {
+      const key = pid == null ? 'root' : String(pid);
+      return (byParent[key]||[]).filter(matchSelfOrDesc).map(p => {
+        const hasKids = (byParent[String(p.id)]||[]).length > 0;
+        const isCollapsed = !!collapsed[p.id];
+        return `
+          <div class="node ${hasKids?'':'leaf'}" style="padding-left:${6+depth*2}px"
+            onclick="event.stopPropagation(); ${hasKids?`toggleSysPermNode(${p.id})`:''}">
+            ${hasKids
+              ? `<span style="width:14px;display:inline-block;color:var(--muted)">${isCollapsed?'▸':'▾'}</span>`
+              : `<span style="width:14px;display:inline-block"></span>`}
+            <b>${p.perm_name}</b>
+            <code class="note">${p.perm_code}</code>
+            <span class="pill p-gray">目录</span>
+            <span class="pill ${p.enabled?'p-green':'p-orange'}">${p.enabled?'可申请':'停用'}</span>
+          </div>
+          ${hasKids && !isCollapsed ? `<div class="kids">${walk(p.id, depth+1)}</div>` : ''}
+        `;
+      }).join('');
+    };
+    return walk(null, 0) || '<div class="note" style="padding:8px">暂无权限项</div>';
+  };
+  const ownersLabel = (s) => {
+    const os = s.owners || [];
+    if (!os.length) return '<span class="note">未指定</span>';
+    return os.map(o => `${o.display_name}`).join('、');
+  };
+  const canEdit = !!(focus && (focus.can_manage || state.isSysSuper)) && (hasBtn('sys_perm_edit') || hasBtn('manage_systems') || state.isSysSuper);
+  const canAddSys = hasBtn('sys_add') || state.isSysSuper;
+  const detailTab = state.sysDetailTab || 'status';
+  const acctQ = (state.sysAcctQ || '').trim().toLowerCase();
+  const accounts = (focus && focus.accounts) || [];
+  const loginAccts = (focus && focus.login_accounts) || [];
+  const filterAcct = (a) => {
+    if (!acctQ) return true;
+    const hay = `${a.account_name||''} ${a.display_name||''} ${a.phone||''} ${a.email||''} ${a.itcode||''} ${a.leuc_name||''} ${a.leuc_username||''}`.toLowerCase();
+    return hay.includes(acctQ);
+  };
+  const filteredAccts = accounts.filter(filterAcct);
+  const tabBtn = (id, label, count) =>
+    `<button class="btn btn-sm ${detailTab===id?'btn-pri':'btn-line'}" style="width:auto"
+      onclick="state.sysDetailTab='${id}';renderMain()">${label}${count!=null?` (${count})`:''}</button>`;
+  const statusCard = focus ? `
+        <div class="card" style="margin-bottom:12px">
+          <h4>当前状态 · ${focus.name} <span class="note">${focus.code}</span>
+            ${focus.can_manage?'':'<span class="pill p-gray">只读</span>'}</h4>
+          <div class="kv"><span class="lab">系统状态</span>
+            <b>${focus.status==='enabled'?'<span class="pill p-green">启用中</span>':'<span class="pill p-orange">已禁用</span>'}</b>
+            ${canEdit?`<button class="btn btn-sm btn-line" onclick="toggleSys(${focus.id},'${focus.status==='enabled'?'disabled':'enabled'}')">${focus.status==='enabled'?'禁用系统':'启用系统'}</button>`:''}
+          </div>
+          <div class="kv"><span class="lab">准入方式</span><b>${focus.access_mode==='open'?'全员登录':'需账号绑定'}</b></div>
+          <div class="kv"><span class="lab">系统管理员</span>
+            <b>${ownersLabel(focus)}</b>
+            ${state.isSysSuper?`<button class="btn btn-sm btn-line" onclick="openEditSysOwners(${focus.id})">指定管理员</button>`:''}
+          </div>
+          <div class="kv"><span class="lab">外部人员登录</span>
+            <b>${focus.forbid_external?'禁止':'允许'}</b>
+            ${canEdit?`<button class="btn btn-sm btn-line" onclick="toggleForbidExt(${focus.id},${focus.forbid_external?0:1})">${focus.forbid_external?'允许外部':'禁止外部'}</button>`:''}
+          </div>
+          <div class="kv"><span class="lab">是否有敏感权限</span>
+            <b>${focus.has_sensitive?'有':'无'}</b>
+            ${canEdit?`<button class="btn btn-sm btn-line" onclick="toggleHasSensitive(${focus.id},${focus.has_sensitive?0:1})">${focus.has_sensitive?'设为无':'设为有'}</button>`:''}
+          </div>
+          <div class="kv"><span class="lab">client_id</span>
+            <code id="sys-cid-${focus.id}">${focus.client_id}</code>
+            ${canEdit?`<button class="btn btn-sm btn-line" onclick="copyText(document.getElementById('sys-cid-${focus.id}').textContent)">复制</button>`:''}
+          </div>
+          <div class="kv"><span class="lab">client_secret</span>
+            <code id="sys-sec-${focus.id}">${(state.revealedSecrets&&state.revealedSecrets[focus.id])||focus.client_secret_masked||'••••••••'}</code>
+            ${canEdit?`<button class="btn btn-sm btn-line" onclick="revealSysSecret(${focus.id})">查看</button>
+            <button class="btn btn-sm btn-line" onclick="copySysSecret(${focus.id})">复制</button>
+            <button class="btn btn-sm btn-line" onclick="rotateSecret(${focus.id})">轮换</button>`:''}
+          </div>
+          <div class="note" style="margin-top:10px">
+            账号池 <b>${focus.account_pool_count||0}</b>
+            · 已绑定 <b>${focus.account_bound_count||0}</b>
+            · 无归属 <b>${focus.account_unbound_count||0}</b>
+            · LEUC 开通 <b>${loginAccts.length}</b>
+            · 权限 <b>${allPerms.length}</b>
+          </div>
+        </div>` : '';
+  const accountsCard = focus ? `
+        <div class="card" style="margin-bottom:12px">
+          <h4>全部账户 <span class="note">子系统账号池</span>
+            <span class="pill p-blue">${accounts.length}</span>
+            <span class="pill p-green">已绑 ${focus.account_bound_count||0}</span>
+            <span class="pill p-orange">无归属 ${focus.account_unbound_count||0}</span>
+          </h4>
+          <div class="toolbar" style="margin-bottom:10px">
+            <input id="sys-acct-q" type="search" placeholder="搜索账号/姓名/手机/邮箱/LEUC…"
+              value="${(state.sysAcctQ||'').replace(/"/g,'&quot;')}"
+              style="flex:1;min-width:180px;padding:8px 10px;border:1px solid var(--line);border-radius:8px"
+              onkeydown="if(event.key==='Enter'){state.sysAcctQ=this.value;renderMain()}">
+            <button class="btn btn-sm btn-line" onclick="state.sysAcctQ=document.getElementById('sys-acct-q').value;renderMain()">查询</button>
+            ${acctQ?`<button class="btn btn-sm btn-line" onclick="state.sysAcctQ='';renderMain()">清空</button>`:''}
+            <button class="btn btn-sm btn-line" onclick="nav('sys_accounts')">去账号管理</button>
+          </div>
+          <div style="max-height:42vh;overflow:auto">
+            <table>
+              <thead><tr>
+                <th>子系统账号</th><th>姓名</th><th>手机</th><th>邮箱</th><th>itcode</th>
+                <th>来源</th><th>绑定状态</th><th>归属 LEUC</th>
+              </tr></thead>
+              <tbody>${filteredAccts.length?filteredAccts.map(a=>`<tr>
+                <td><code>${a.account_name}</code></td>
+                <td>${a.display_name||'-'}</td>
+                <td>${a.phone||'-'}</td>
+                <td>${a.email||'-'}</td>
+                <td>${a.itcode||'-'}</td>
+                <td>${a.source||'-'}</td>
+                <td><span class="pill ${a.bound?'p-green':'p-orange'}">${a.bind_label||(a.bound?'已绑定':'无归属')}</span></td>
+                <td>${a.bound?`${a.leuc_name||''}（${a.leuc_username||''}）`:'<span class="note">—</span>'}</td>
+              </tr>`).join(''):`<tr><td colspan="8" class="note">${accounts.length?'无匹配账号':'暂无子系统账号'}</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+          <h4 style="margin-top:16px">LEUC 已开通账号 <span class="pill p-blue">${loginAccts.length}</span></h4>
+          <div style="max-height:28vh;overflow:auto">
+            <table>
+              <thead><tr><th>LEUC 用户</th><th>系统账号</th><th>标签</th><th>可登录</th><th>敏感</th><th>权限摘要</th></tr></thead>
+              <tbody>${loginAccts.length?loginAccts.map(a=>`<tr>
+                <td>${a.leuc_name}（${a.leuc_username}）</td>
+                <td><code>${a.account_name}</code></td>
+                <td>${a.account_label||'-'}</td>
+                <td>${a.can_login?'<span class="pill p-green">是</span>':'<span class="pill p-gray">否</span>'}</td>
+                <td>${a.has_sensitive?'<span class="pill p-red">有</span>':'—'}</td>
+                <td class="note">${a.perm_summary||''}</td>
+              </tr>`).join(''):'<tr><td colspan="6" class="note">暂无 LEUC 开通记录</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>` : '';
+  const permsCard = focus ? `
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+            <h4 style="margin:0">全部权限 <span class="note">可申请权限目录</span>
+              <span class="pill p-blue">${allPerms.length}</span></h4>
+            <div class="toolbar" style="margin:0">
+              <button class="btn btn-sm ${viewMode==='list'?'btn-pri':'btn-line'}" style="width:auto"
+                onclick="state.sysPermView='list';renderMain()">列表查询</button>
+              <button class="btn btn-sm ${viewMode==='tree'?'btn-pri':'btn-line'}" style="width:auto"
+                onclick="state.sysPermView='tree';renderMain()">树状查看</button>
+            </div>
+          </div>
+          <div class="toolbar" style="margin-bottom:10px">
+            <input id="sys-perm-q" type="search" placeholder="按编码 / 名称查询…"
+              value="${(state.sysPermQ||'').replace(/"/g,'&quot;')}"
+              style="flex:1;min-width:180px;padding:8px 10px;border:1px solid var(--line);border-radius:8px"
+              onkeydown="if(event.key==='Enter'){state.sysPermQ=this.value;renderMain()}">
+            <button class="btn btn-sm btn-line" onclick="state.sysPermQ=document.getElementById('sys-perm-q').value;renderMain()">查询</button>
+            ${permQ?`<button class="btn btn-sm btn-line" onclick="state.sysPermQ='';renderMain()">清空</button>`:''}
+            ${viewMode==='tree'?`<button class="btn btn-sm btn-line" onclick="expandAllSysPerm(true)">全部展开</button>
+              <button class="btn btn-sm btn-line" onclick="expandAllSysPerm(false)">全部收起</button>`:''}
+          </div>
+          ${viewMode==='tree' ? `
+            <div class="org-tree" style="max-height:48vh;border:0;padding:0;background:transparent">
+              ${buildPermOrgTree(allPerms)}
+            </div>` : `
+            <table>
+              <thead><tr><th>编码</th><th>名称</th><th>类型</th><th>上级</th><th>状态</th></tr></thead>
+              <tbody>${filtered.length?filtered.map(p=>`<tr>
+                  <td><code>${p.perm_code}</code></td>
+                  <td>${p.perm_name}${p.description?`<div class="note">${p.description}</div>`:''}</td>
+                  <td><span class="pill p-gray">目录</span></td>
+                  <td>${p.parent_id!=null?parentName(p.parent_id):'—'}</td>
+                  <td>${p.enabled?'<span class="pill p-green">可申请</span>':'<span class="pill p-orange">停用</span>'}</td>
+                </tr>`).join(''):`<tr><td colspan="5" class="note">${allPerms.length?'无匹配权限':'暂无权限项'}</td></tr>`}
+              </tbody>
+            </table>`}
+          <div class="toolbar" style="margin-top:10px">
+            ${canEdit?`<button class="btn btn-sm btn-line" onclick="syncSysPerms(${focus.id})">同步权限目录</button>
+            <button class="btn btn-sm btn-line" onclick="openImportSysPerms(${focus.id})">导入权限</button>
+            <button class="btn btn-sm btn-line" onclick="openAddSysPerm(${focus.id})">添加权限项</button>`:''}
+            <span class="note">${viewMode==='list'?`列表 ${filtered.length}/${allPerms.length}`:`树状 · 共 ${allPerms.length} 项`} · 与敏感复选框无关</span>
+          </div>
+        </div>` : '';
+  el.innerHTML = `
+    <div class="ptitle">${title} <span class="pill p-blue">OIDC</span>
+      <span class="pill p-gray">${(data.systems||[]).length} 个系统</span></div>
+    <div class="callout"><strong>可登录系统目录</strong>：查看每个系统的<strong>当前状态</strong>、<strong>全部账户</strong>、<strong>全部权限</strong>。
+      账号申请读取启用系统列表。仅系统管理员 / 超管可见。
+      Issuer：<code>${data.issuer}</code></div>
+    <div class="toolbar">
+      ${canAddSys?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openAddSys()">添加系统</button>`:''}
+      <button class="btn btn-sm btn-line" onclick="nav('sys_accounts')">系统账号管理</button>
+    </div>
+    <div class="org-layout">
+      <div class="org-tree" style="max-height:70vh">
+        <div class="note" style="margin-bottom:6px">全部可登录系统</div>
+        ${(data.systems||[]).map(s=>`
+          <div class="node ${String(s.id)===String(focus&&focus.id)?'on':''}"
+            onclick="state.sysFocusId=${s.id};state.sysPermQ='';state.sysAcctQ='';renderMain()">
+            <b>${s.name}</b>
+            ${s.status!=='enabled'?'<span class="pill p-orange">禁用</span>':''}
+            ${s.can_manage?'<span class="mgmt">我管</span>':''}
+            <span class="note" style="margin-left:auto">${s.account_pool_count||0}账 · ${(s.permissions||[]).length}权</span>
+          </div>`).join('')||'<div class="note">暂无系统</div>'}
+      </div>
+      <div>
+        ${focus ? `
+        <div class="toolbar" style="margin-bottom:12px">
+          ${tabBtn('status','当前状态')}
+          ${tabBtn('accounts','全部账户', accounts.length)}
+          ${tabBtn('perms','全部权限', allPerms.length)}
+        </div>
+        ${detailTab==='accounts' ? accountsCard : (detailTab==='perms' ? permsCard : statusCard)}
+        ` : '<div class="note">请选择左侧系统</div>'}
+      </div>
+    </div>`;
+  // AI-GEN-END
+}
+function toggleSysPermNode(id){
+  if (!state.sysPermCollapsed) state.sysPermCollapsed = {};
+  state.sysPermCollapsed[id] = !state.sysPermCollapsed[id];
+  renderMain();
+}
+function expandAllSysPerm(expand){
+  const focus = (state.adminSystems||[]).find(s => String(s.id)===String(state.sysFocusId))
+    || (state.adminSystems||[])[0];
+  const map = {};
+  if (!expand && focus) {
+    (focus.permissions||[]).forEach(p => {
+      const hasKids = (focus.permissions||[]).some(x => x.parent_id === p.id);
+      if (hasKids) map[p.id] = true;
+    });
+  }
+  state.sysPermCollapsed = map;
+  renderMain();
+}
+function renderOwnerChecks(selectedIds, boxId){
+  const cands = state.ownerCandidates || [];
+  const sel = new Set((selectedIds||[]).map(Number));
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  box.innerHTML = cands.length ? cands.map(c => `
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin:4px 0;cursor:pointer">
+      <input type="checkbox" class="sys-owner-cb" value="${c.id}" ${sel.has(c.id)?'checked':''}>
+      ${c.display_name}（${c.username}）
+      <span class="pill ${c.role==='system_owner'?'p-blue':'p-gray'}">${c.role==='system_owner'?'系统管理员':'超管'}</span>
+    </label>`).join('') : '<div class="note">暂无系统管理员角色用户</div>';
+}
+function collectOwnerIds(boxId){
+  return [...document.querySelectorAll('#'+boxId+' .sys-owner-cb:checked')].map(el => Number(el.value));
+}
+async function openEditSysOwners(sid){
+  if (!state.isSysSuper) return toast('仅超级管理员可指定');
+  const sys = (state.adminSystems||[]).find(s => s.id === sid);
+  if (!sys) return;
+  state._editOwnerSid = sid;
+  document.getElementById('sec-modal-title').textContent = '指定系统管理员 · ' + sys.name;
+  document.getElementById('sec-modal-hint').textContent = '可勾选多名；账号申请/绑定确认由系统管理员处理。';
+  document.getElementById('sec-modal-body').innerHTML = `<div id="edit-owners-box" style="max-height:280px;overflow:auto"></div>`;
+  renderOwnerChecks(sys.owner_user_ids || [], 'edit-owners-box');
+  secModalMode = 'sys_owners';
+  const modal = document.querySelector('#m-sec .modal');
+  if (modal) modal.style.maxWidth = '480px';
+  openModal('m-sec');
+}
+async function toggleHasSensitive(id, flag){
+  const { data } = await api('/api/admin/systems/'+id+'/has-sensitive', {
+    method:'POST', body: JSON.stringify({ has_sensitive: !!flag })
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message); renderMain();
+}
+async function toggleForbidExt(id, forbid){
+  const { data } = await api('/api/admin/systems/'+id+'/forbid-external', {
+    method:'POST', body: JSON.stringify({ forbid_external: !!forbid })
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message); renderMain();
+}
+
+async function renderSysAccounts(el){
+  // AI-GEN-BEGIN
+  el.innerHTML = `<div class="ptitle">系统账号管理</div><div class="note">加载中…</div>`;
+  if (!state.acctOv) state.acctOv = { system_id:'', unbound_only:false, q:'' };
+  // 与旧筛选兼容
+  if (state.sysAcctFilter && !state.acctOv.system_id) state.acctOv.system_id = state.sysAcctFilter;
+  const f = state.acctOv;
+  const qs = new URLSearchParams();
+  if (f.system_id) qs.set('system_id', f.system_id);
+  if (f.unbound_only) qs.set('unbound_only', '1');
+  if (f.q) qs.set('q', f.q);
+  const [{ data: ov }, { data: cat }] = await Promise.all([
+    api('/api/sys-accounts/overview' + (f.system_id ? '?system_id=' + encodeURIComponent(f.system_id) : '')),
+    api('/api/sys-accounts/catalog?' + qs.toString()),
+  ]);
+  if (!ov.ok) { el.innerHTML = `<div class="ptitle">系统账号管理</div><div class="warn">${ov.error}</div>`; return; }
+  if (!cat.ok) { el.innerHTML = `<div class="ptitle">系统账号管理</div><div class="warn">${cat.error}</div>`; return; }
+  state.sysAcctData = ov;
+  const st = cat.stats || {};
+  const sysOpts = (cat.systems||ov.systems||[]).map(s =>
+    `<option value="${s.id}" ${String(s.id)===String(f.system_id)?'selected':''}>${s.name}</option>`).join('');
+  const bySys = (cat.by_system||[]).map(s => `
+    <div class="sys-block" style="margin-bottom:8px">
+      <div class="hd"><b>${s.name}</b>
+        <span>
+          <span class="pill p-blue">共 ${s.total}</span>
+          <span class="pill p-green">已绑 ${s.bound}</span>
+          <span class="pill ${s.unbound?'p-orange':'p-gray'}">无归属 ${s.unbound}</span>
+        </span>
+      </div>
+    </div>`).join('') || '<div class="note">暂无系统</div>';
+  el.innerHTML = `
+    <div class="ptitle">系统账号管理
+      <span class="pill p-orange">待确认 ${(ov.grants||[]).length}</span>
+      <span class="pill p-blue">全部 ${st.total||0}</span>
+      <span class="pill p-green">已绑定 ${st.bound||0}</span>
+      <span class="pill p-orange">无归属 ${st.unbound||0}</span>
+    </div>
+    <div class="callout">统一管理子系统账号池：同步/导入、确认绑定，并查看全部账号绑定情况。
+      匹配字段：${(ov.match_fields||[]).join(' / ')}。</div>
+    <div class="toolbar">
+      <select id="sa-sys" onchange="state.acctOv.system_id=this.value;state.sysAcctFilter=this.value;renderMain()">
+        <option value="">全部系统</option>${sysOpts}</select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+        <input type="checkbox" ${f.unbound_only?'checked':''}
+          onchange="state.acctOv.unbound_only=this.checked;renderMain()">
+        仅看无归属
+      </label>
+      <input id="sa-q" value="${(f.q||'').replace(/"/g,'&quot;')}" placeholder="搜索账号/姓名/手机/邮箱/LEUC"
+        style="width:200px" onkeydown="if(event.key==='Enter'){state.acctOv.q=this.value.trim();renderMain()}">
+      <button class="btn btn-sm btn-line" onclick="state.acctOv.q=document.getElementById('sa-q').value.trim();renderMain()">查询</button>
+      <button class="btn btn-sm btn-line" onclick="state.acctOv={system_id:'',unbound_only:false,q:''};state.sysAcctFilter='';renderMain()">重置</button>
+      ${(hasBtn('sys_acct_sync')||state.isSysSuper)?`<button class="btn btn-sm btn-line" onclick="saSync()">模拟同步</button>
+      <button class="btn btn-sm btn-line" onclick="openSaImport()">导入账号</button>`:''}
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <h4>分系统汇总</h4>
+      ${bySys}
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <h4>待确认账号申请 <span class="pill p-orange">${(ov.grants||[]).length}</span></h4>
+      ${(ov.grants||[]).length ? (ov.grants||[]).map(g => `
+        <div class="sys-block" style="margin-bottom:10px">
+          <div class="hd">
+            <b>${g.leuc_name}</b>（${g.leuc_username}）→ <b>${g.system_name}</b>
+            <span class="pill p-orange">待确认</span>
+          </div>
+          <div class="note">LEUC：手机 ${g.leuc_phone||'-'} · 邮箱 ${g.leuc_email||'-'} · itcode ${g.leuc_itcode||'-'}</div>
+          <div style="margin-top:8px;font-size:13px">
+            ${(g.matches||[]).length ? g.matches.map((m,i)=>`
+              <label style="display:flex;gap:8px;align-items:center;padding:4px 0;cursor:pointer">
+                <input type="radio" name="g${g.id}" value="${m.account_id}" ${i===0?'checked':''}>
+                <code>${m.account_name}</code> ${m.display_name||''}
+                <span class="pill p-blue">${(m.hits||[]).join('+')||'候选'}</span>
+                <span class="note">分 ${m.score}</span>
+              </label>`).join('') : '<div class="warn">无匹配账号 — 可新建绑定</div>'}
+          </div>
+          <div class="toolbar" style="margin-top:8px">
+            <button class="btn btn-sm btn-pri" style="width:auto" onclick="saConfirm(${g.id},false)">确认绑定</button>
+            <button class="btn btn-sm btn-line" onclick="saConfirm(${g.id},true)">新建并绑定</button>
+            <button class="btn btn-sm btn-line" onclick="saReject(${g.id})">驳回</button>
+          </div>
+        </div>`).join('') : '<div class="note">暂无待确认申请</div>'}
+    </div>
+    <div class="card" style="padding:0;overflow:auto">
+      <h4 style="padding:14px 14px 0">子系统账号池 <span class="note">当前列出 ${st.filtered||0}</span></h4>
+      <table>
+        <thead><tr>
+          <th>系统</th><th>子系统账号</th><th>姓名</th><th>手机</th><th>邮箱</th><th>itcode</th>
+          <th>来源</th><th>绑定状态</th><th>归属 LEUC</th>
+        </tr></thead>
+        <tbody>${(cat.accounts||[]).length ? cat.accounts.map(a => `
+          <tr>
+            <td>${a.system_name}<div class="note" style="margin:0">${a.system_code||''}</div></td>
+            <td><code>${a.account_name}</code></td>
+            <td>${a.display_name||'-'}</td>
+            <td>${a.phone||'-'}</td>
+            <td>${a.email||'-'}</td>
+            <td>${a.itcode||'-'}</td>
+            <td>${a.source||'-'}</td>
+            <td><span class="pill ${a.bound?'p-green':'p-orange'}">${a.bind_label||(a.bound?'已绑定':'无归属')}</span></td>
+            <td>${a.bound?`${a.leuc_name||''}（${a.leuc_username||''}）`:'<span class="note">—</span>'}</td>
+          </tr>`).join('') : '<tr><td colspan="9" class="note">无匹配账号，可同步或导入</td></tr>'}
+        </tbody>
+      </table>
+    </div>`;
+  // AI-GEN-END
+}
+
+// AI-GEN-BEGIN
+async function renderOaForms(el){
+  el.innerHTML = `<div class="ptitle">OA单据</div><div class="note">加载中…</div>`;
+  const { data } = await api('/api/oa/forms');
+  if (!data.ok) { el.innerHTML = `<div class="ptitle">OA单据</div><div class="warn">${data.error}</div>`; return; }
+  const statusPill = (s) => {
+    const map = {
+      received:'p-blue', processing:'p-orange', done:'p-green', rejected:'p-gray',
+      pending_bind:'p-orange', pending_close:'p-orange', pending_create_user:'p-red',
+      pending:'p-orange', skipped:'p-gray',
+    };
+    return `<span class="pill ${map[s]||'p-gray'}">${s}</span>`;
+  };
+  const typeLabel = (t) => t === 'leave' ? '北森注销' : '账号申请';
+  el.innerHTML = `
+    <div class="ptitle">OA单据 <span class="pill p-blue">${(data.forms||[]).length}</span></div>
+    <!-- AI-GEN-BEGIN -->
+    <div class="callout">
+      <strong>账号申请</strong>：OA 审批通过后接单 → 匹配到人则发起<strong>账号申请</strong>待办；匹配不到则人事<strong>新建人员</strong>后再申请。<br>
+      <strong>注销</strong>：北森单据通过后<strong>系统直接关闭</strong>各关联账号（不经系统负责人待办）；人员未匹配则派人人事核对。
+    </div>
+    <div class="toolbar">
+      <button class="btn btn-sm btn-pri" style="width:auto" onclick="oaSimApply('mixed')">模拟账号申请通过（混合）</button>
+      <button class="btn btn-sm btn-line" onclick="oaSimApply('existing')">模拟：已知人申请</button>
+      <button class="btn btn-sm btn-line" onclick="oaSimApply('new_person')">模拟：新人申请</button>
+      <button class="btn btn-sm btn-pri" style="width:auto" onclick="oaSimLeave('lisi')">模拟北森注销（李四·直关）</button>
+      <button class="btn btn-sm btn-line" onclick="oaSimLeave('unknown')">模拟北森注销（未匹配人）</button>
+    </div>
+    <!-- AI-GEN-END -->
+    ${(data.forms||[]).length ? data.forms.map(f => `
+      <div class="card" style="margin-bottom:12px">
+        <div class="hd" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <div>
+            <b>${typeLabel(f.form_type)}</b> · <code>${f.oa_form_no}</code>
+            ${statusPill(f.status)}
+          </div>
+          <div class="note">${f.approved_at || f.created_at || ''}</div>
+        </div>
+        <div class="note" style="margin:6px 0">${f.title || ''} · 申请人 ${f.applicant_name || '-'} · OA编码 ${f.oa_person_code || '-'}
+          ${f.leuc_name?` · LEUC ${f.leuc_name}（${f.leuc_username}）`:''}</div>
+        <table>
+          <thead><tr>
+            <th>系统</th><th>需求分类</th><th>申请人</th><th>OA编码</th><th>岗位</th><th>处理状态</th><th>备注</th>
+          </tr></thead>
+          <tbody>${(f.lines||[]).map(l => `
+            <tr>
+              <td>${l.system_name || l.system_code || '-'}</td>
+              <td>${l.req_category || '-'}</td>
+              <td>${l.applicant_name || '-'}</td>
+              <td><code>${l.oa_person_code || '-'}</code></td>
+              <td>${l.applicant_job || '-'}</td>
+              <td>${statusPill(l.handle_status)}</td>
+              <td class="note">${l.remark || ''}</td>
+            </tr>`).join('') || '<tr><td colspan="7" class="note">无明细</td></tr>'}
+          </tbody>
+        </table>
+      </div>`).join('') : '<div class="card note">暂无单据，请点上方按钮模拟 OA 审批通过</div>'}
+  `;
+}
+async function oaSimApply(scenario){
+  const { data } = await api('/api/oa/simulate-account-apply', {
+    method:'POST', body: JSON.stringify({ scenario })
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  renderMain();
+}
+async function oaSimLeave(who){
+  const body = who === 'unknown'
+    ? { oa_person_code: 'E-LEAVE-X', applicant_name: '离职未知人' }
+    : { oa_person_code: 'lisi', applicant_name: '李四' };
+  const { data } = await api('/api/oa/simulate-leave', { method:'POST', body: JSON.stringify(body) });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  renderMain();
+}
+// AI-GEN-END
+
+async function saConfirm(grantId, createNew){
+  const sel = document.querySelector(`input[name="g${grantId}"]:checked`);
+  const body = { grant_id: grantId, create_new: !!createNew };
+  if (!createNew && sel) body.account_id = Number(sel.value);
+  if (createNew) {
+    const name = prompt('新建子系统账号名', 'new_acct');
+    if (!name) return;
+    body.account_name = name;
+  }
+  const { data } = await api('/api/sys-accounts/confirm-bind', { method:'POST', body: JSON.stringify(body) });
+  if (!data.ok) return toast(data.error);
+  toast(data.message); renderMain();
+}
+async function saReject(grantId){
+  const { data } = await api('/api/sys-accounts/reject', { method:'POST', body: JSON.stringify({ grant_id: grantId }) });
+  if (!data.ok) return toast(data.error);
+  toast(data.message); renderMain();
+}
+async function saSync(){
+  const sid = state.sysAcctFilter || state.sysAcctData?.systems?.[0]?.id;
+  if (!sid) return toast('请先选择系统');
+  const { data } = await api('/api/sys-accounts/sync-demo', { method:'POST', body: JSON.stringify({ system_id: Number(sid) }) });
+  if (!data.ok) return toast(data.error);
+  toast(data.message); renderMain();
+}
+function openSaImport(){
+  const sid = state.sysAcctFilter || state.sysAcctData?.systems?.[0]?.id;
+  if (!sid) return toast('请先选择系统');
+  state._importSysId = sid;
+  document.getElementById('sa-import-csv').value = '账号名,姓名,手机,邮箱,itcode\nimp_user1,导入用户,13930000001,imp1@lecoo.com,impu1';
+  openModal('m-sa-import');
+}
+async function submitSaImport(){
+  const { data } = await api('/api/sys-accounts/import', {
+    method:'POST',
+    body: JSON.stringify({ system_id: Number(state._importSysId), csv: document.getElementById('sa-import-csv').value, source:'import' })
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message); closeModal('m-sa-import'); renderMain();
+}
+
+async function revealSysSecret(id){
+  // AI-GEN-BEGIN
+  const { data } = await api('/api/admin/systems/'+id+'/credentials');
+  if (!data.ok) return toast(data.error||'无权限查看');
+  if (!state.revealedSecrets) state.revealedSecrets = {};
+  state.revealedSecrets[id] = data.client_secret;
+  const el = document.getElementById('sys-sec-'+id);
+  if (el) el.textContent = data.client_secret;
+  toast('已显示 client_secret');
+  // AI-GEN-END
+}
+async function copySysSecret(id){
+  // AI-GEN-BEGIN
+  let secret = state.revealedSecrets && state.revealedSecrets[id];
+  if (!secret) {
+    const { data } = await api('/api/admin/systems/'+id+'/credentials');
+    if (!data.ok) return toast(data.error||'无权限');
+    secret = data.client_secret;
+    if (!state.revealedSecrets) state.revealedSecrets = {};
+    state.revealedSecrets[id] = secret;
+    const el = document.getElementById('sys-sec-'+id);
+    if (el) el.textContent = secret;
+  }
+  copyText(secret);
+  // AI-GEN-END
+}
+function copyText(t){
+  if (!t) return toast('无内容');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(t).then(()=>toast('已复制')).catch(()=>toast(t));
+  } else {
+    toast(t);
+  }
+}
+async function rotateSecret(id){
+  // AI-GEN-BEGIN
+  if (!confirm('确认轮换 client_secret？旧 secret 将立即失效。')) return;
+  const { data } = await api('/api/admin/systems/'+id+'/rotate-secret', { method:'POST', body:'{}' });
+  if (!data.ok) return toast(data.error||'失败');
+  if (!state.revealedSecrets) state.revealedSecrets = {};
+  state.revealedSecrets[id] = data.client_secret;
+  const el = document.getElementById('sys-sec-'+id);
+  if (el) el.textContent = data.client_secret;
+  toast('已轮换，新 secret 已显示');
+  // AI-GEN-END
+}
+async function toggleSys(id, status){
+  const { data } = await api('/api/admin/systems/'+id+'/status', { method:'POST', body: JSON.stringify({ status }) });
+  if (!data.ok) return toast(data.error);
+  toast(status==='enabled'?'已启用':'已禁用'); renderMain();
+}
+function openAddSys(){
+  // AI-GEN-BEGIN
+  if (!(hasBtn('sys_add') || state.isSysSuper)) return toast('无「添加系统」按钮权限');
+  state.sysAccessMode = 'apply';
+  document.querySelectorAll('#sys-mode div').forEach(d => d.classList.toggle('on', d.dataset.m==='apply'));
+  const fe = document.getElementById('sys-forbid-ext');
+  if (fe) fe.checked = false;
+  document.getElementById('sys-name').value = '';
+  document.getElementById('sys-code').value = '';
+  document.getElementById('sys-client').value = '';
+  renderOwnerChecks([], 'sys-owners-box');
+  openModal('m-add-sys');
+  // AI-GEN-END
+}
+function pickSysMode(el){
+  document.querySelectorAll('#sys-mode div').forEach(d => d.classList.remove('on'));
+  el.classList.add('on');
+  state.sysAccessMode = el.dataset.m;
+}
+async function submitAddSys(){
+  // AI-GEN-BEGIN
+  const body = {
+    name: document.getElementById('sys-name').value.trim(),
+    code: document.getElementById('sys-code').value.trim(),
+    client_id: document.getElementById('sys-client').value.trim() || undefined,
+    redirect_uris: document.getElementById('sys-cb').value.trim(),
+    require_pkce: true,
+    access_mode: state.sysAccessMode || 'apply',
+    forbid_external: !!document.getElementById('sys-forbid-ext')?.checked,
+    owner_user_ids: collectOwnerIds('sys-owners-box'),
+  };
+  const { data } = await api('/api/admin/systems', { method:'POST', body: JSON.stringify(body) });
+  if (!data.ok) return toast(data.error);
+  toast(data.message + ' secret=' + data.client_secret);
+  closeModal('m-add-sys'); renderMain();
+  // AI-GEN-END
+}
+async function submitSysOwners(){
+  // AI-GEN-BEGIN
+  const sid = state._editOwnerSid;
+  if (!sid) return;
+  const ids = collectOwnerIds('edit-owners-box');
+  const { data } = await api('/api/admin/systems/'+sid+'/owners', {
+    method:'POST', body: JSON.stringify({ owner_user_ids: ids })
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  closeModal('m-sec');
+  state._editOwnerSid = null;
+  renderMain();
+  // AI-GEN-END
+}
+
+
+async function syncSysPerms(sid){
+  // AI-GEN-BEGIN
+  const { data } = await api('/api/admin/systems/'+sid+'/perms/sync-demo', { method:'POST', body:'{}' });
+  if (!data.ok) return toast(data.error);
+  toast(data.message); renderMain();
+  // AI-GEN-END
+}
+function openImportSysPerms(sid){
+  // AI-GEN-BEGIN
+  state._importPermSid = sid;
+  document.getElementById('sec-modal-title').textContent = '导入权限目录';
+  document.getElementById('sec-modal-hint').textContent = '每行：编码,名称[,父编码]';
+  document.getElementById('sec-modal-body').innerHTML =
+    `<textarea id="perm-import-csv" rows="8" style="width:100%">编码,名称,父编码
+report,报表中心,
+report_view,报表查看,report
+report_edit,报表编辑,report</textarea>`;
+  secModalMode = 'perm_import';
+  openModal('m-sec');
+  // AI-GEN-END
+}
+function openAddSysPerm(sid){
+  // AI-GEN-BEGIN
+  state._addPermSid = sid;
+  document.getElementById('sec-modal-title').textContent = '添加权限项';
+  document.getElementById('sec-modal-hint').textContent = '写入本系统权限目录（非敏感标记）';
+  document.getElementById('sec-modal-body').innerHTML = `
+    <div class="field"><label>编码</label><input id="ap-code" placeholder="perm_code"></div>
+    <div class="field"><label>名称</label><input id="ap-name" placeholder="权限名称"></div>
+    <div class="field"><label>说明</label><input id="ap-desc" placeholder="可选"></div>`;
+  secModalMode = 'perm_add';
+  openModal('m-sec');
+  // AI-GEN-END
+}
+async function submitPermImport(){
+  const sid = state._importPermSid;
+  const csv = document.getElementById('perm-import-csv')?.value || '';
+  const { data } = await api('/api/admin/systems/'+sid+'/perms/import', {
+    method:'POST', body: JSON.stringify({ csv })
+  });
+  if (!data.ok) return toast(data.error);
+  toast(data.message); closeModal('m-sec'); renderMain();
+}
+async function submitPermAdd(){
+  const sid = state._addPermSid;
+  const body = {
+    system_id: sid,
+    perm_code: document.getElementById('ap-code').value.trim(),
+    perm_name: document.getElementById('ap-name').value.trim(),
+    description: document.getElementById('ap-desc').value.trim(),
+  };
+  const { data } = await api('/api/sensitive/config/defs', { method:'POST', body: JSON.stringify(body) });
+  if (!data.ok) return toast(data.error);
+  toast(data.message); closeModal('m-sec'); renderMain();
+}
+
+async function openBatchGrant(){ return openAccountBind('apply_for'); }
+async function openSelfBind(){ return openAccountBind('apply'); }
+async function submitBatchGrant(){ return submitAccountBind(state._bindMode || 'apply'); }
+
+async function loadOidcApps(){ /* 登录页不再罗列系统，改用 /demo/home */ }
+
+async function startOidc(clientId){
+  const { data } = await api('/api/oidc/start', { method:'POST', body: JSON.stringify({ client_id: clientId }) });
+  if (!data.ok) return toast(data.error||'无法发起');
+  if (data.pkce_verifier) sessionStorage.setItem('pkce_verifier', data.pkce_verifier);
+  if (data.pkce_verifier) sessionStorage.setItem('erp_pkce_verifier', data.pkce_verifier);
+  if (data.authorize_url) {
+    location.href = data.authorize_url;
+    return;
+  }
+  toast(data.message||'已发起');
+}
+
+async function apiLogout(){
+  if (state._chatPollTimer) clearInterval(state._chatPollTimer);
+  document.getElementById('chat-fab-wrap').style.display = 'none';
+  document.getElementById('chat-panel')?.classList.remove('show');
+  document.getElementById('notify-stack').innerHTML = '';
+  await api('/api/logout', { method:'POST', body:'{}' });
+  state.user=null; state.home=null; showPanel('lp-form'); showScreen('login'); markRoleBtn(null);
+}
+async function loadRoleButtons(){
+  const { data } = await api('/api/demo-users');
+  const box = document.getElementById('role-switch');
+  const label = box.querySelector('span');
+  box.innerHTML=''; box.appendChild(label);
+  // AI-GEN-BEGIN
+  (data.users||[]).forEach(u=>{
+    const b=document.createElement('button');
+    b.textContent=u.button_label||u.display_name||u.role_label;
+    b.dataset.user=u.username;
+    b.title=`${u.display_name} · ${u.username} / 123456`;
+    b.onclick=()=>quickRole(u.username);
+    box.appendChild(b);
+  });
+  // AI-GEN-END
+}
+function markRoleBtn(username){
+  document.querySelectorAll('#role-switch button').forEach(b=>b.classList.toggle('on', b.dataset.user===username));
+}
+async function quickRole(username){
+  document.getElementById('username').value=username;
+  const { data } = await api('/api/switch-role', { method:'POST', body: JSON.stringify({ username }) });
+  if (!data.ok) return toast(data.error);
+  toast('已切换为 '+data.user.display_name+'（'+data.user.username+'）');
+  await enterHome();
+}
+
+document.getElementById('username').addEventListener('change', refreshRisk);
+(async function boot(){
+  await loadRoleButtons();
+  await loadOidcApps();
+  setSource('leuc');
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('oidc') === '1' && qs.get('client_id')) {
+    await startOidc(qs.get('client_id'));
+  }
+  const { data } = await api('/api/me');
+  if (data.ok && state.source==='leuc') await enterHome();
+  else await refreshRisk();
+})();
+// AI-GEN-END
+</script>
+<!-- AI-GEN-END -->
+</body>
+</html>
