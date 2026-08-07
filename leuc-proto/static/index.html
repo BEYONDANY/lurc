@@ -5020,7 +5020,9 @@ async function toggleForbidExt(id, forbid){
 async function renderSysAccounts(el){
   // AI-GEN-BEGIN
   el.innerHTML = `<div class="ptitle">系统账号管理</div><div class="note">加载中…</div>`;
-  if (!state.acctOv) state.acctOv = { system_id:'', unbound_only:false, q:'' };
+  if (!state.acctOv) state.acctOv = { system_id:'', unbound_only:false, q:'', page:1, page_size:50 };
+  if (state.acctOv.page == null) state.acctOv.page = 1;
+  if (state.acctOv.page_size == null) state.acctOv.page_size = 50;
   // 与旧筛选兼容
   if (state.sysAcctFilter && !state.acctOv.system_id) state.acctOv.system_id = state.sysAcctFilter;
   const f = state.acctOv;
@@ -5028,24 +5030,27 @@ async function renderSysAccounts(el){
   if (f.system_id) qs.set('system_id', f.system_id);
   if (f.unbound_only) qs.set('unbound_only', '1');
   if (f.q) qs.set('q', f.q);
+  qs.set('page', String(f.page || 1));
+  qs.set('page_size', String(f.page_size || 50));
   const [{ data: ov }, { data: cat }] = await Promise.all([
     api('/api/sys-accounts/overview' + (f.system_id ? '?system_id=' + encodeURIComponent(f.system_id) : '')),
     api('/api/sys-accounts/catalog?' + qs.toString()),
   ]);
   if (!ov.ok) { el.innerHTML = `<div class="ptitle">系统账号管理</div><div class="warn">${ov.error}</div>`; return; }
   if (!cat.ok) { el.innerHTML = `<div class="ptitle">系统账号管理</div><div class="warn">${cat.error}</div>`; return; }
-  // AI-GEN-BEGIN
   state.sysAcctData = {
     ...ov,
     systems: cat.systems || ov.systems || [],
     catalog: cat,
   };
-  // AI-GEN-END
   const st = cat.stats || {};
+  const pg = cat.pagination || { page:1, page_size:50, total:0, total_pages:1 };
+  state.acctOv.page = pg.page;
+  state.acctOv.page_size = pg.page_size;
   const sysOpts = (cat.systems||ov.systems||[]).map(s =>
     `<option value="${s.id}" ${String(s.id)===String(f.system_id)?'selected':''}>${s.name}</option>`).join('');
   const bySys = (cat.by_system||[]).map(s => `
-    <div class="sys-block" style="margin-bottom:8px">
+    <div class="sys-block" style="margin:0">
       <div class="hd"><b>${s.name}</b>
         <span>
           <span class="pill p-blue">共 ${s.total}</span>
@@ -5054,6 +5059,23 @@ async function renderSysAccounts(el){
         </span>
       </div>
     </div>`).join('') || '<div class="note">暂无系统</div>';
+  const fromN = pg.total ? ((pg.page - 1) * pg.page_size + 1) : 0;
+  const toN = Math.min(pg.page * pg.page_size, pg.total);
+  const pageSizes = [20, 50, 100];
+  const pagerHtml = `
+    <div class="pager">
+      <div class="pager-meta">显示 ${fromN}-${toN} / 共 ${pg.total} 条 · 第 ${pg.page}/${pg.total_pages} 页</div>
+      <div class="pager-actions">
+        <span class="note" style="margin:0">每页</span>
+        <select onchange="saSetPageSize(this.value)">
+          ${pageSizes.map(n => `<option value="${n}" ${Number(pg.page_size)===n?'selected':''}>${n}</option>`).join('')}
+        </select>
+        <button class="btn btn-sm btn-line" ${pg.page<=1?'disabled':''} onclick="saGotoPage(1)">首页</button>
+        <button class="btn btn-sm btn-line" ${pg.page<=1?'disabled':''} onclick="saGotoPage(${pg.page-1})">上一页</button>
+        <button class="btn btn-sm btn-line" ${pg.page>=pg.total_pages?'disabled':''} onclick="saGotoPage(${pg.page+1})">下一页</button>
+        <button class="btn btn-sm btn-line" ${pg.page>=pg.total_pages?'disabled':''} onclick="saGotoPage(${pg.total_pages})">末页</button>
+      </div>
+    </div>`;
   el.innerHTML = `
     <div class="ptitle">系统账号管理
       <span class="pill p-orange">待确认 ${(ov.grants||[]).length}</span>
@@ -5066,17 +5088,17 @@ async function renderSysAccounts(el){
       <strong>北森 SSO 只认此处已绑定且可登录的账号</strong>，通讯录里的北森ID不能直接登录。
       匹配字段：${(ov.match_fields||[]).join(' / ')}。</div>
     <div class="toolbar">
-      <select id="sa-sys" onchange="state.acctOv.system_id=this.value;state.sysAcctFilter=this.value;renderMain()">
+      <select id="sa-sys" onchange="state.acctOv.system_id=this.value;state.sysAcctFilter=this.value;state.acctOv.page=1;renderMain()">
         <option value="">全部系统</option>${sysOpts}</select>
       <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
         <input type="checkbox" ${f.unbound_only?'checked':''}
-          onchange="state.acctOv.unbound_only=this.checked;renderMain()">
+          onchange="state.acctOv.unbound_only=this.checked;state.acctOv.page=1;renderMain()">
         仅看无归属
       </label>
       <input id="sa-q" value="${(f.q||'').replace(/"/g,'&quot;')}" placeholder="搜索唯一标识/账号/姓名/手机/邮箱/LEUC"
-        style="width:200px" onkeydown="if(event.key==='Enter'){state.acctOv.q=this.value.trim();renderMain()}">
-      <button class="btn btn-sm btn-line" onclick="state.acctOv.q=document.getElementById('sa-q').value.trim();renderMain()">查询</button>
-      <button class="btn btn-sm btn-line" onclick="state.acctOv={system_id:'',unbound_only:false,q:''};state.sysAcctFilter='';renderMain()">重置</button>
+        style="width:min(280px,40vw)" onkeydown="if(event.key==='Enter'){state.acctOv.q=this.value.trim();state.acctOv.page=1;renderMain()}">
+      <button class="btn btn-sm btn-line" onclick="state.acctOv.q=document.getElementById('sa-q').value.trim();state.acctOv.page=1;renderMain()">查询</button>
+      <button class="btn btn-sm btn-line" onclick="state.acctOv={system_id:'',unbound_only:false,q:'',page:1,page_size:state.acctOv.page_size||50};state.sysAcctFilter='';renderMain()">重置</button>
       ${(hasBtn('sys_acct_sync')||state.isSysSuper)?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openSaAdd()">添加账号</button>
       <button class="btn btn-sm btn-line" onclick="saSync()">${(() => {
         const sid = state.sysAcctFilter || state.acctOv?.system_id;
@@ -5088,7 +5110,7 @@ async function renderSysAccounts(el){
     </div>
     <div class="card" style="margin-bottom:14px">
       <h4>分系统汇总</h4>
-      ${bySys}
+      <div class="by-sys-grid">${bySys}</div>
     </div>
     <div class="card" style="margin-bottom:14px">
       <h4>待确认账号申请 <span class="pill p-orange">${(ov.grants||[]).length}</span></h4>
@@ -5116,29 +5138,52 @@ async function renderSysAccounts(el){
           </div>
         </div>`).join('') : '<div class="note">暂无待确认申请</div>'}
     </div>
-    <div class="card" style="padding:0;overflow:auto">
-      <h4 style="padding:14px 14px 0">子系统账号池 <span class="note">当前列出 ${st.filtered||0}</span></h4>
-      <table>
-        <thead><tr>
-          <th>系统</th><th>唯一标识/SSO</th><th>子系统账号</th><th>姓名</th><th>手机</th><th>邮箱</th><th>itcode</th>
-          <th>来源</th><th>绑定状态</th><th>归属 LEUC</th>
-        </tr></thead>
-        <tbody>${(cat.accounts||[]).length ? cat.accounts.map(a => `
-          <tr>
-            <td>${a.system_name}<div class="note" style="margin:0">${a.system_code||''}${a.system_code==='beisen'?' · 北森用户ID':''}</div></td>
-            <td><code>${a.account_uid||'-'}</code></td>
-            <td><code>${a.account_name}</code></td>
-            <td>${a.display_name||'-'}</td>
-            <td>${a.phone||'-'}</td>
-            <td>${a.email||'-'}</td>
-            <td>${a.itcode||'-'}</td>
-            <td>${a.source||'-'}</td>
-            <td><span class="pill ${a.bound?'p-green':'p-orange'}">${a.bind_label||(a.bound?'已绑定':'无归属')}</span></td>
-            <td>${a.bound?`${a.leuc_name||''}（${a.leuc_username||''}）`:'<span class="note">—</span>'}</td>
-          </tr>`).join('') : '<tr><td colspan="10" class="note">无匹配账号，可同步或导入</td></tr>'}
-        </tbody>
-      </table>
+    <div class="card sa-pool-card">
+      <div class="sa-pool-hd">
+        <h4>子系统账号池 <span class="note">筛选 ${st.filtered||0} 条</span></h4>
+        <span class="note" style="margin:0">宽表可横向滚动 · 分页加载</span>
+      </div>
+      <div class="sa-table-wrap">
+        <table class="sa-accounts-table">
+          <thead><tr>
+            <th>系统</th><th>唯一标识/SSO</th><th>子系统账号</th><th>姓名</th><th>手机</th><th>邮箱</th><th>itcode</th>
+            <th>来源</th><th>绑定状态</th><th>归属 LEUC</th>
+          </tr></thead>
+          <tbody>${(cat.accounts||[]).length ? cat.accounts.map(a => `
+            <tr>
+              <td>${a.system_name}<div class="note" style="margin:0">${a.system_code||''}${a.system_code==='beisen'?' · 北森用户ID':''}</div></td>
+              <td><code>${a.account_uid||'-'}</code></td>
+              <td><code>${a.account_name}</code></td>
+              <td>${a.display_name||'-'}</td>
+              <td>${a.phone||'-'}</td>
+              <td>${a.email||'-'}</td>
+              <td>${a.itcode||'-'}</td>
+              <td>${a.source||'-'}</td>
+              <td><span class="pill ${a.bound?'p-green':'p-orange'}">${a.bind_label||(a.bound?'已绑定':'无归属')}</span></td>
+              <td>${a.bound?`${a.leuc_name||''}（${a.leuc_username||''}）`:'<span class="note">—</span>'}</td>
+            </tr>`).join('') : '<tr><td colspan="10" class="note">无匹配账号，可同步或导入</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+      ${pagerHtml}
     </div>`;
+  // AI-GEN-END
+}
+function saGotoPage(p){
+  // AI-GEN-BEGIN
+  if (!state.acctOv) state.acctOv = { page:1, page_size:50 };
+  const n = Number(p) || 1;
+  if (n < 1) return;
+  state.acctOv.page = n;
+  renderMain();
+  // AI-GEN-END
+}
+function saSetPageSize(size){
+  // AI-GEN-BEGIN
+  if (!state.acctOv) state.acctOv = {};
+  state.acctOv.page_size = Number(size) || 50;
+  state.acctOv.page = 1;
+  renderMain();
   // AI-GEN-END
 }
 
