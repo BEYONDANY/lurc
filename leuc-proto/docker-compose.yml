@@ -7,6 +7,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-leuc}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leuc}
       POSTGRES_DB: ${POSTGRES_DB:-leuc}
+      TZ: Asia/Shanghai
+      PGTZ: Asia/Shanghai
+    command: ["postgres", "-c", "timezone=Asia/Shanghai"]
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -32,6 +35,7 @@ services:
       LEUC_PORT: "5055"
       LEUC_FORCE_INIT: "${LEUC_FORCE_INIT:-0}"
       DATABASE_URL: "${DATABASE_URL:-postgresql://leuc:leuc@db:5432/leuc}"
+      TZ: Asia/Shanghai
     # 有 .env 时加载 LeOrg / 北森配置；没有也不阻塞启动
     env_file:
       - path: .env

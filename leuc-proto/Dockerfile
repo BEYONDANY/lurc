@@ -7,13 +7,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     LEUC_HOST=0.0.0.0 \
     LEUC_PORT=5055 \
-    PYTHONNOUSERSITE=1
+    PYTHONNOUSERSITE=1 \
+    TZ=Asia/Shanghai \
+    LANG=C.UTF-8
 
-# 基础编译依赖（cryptography / pypinyin 偶发需要）
+# 基础编译依赖（cryptography / pypinyin 偶发需要）+ 中国时区数据
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
+        tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

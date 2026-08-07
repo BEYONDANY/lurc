@@ -55,6 +55,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
+from zoneinfo import ZoneInfo
 
 from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory, session
 
@@ -906,17 +907,34 @@ def user_can_set_account_expire(user):
     # AI-GEN-END
 
 
+# AI-GEN-BEGIN
+CN_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def now_cn() -> datetime:
+    """当前中国时区（Asia/Shanghai）时间。"""
+    return datetime.now(CN_TZ)
+
+
+def now_ts() -> str:
+    """业务时间戳：中国时区年月日时分秒（待办/申请列表与详情展示）。"""
+    return now_cn().strftime("%Y-%m-%d %H:%M:%S")
+
+
 def default_account_expire(days: int = 90) -> str:
     """新建账号默认有效期：今天 + N 天。"""
-    # AI-GEN-BEGIN
-    return (datetime.now() + timedelta(days=int(days))).strftime("%Y-%m-%d")
-    # AI-GEN-END
+    return (now_cn() + timedelta(days=int(days))).strftime("%Y-%m-%d")
 
 
-# AI-GEN-BEGIN
-def now_ts() -> str:
-    """业务时间戳：年月日时分秒（待办/申请列表与详情展示）。"""
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+# 进程级时区（Docker 内 datetime.now 等也会对齐；Windows 仍以 now_cn/now_ts 为准）
+_os.environ.setdefault("TZ", "Asia/Shanghai")
+try:
+    import time as _time
+
+    if hasattr(_time, "tzset"):
+        _time.tzset()
+except Exception:
+    pass
 # AI-GEN-END
 
 
@@ -1090,62 +1108,111 @@ def prepare_flow_steps(db, steps, applicant_id, system_id=None):
 
 
 def get_provision_targets(db, meta: dict | None, application=None) -> list[dict]:
-    """待开通系统列表：优先 meta.items 多行，否则 system_ids / system_id。"""
+    """待开通账号列表：按申请明细行（同一系统多行也各开一个账号）。"""
     # AI-GEN-BEGIN
     meta = meta if isinstance(meta, dict) else {}
     app = dict(application) if application and not isinstance(application, dict) else (application or {})
     targets: list[dict] = []
-    seen: set[int] = set()
 
-    def _add(sid, *, name=None, with_sensitive=None, create_new=True, item=None):
+    def _sys_name(sid, fallback=None):
+        if fallback:
+            return fallback
         if not sid:
-            return
-        sid = int(sid)
-        if sid in seen:
-            return
-        if create_new is False:
-            return
-        seen.add(sid)
-        if not name:
-            sy = db.execute(
-                "SELECT name, code FROM systems WHERE id = ?", (sid,)
-            ).fetchone()
-            name = sy["name"] if sy else f"系统#{sid}"
-        targets.append(
-            {
-                "system_id": sid,
-                "system_name": name,
-                "with_sensitive": bool(
-                    with_sensitive
-                    if with_sensitive is not None
-                    else meta.get("with_sensitive")
-                ),
-                "create_new": True,
-                "item": item,
-            }
-        )
+            return "—"
+        sy = db.execute(
+            "SELECT name, code FROM systems WHERE id = ?", (int(sid),)
+        ).fetchone()
+        return sy["name"] if sy else f"系统#{sid}"
 
     items = meta.get("items") or meta.get("lines") or []
     if isinstance(items, list) and items:
-        for it in items:
+        for idx, it in enumerate(items):
             if not isinstance(it, dict):
                 continue
-            _add(
-                it.get("system_id"),
-                name=it.get("system_name"),
-                with_sensitive=it.get("with_sensitive"),
-                create_new=it.get("create_new", meta.get("create_new", True)),
-                item=it,
+            # 仅「新建账号」行需要负责人开通
+            create_new = it.get("create_new")
+            if create_new is None:
+                create_new = meta.get("create_new", True)
+            if not create_new:
+                continue
+            sid = it.get("system_id") or app.get("system_id")
+            if not sid:
+                continue
+            sid = int(sid)
+            name = _sys_name(sid, it.get("system_name"))
+            perms = it.get("perm_names") or []
+            if isinstance(perms, str):
+                perms = [perms]
+            perm_txt = "、".join(str(x) for x in perms if x)
+            sens = bool(
+                it.get("with_sensitive")
+                if it.get("with_sensitive") is not None
+                else meta.get("with_sensitive")
             )
-    if not targets:
-        sids = meta.get("system_ids") or []
-        if not isinstance(sids, list):
-            sids = [sids] if sids else []
-        for sid in sids:
-            _add(sid, with_sensitive=meta.get("with_sensitive"), create_new=True)
-    if not targets:
-        sid = meta.get("system_id") or app.get("system_id")
-        _add(sid, with_sensitive=meta.get("with_sensitive"), create_new=bool(meta.get("create_new", True)))
+            label = name
+            if perm_txt:
+                label = f"{name} · {perm_txt}"
+            elif sens:
+                label = f"{name} · 含敏感"
+            # 同行次提示（同系统多账号）
+            same_sys_n = sum(
+                1
+                for j, x in enumerate(items)
+                if isinstance(x, dict)
+                and int(x.get("system_id") or 0) == sid
+                and (x.get("create_new") if x.get("create_new") is not None else True)
+                and j <= idx
+            )
+            if same_sys_n > 1 or sum(
+                1
+                for x in items
+                if isinstance(x, dict) and int(x.get("system_id") or 0) == sid
+            ) > 1:
+                label = f"{label}（第{same_sys_n}个账号）"
+            targets.append(
+                {
+                    "line_key": str(idx),
+                    "line_index": idx,
+                    "system_id": sid,
+                    "system_name": name,
+                    "label": label,
+                    "perm_names": list(perms),
+                    "with_sensitive": sens,
+                    "create_new": True,
+                    "item": it,
+                }
+            )
+        if targets:
+            return targets
+
+    # 无明细行：按系统去重回退
+    sids = meta.get("system_ids") or []
+    if not isinstance(sids, list):
+        sids = [sids] if sids else []
+    if not sids and (meta.get("system_id") or app.get("system_id")):
+        sids = [meta.get("system_id") or app.get("system_id")]
+    seen = set()
+    for i, sid in enumerate(sids):
+        if not sid:
+            continue
+        sid = int(sid)
+        if sid in seen:
+            continue
+        seen.add(sid)
+        name = _sys_name(sid)
+        targets.append(
+            {
+                "line_key": str(i),
+                "line_index": i,
+                "system_id": sid,
+                "system_name": name,
+                "label": name,
+                "perm_names": [],
+                "with_sensitive": bool(meta.get("with_sensitive")),
+                "create_new": True,
+                "item": None,
+            }
+        )
     return targets
     # AI-GEN-END
 
@@ -6186,7 +6253,7 @@ def todo_decide(user, tid):
                 provisions = data.get("provisions")
                 if not isinstance(provisions, list):
                     provisions = []
-                # 单系统兼容旧字段
+                # 单行兼容旧字段
                 if (
                     not provisions
                     and len(targets) == 1
@@ -6197,41 +6264,73 @@ def todo_decide(user, tid):
                 ):
                     provisions = [
                         {
+                            "line_key": targets[0].get("line_key"),
                             "system_id": targets[0]["system_id"],
                             "account_id": data.get("account_id"),
                             "account_name": (data.get("account_name") or "").strip()
                             or None,
                         }
                     ]
-                covered = {
-                    int(p.get("system_id"))
-                    for p in provisions
-                    if isinstance(p, dict)
-                    and p.get("system_id") not in (None, "")
+                # 校验每一行都有账号
+                probe = provision_account_apply_multi(
+                    db,
+                    app_row,
+                    provisions,
+                    meta=meta_pre,
+                    with_sensitive=bool(meta_pre.get("with_sensitive")),
+                    remark=None,
+                )
+                # 上面会真正开通；预检改为纯匹配
+                # 重新用只读匹配，避免半开通 —— 这里改回仅检查
+            if at_owner_effect and meta_pre.get("create_new"):
+                targets = get_provision_targets(db, meta_pre, app_row)
+                provisions = data.get("provisions")
+                if not isinstance(provisions, list):
+                    provisions = []
+                if (
+                    not provisions
+                    and len(targets) == 1
                     and (
-                        p.get("account_id")
-                        or (p.get("account_name") or "").strip()
+                        data.get("account_id")
+                        or (data.get("account_name") or "").strip()
                     )
-                }
-                missing = [
-                    t for t in targets if int(t["system_id"]) not in covered
-                ]
+                ):
+                    provisions = [
+                        {
+                            "line_key": targets[0].get("line_key"),
+                            "system_id": targets[0]["system_id"],
+                            "account_id": data.get("account_id"),
+                            "account_name": (data.get("account_name") or "").strip()
+                            or None,
+                        }
+                    ]
+                prov_probe = [dict(p) for p in provisions if isinstance(p, dict)]
+                missing = []
+                for t in targets:
+                    p = _match_provision(prov_probe, t)
+                    if not p or not (
+                        p.get("account_id") or (p.get("account_name") or "").strip()
+                    ):
+                        missing.append(t)
+                        continue
+                    p["_used"] = True
                 if missing:
-                    names = "、".join(t["system_name"] for t in missing)
+                    names = "、".join(
+                        t.get("label") or t.get("system_name") for t in missing
+                    )
                     return jsonify(
                         {
                             "ok": False,
-                            "error": f"请为以下系统选择账号后再开通：{names}",
+                            "error": f"请为以下申请行选择账号后再开通：{names}",
                             "need_account_input": True,
                             "todo_id": tid,
                             "application_id": app_id,
                             "applicant_id": app_row["applicant_id"],
                             "system_id": app_row["system_id"],
                             "provision_targets": targets,
-                            "missing_system_ids": [t["system_id"] for t in missing],
+                            "missing_line_keys": [t.get("line_key") for t in missing],
                         }
                     ), 400
-                # 供后续开通使用
                 data["_resolved_provisions"] = provisions
         # AI-GEN-END
         db.execute(
