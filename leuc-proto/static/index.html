@@ -3320,7 +3320,10 @@ async function submitDecideTodo(id, decision, extra){
   closeModal('m-provision');
   closeModal('m-decide');
   await enterHome();
-  state.view = 'todo'; state.todoTab = decision==='approved' ? 'done' : 'pending';
+  // AI-GEN-BEGIN
+  // 处理后仍留在「待处理」，不跳转到「已完成」
+  state.view = 'todo'; state.todoTab = 'pending';
+  // AI-GEN-END
   renderSide(); renderMain();
   // AI-GEN-END
 }
