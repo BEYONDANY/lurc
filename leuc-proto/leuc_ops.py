@@ -248,8 +248,14 @@ def start_task_scheduler(app, run_leorg_sync_fn) -> None:
                                 msg = run_leorg_sync_fn(conn)
                                 status = "ok"
                             except Exception as e:  # noqa: BLE001
-                                msg = str(e)
+                                # AI-GEN-BEGIN
+                                msg = f"{type(e).__name__}: {e}"
                                 status = "error"
+                                try:
+                                    conn.rollback()
+                                except Exception:
+                                    pass
+                                # AI-GEN-END
                             iv = float(t["interval_hours"] or 6)
                             next_at = (datetime.now() + timedelta(hours=iv)).strftime(
                                 "%Y-%m-%d %H:%M:%S"

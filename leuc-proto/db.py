@@ -843,15 +843,18 @@ def ensure_roles_seeded(conn: PgConnection) -> None:
                 (role, cap),
             )
     # AI-GEN-END
-    # 兼容旧演示角色：若库里仍有人占用则登记，否则忽略
-    for code, label in (("employee_a", "普通员工A"), ("employee_b", "普通员工B")):
-        n = conn.execute("SELECT COUNT(*) AS c FROM users WHERE role=?", (code,)).fetchone()
-        if n and n["c"]:
-            conn.execute(
-                """INSERT OR IGNORE INTO roles (code, label, is_builtin, sort_order, created_at)
-                VALUES (?, ?, 1, 15, ?)""",
-                (code, label, now),
-            )
+    # AI-GEN-BEGIN
+    # 同步会创建 employee_a 用户并写 user_roles；角色目录必须先存在
+    for code, label, sort in (
+        ("employee_a", "普通员工A", 15),
+        ("employee_b", "普通员工B", 16),
+    ):
+        conn.execute(
+            """INSERT OR IGNORE INTO roles (code, label, is_builtin, sort_order, created_at)
+            VALUES (?, ?, 1, ?, ?)""",
+            (code, label, sort, now),
+        )
+    # AI-GEN-END
 
 
 # AI-GEN-BEGIN

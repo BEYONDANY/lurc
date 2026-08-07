@@ -6889,7 +6889,8 @@ def leorg_status():
 def _leorg_sync_state(db):
     # AI-GEN-BEGIN
     row = db.execute("SELECT * FROM leorg_sync_state WHERE id = 1").fetchone()
-    return dict(row) if row else None
+    # 无水位记录时返回空 dict，避免调用方 .get 空指针
+    return dict(row) if row else {}
     # AI-GEN-END
 
 
@@ -8104,14 +8105,17 @@ def _sync_leorg_employees(db, emps):
                 beisen_user_id,
             ),
         )
+        # AI-GEN-BEGIN
+        if cur.lastrowid is None:
+            raise RuntimeError(f"创建用户失败：未返回 id（{username}）")
         uid = int(cur.lastrowid)
-        try:
-            db.execute(
-                "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)",
-                (uid, "employee_a"),
-            )
-        except Exception:
-            pass
+        # 确保角色目录存在后再写关联（避免 PG 外键失败污染事务）
+        ensure_roles_seeded(db)
+        db.execute(
+            "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)",
+            (uid, "employee_a"),
+        )
+        # AI-GEN-END
         record_credential_notify(
             db,
             user_id=uid,
@@ -11819,19 +11823,23 @@ def _run_scheduled_leorg_sync(conn) -> str:
         return "LeOrg 未配置，跳过"
     client = LeorgClient(load_config())
     migrate_schema(conn)
-    state = _leorg_sync_state(conn)
+    state = _leorg_sync_state(conn) or {}
     mode = "full" if not state.get("last_full_at") else "incr"
-    orgs = client.list_organizations(status=1)
-    org_stats = _sync_leorg_organizations(conn, orgs)
+    orgs = [o for o in (client.list_organizations(status=1) or []) if isinstance(o, dict)]
+    org_stats = _sync_leorg_organizations(conn, orgs) or {}
     if mode == "full":
-        emps = client.list_employees(emp_status=1) + client.list_employees(emp_status=2)
+        emps = (client.list_employees(emp_status=1) or []) + (
+            client.list_employees(emp_status=2) or []
+        )
         max_cid = client.latest_change_id(days=1)
     else:
         after = int(state.get("last_change_id") or 0)
-        changes = client.list_employee_changes(days=7, after_id=after)
+        changes = client.list_employee_changes(days=7, after_id=after) or []
         emps = []
         max_cid = after
         for ch in changes:
+            if not isinstance(ch, dict):
+                continue
             max_cid = max(max_cid, int(ch.get("id") or 0))
             eid = ch.get("emp_id") or ch.get("employee_id")
             if eid is None:
@@ -11839,7 +11847,8 @@ def _run_scheduled_leorg_sync(conn) -> str:
             detail = client.get_employee(int(eid))
             if detail:
                 emps.append(detail)
-    emp_stats = _sync_leorg_employees(conn, emps)
+    emps = [e for e in emps if isinstance(e, dict)]
+    emp_stats = _sync_leorg_employees(conn, emps) or {}
     _resolve_dept_owners_from_leorg(conn)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     _save_leorg_sync_state(
@@ -11896,12 +11905,21 @@ def admin_tasks_run(user, code):
         return jsonify({"ok": False, "error": "暂不支持该任务手动执行"}), 400
     db = get_db()
     migrate_schema(db)
+    # AI-GEN-BEGIN
     try:
         msg = _run_scheduled_leorg_sync(db)
         status = "ok"
     except Exception as e:  # noqa: BLE001
-        msg = str(e)
+        msg = f"{type(e).__name__}: {e}"
         status = "error"
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        import sys
+        import traceback
+
+        traceback.print_exc(file=sys.stderr)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     task = db.execute("SELECT * FROM scheduled_tasks WHERE code = ?", (code,)).fetchone()
     iv = float(task["interval_hours"] or 6) if task else 6
@@ -11914,6 +11932,7 @@ def admin_tasks_run(user, code):
     )
     db.commit()
     return jsonify({"ok": status == "ok", "message": msg, "status": status})
+    # AI-GEN-END
 
 
 @app.get("/api/admin/notify-records")
