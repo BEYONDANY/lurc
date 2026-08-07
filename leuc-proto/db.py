@@ -128,7 +128,9 @@ CREATE TABLE IF NOT EXISTS messages (
   body TEXT NOT NULL,
   created_at TEXT NOT NULL,
   is_read INTEGER DEFAULT 0,
-  msg_type TEXT NOT NULL DEFAULT 'chat'
+  msg_type TEXT NOT NULL DEFAULT 'chat',
+  ref_type TEXT,
+  ref_id INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS todos (
@@ -587,11 +589,43 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
             "ALTER TABLE systems ADD COLUMN is_builtin INTEGER NOT NULL DEFAULT 0"
         )
     ensure_leuc_system(conn)
+    # AI-GEN-BEGIN
+    msg_cols = _table_cols(conn, "messages")
+    if msg_cols and "ref_type" not in msg_cols:
+        conn.execute("ALTER TABLE messages ADD COLUMN ref_type TEXT")
+    if msg_cols and "ref_id" not in msg_cols:
+        conn.execute("ALTER TABLE messages ADD COLUMN ref_id INTEGER")
+    ensure_todo_notify_trigger(conn)
     # AI-GEN-END
 
 
 # AI-GEN-BEGIN
 LEUC_SYSTEM_CODE = "leuc"
+
+
+def ensure_todo_notify_trigger(conn: sqlite3.Connection) -> None:
+    """创建 pending 待办时自动给办理人发可跳转的系统消息。"""
+    conn.execute("DROP TRIGGER IF EXISTS todos_notify_pending")
+    conn.execute(
+        """CREATE TRIGGER todos_notify_pending
+        AFTER INSERT ON todos
+        WHEN NEW.bucket = 'pending' AND NEW.assignee_id IS NOT NULL
+        BEGIN
+          INSERT INTO messages
+            (from_user_id, to_user_id, title, body, created_at, is_read, msg_type, ref_type, ref_id)
+          VALUES (
+            0,
+            NEW.assignee_id,
+            '待办：' || NEW.todo_type,
+            '您有新待办「' || NEW.title || '」，点击办理。',
+            datetime('now', 'localtime'),
+            0,
+            'system',
+            'todo',
+            NEW.id
+          );
+        END"""
+    )
 
 
 def ensure_leuc_system(conn: sqlite3.Connection) -> None:

@@ -1228,32 +1228,22 @@ def build_application_flow(db, app_id):
 def build_todo_flow(db, todo_row):
     """待办完整流程视图（有 application 走多级链，否则单步）。"""
     # AI-GEN-BEGIN
-    todo = dict(todo_row)
-    app_id = todo.get("application_id")
+    todo_ser = serialize_todo(db, todo_row)
+    app_id = todo_row["application_id"] if "application_id" in todo_row.keys() else todo_row.get("application_id")
     if app_id:
         flow = build_application_flow(db, app_id)
-        flow["todo"] = {
-            "id": todo.get("id"),
-            "title": todo.get("title"),
-            "todo_type": todo.get("todo_type"),
-            "status": todo.get("status"),
-            "bucket": todo.get("bucket"),
-            "created_at": todo.get("created_at"),
-            "step_order": todo.get("step_order"),
-            "initiator": _user_brief(db, todo.get("initiator_id")),
-            "assignee": _user_brief(db, todo.get("assignee_id")),
-        }
+        flow["todo"] = todo_ser
         return flow
     meta = {}
     try:
-        meta = json.loads(todo.get("meta") or "{}")
+        meta = json.loads(todo_row["meta"] or "{}")
     except Exception:
         meta = {}
-    assignee = _user_brief(db, todo.get("assignee_id"))
-    st = (todo.get("status") or "").strip()
-    done = todo.get("bucket") == "done" or st in ("approved", "rejected")
+    assignee = _user_brief(db, todo_row["assignee_id"])
+    st = (todo_row["status"] or "").strip()
+    done = todo_row["bucket"] == "done" or st in ("approved", "rejected")
     phase = "done" if done else "current"
-    step_label = meta.get("step_label") or todo.get("todo_type") or "审批"
+    step_label = meta.get("step_label") or todo_row["todo_type"] or "审批"
     timeline = [
         {
             "step_order": 1,
@@ -1262,25 +1252,14 @@ def build_todo_flow(db, todo_row):
             "status": st if done else "pending",
             "phase": phase,
             "assignee": assignee,
-            "assignee_id": todo.get("assignee_id"),
-            "todo_id": todo.get("id"),
-            "decided_at": todo.get("created_at") if done else None,
+            "assignee_id": todo_row["assignee_id"],
+            "todo_id": todo_row["id"],
+            "decided_at": todo_row["created_at"] if done else None,
         }
     ]
     return {
         "application": None,
-        "todo": {
-            "id": todo.get("id"),
-            "title": todo.get("title"),
-            "todo_type": todo.get("todo_type"),
-            "status": todo.get("status"),
-            "bucket": todo.get("bucket"),
-            "created_at": todo.get("created_at"),
-            "step_order": 1,
-            "initiator": _user_brief(db, todo.get("initiator_id")),
-            "assignee": assignee,
-            "meta": meta,
-        },
+        "todo": todo_ser,
         "timeline": timeline,
         "forecast": [],
         "current_approver": None if done else assignee,
@@ -2026,6 +2005,23 @@ def _can_config_roles(user) -> bool:
     return user_has_cap(user, "config_roles") or user["role"] == "super_admin"
 
 
+def _can_view_roles(user) -> bool:
+    """查看角色配置 / 人员绑定：配置或分配权限均可。"""
+    return (
+        _can_config_roles(user)
+        or user_has_cap(user, "role_assign")
+        or user["role"] == "super_admin"
+    )
+
+
+def _can_assign_roles(user) -> bool:
+    return (
+        user_has_cap(user, "role_assign")
+        or user_has_cap(user, "config_roles")
+        or user["role"] == "super_admin"
+    )
+
+
 def _slug_role_code(label: str) -> str:
     """从中文名生成角色 code；失败则用时间戳。"""
     raw = (name_to_pinyin(label) or "").strip().lower()
@@ -2041,9 +2037,9 @@ def _slug_role_code(label: str) -> str:
 @app.get("/api/admin/roles")
 @login_required
 def admin_roles_get(user):
-    """角色列表 + 菜单/能力配置（超管或 config_roles）。"""
-    if not _can_config_roles(user):
-        return jsonify({"ok": False, "error": "无权配置角色"}), 403
+    """角色列表 + 菜单/能力配置（超管 / config_roles / role_assign 可看）。"""
+    if not _can_view_roles(user):
+        return jsonify({"ok": False, "error": "无权查看角色"}), 403
     db = get_db()
     ensure_roles_seeded(db)
     db.commit()
@@ -2079,7 +2075,65 @@ def admin_roles_get(user):
         "all_menus": ALL_MENUS,
         "all_buttons": ALL_BUTTONS,
         "all_caps": ALL_CAPS,  # 兼容旧前端
+        "can_config": _can_config_roles(user),
+        "can_assign": _can_assign_roles(user),
     })
+
+
+@app.get("/api/admin/roles/<role>/members")
+@login_required
+def admin_role_members(user, role):
+    """某角色下的人员列表（可搜）。"""
+    # AI-GEN-BEGIN
+    if not _can_view_roles(user):
+        return jsonify({"ok": False, "error": "无权查看"}), 403
+    db = get_db()
+    ensure_roles_seeded(db)
+    if role in ("employee_a", "employee_b") or not db.execute(
+        "SELECT 1 FROM roles WHERE code=?", (role,)
+    ).fetchone():
+        return jsonify({"ok": False, "error": "无效角色"}), 400
+    q = (request.args.get("q") or "").strip()
+    sql = """SELECT u.id, u.username, u.display_name, u.role, u.dept_id, u.phone, u.email,
+                    d.name AS dept_name
+             FROM users u
+             LEFT JOIN departments d ON d.id = u.dept_id
+             WHERE u.role = ?"""
+    params: list = [role]
+    if q:
+        like = f"%{q}%"
+        sql += " AND (u.display_name LIKE ? OR u.username LIKE ? OR u.phone LIKE ? OR u.email LIKE ?)"
+        params.extend([like, like, like, like])
+    sql += " ORDER BY u.display_name, u.id LIMIT 200"
+    rows = db.execute(sql, params).fetchall()
+    members = []
+    for r in rows:
+        members.append(
+            {
+                "id": r["id"],
+                "username": r["username"],
+                "display_name": r["display_name"],
+                "role": r["role"],
+                "role_label": role_label_of(db, r["role"]),
+                "dept_id": r["dept_id"],
+                "dept_name": r["dept_name"],
+                "phone": r["phone"],
+                "email": r["email"],
+                "is_system_admin": (r["username"] or "") == SYSTEM_ADMIN_USERNAME,
+            }
+        )
+    return jsonify(
+        {
+            "ok": True,
+            "role": role,
+            "role_label": role_label_of(db, role),
+            "total": len(members),
+            "members": members,
+            "truncated": len(members) >= 200,
+            "can_assign": _can_assign_roles(user),
+        }
+    )
+    # AI-GEN-END
 
 
 @app.post("/api/admin/roles")
@@ -2207,11 +2261,7 @@ def admin_roles_save(user, role):
 @login_required
 def admin_assign_role(user, uid):
     """给人分配角色。"""
-    if not (
-        user_has_cap(user, "role_assign")
-        or user_has_cap(user, "config_roles")
-        or user["role"] == "super_admin"
-    ):
+    if not _can_assign_roles(user):
         return jsonify({"ok": False, "error": "无权分配角色"}), 403
     data = request.get_json(force=True) or {}
     role = (data.get("role") or "").strip()
@@ -2226,12 +2276,60 @@ def admin_assign_role(user, uid):
     row = db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
     if not row:
         return jsonify({"ok": False, "error": "用户不存在"}), 404
+    if (row["username"] or "") == SYSTEM_ADMIN_USERNAME and role != "super_admin":
+        return jsonify({"ok": False, "error": "系统超管账号不可改角色"}), 400
+    if row["role"] == "super_admin" and role != "super_admin":
+        n = db.execute(
+            "SELECT COUNT(*) AS c FROM users WHERE role='super_admin'"
+        ).fetchone()["c"]
+        if n <= 1:
+            return jsonify({"ok": False, "error": "至少保留一名超级管理员"}), 400
     db.execute("UPDATE users SET role=? WHERE id=?", (role, uid))
     db.commit()
     return jsonify({
         "ok": True,
         "message": f"已将 {row['display_name']} 设为 {role_label_of(db, role)}",
     })
+
+
+@app.delete("/api/admin/users/<int:uid>/role")
+@login_required
+def admin_unbind_role(user, uid):
+    """解除人员与角色绑定：改回普通员工。"""
+    # AI-GEN-BEGIN
+    if not _can_assign_roles(user):
+        return jsonify({"ok": False, "error": "无权解除角色绑定"}), 403
+    db = get_db()
+    ensure_roles_seeded(db)
+    row = db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "用户不存在"}), 404
+    if (row["username"] or "") == SYSTEM_ADMIN_USERNAME:
+        return jsonify({"ok": False, "error": "系统超管账号不可解除角色"}), 400
+    old_role = row["role"] or "employee"
+    if old_role == "employee":
+        return jsonify({"ok": True, "message": f"{row['display_name']} 已是普通员工"})
+    if old_role == "super_admin":
+        n = db.execute(
+            "SELECT COUNT(*) AS c FROM users WHERE role='super_admin'"
+        ).fetchone()["c"]
+        if n <= 1:
+            return jsonify({"ok": False, "error": "至少保留一名超级管理员"}), 400
+    db.execute("UPDATE users SET role='employee' WHERE id=?", (uid,))
+    db.commit()
+    return jsonify(
+        {
+            "ok": True,
+            "message": (
+                f"已解除 {row['display_name']} 的「{role_label_of(db, old_role)}」绑定，"
+                f"现为普通员工"
+            ),
+            "user_id": uid,
+            "from_role": old_role,
+            "to_role": "employee",
+        }
+    )
+    # AI-GEN-END
 # AI-GEN-END
 
 
@@ -3000,7 +3098,7 @@ def apply_preview_flow(user):
 @app.get("/api/dept/overview")
 @login_required
 def org_overview(user):
-    """组织概览：scope=mine 本人路径；scope=manage 可管全树。"""
+    """组织概览：scope=mine 本人路径；scope=manage 全员可读完整通讯录（管理写操作另鉴权）。"""
     # AI-GEN-BEGIN
     db = get_db()
     depts = all_departments(db)
@@ -3056,9 +3154,7 @@ def org_overview(user):
             }
         )
 
-    if not can_manage:
-        return jsonify({"ok": False, "error": "无权查看组织管理"}), 403
-
+    # scope=manage：全员可读完整部门树与人员；写操作仍由 can_manage / 按钮权限控制
     sql = "SELECT * FROM users WHERE 1=1 AND username != ?"
     params = [SYSTEM_ADMIN_USERNAME]
     if focus_id:
@@ -3236,7 +3332,7 @@ def member_perms(user, uid):
 def send_org_message(user):
     data = request.get_json(force=True) or {}
     to_user_id = data.get("to_user_id")
-    title = (data.get("title") or "").strip() or "即时聊天"
+    title = (data.get("title") or "").strip() or "即时消息"
     body = (data.get("body") or "").strip()
     msg_type = (data.get("msg_type") or "chat").strip()
     if msg_type not in ("chat", "system"):
@@ -3484,15 +3580,17 @@ def chat_system_notify(user):
     return jsonify({"ok": True, "count": len(ids), "ids": ids, "message": f"已发送 {len(ids)} 条系统消息"})
 
 
-def push_system_message(db, to_user_id, title, body):
+def push_system_message(db, to_user_id, title, body, ref_type=None, ref_id=None):
+    # AI-GEN-BEGIN
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     cur = db.execute(
         """INSERT INTO messages
-        (from_user_id, to_user_id, title, body, created_at, is_read, msg_type)
-        VALUES (0,?,?,?,?,0,'system')""",
-        (to_user_id, title, body, now),
+        (from_user_id, to_user_id, title, body, created_at, is_read, msg_type, ref_type, ref_id)
+        VALUES (0,?,?,?,?,0,'system',?,?)""",
+        (to_user_id, title, body, now, ref_type, ref_id),
     )
     return cur.lastrowid
+    # AI-GEN-END
 
 
 @app.get("/api/sensitive/catalog")
@@ -7746,6 +7844,11 @@ def admin_update_system(user, sid):
     scopes = data.get("scopes") if "scopes" in data else row["scopes"]
     scopes = (scopes or "openid profile").strip()
 
+    # 仅超管可改系统管理员（先校验，避免半更新）
+    touch_owners = "owner_user_ids" in data or "owners" in data
+    if touch_owners and user["role"] != "super_admin":
+        return jsonify({"ok": False, "error": "仅超管可修改系统管理员"}), 403
+
     db.execute(
         """UPDATE systems SET
           name=?, redirect_uris=?, access_mode=?, forbid_external=?,
@@ -7762,10 +7865,7 @@ def admin_update_system(user, sid):
             sid,
         ),
     )
-    # 仅超管可改系统管理员
-    if "owner_user_ids" in data or "owners" in data:
-        if user["role"] != "super_admin":
-            return jsonify({"ok": False, "error": "仅超管可修改系统管理员"}), 403
+    if touch_owners:
         owner_ids = data.get("owner_user_ids") or data.get("owners") or []
         set_system_owners(db, sid, owner_ids)
 

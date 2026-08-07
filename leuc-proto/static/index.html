@@ -218,7 +218,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 .role-perm-tree .kids{margin-left:22px}
 /* AI-GEN-END */
 .org-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
-/* 即时聊天 / 右下角提醒 */
+/* 即时消息 / 右下角提醒 */
 .chat-dock{position:fixed;right:20px;bottom:20px;z-index:260;display:flex;flex-direction:column;align-items:flex-end;gap:10px;pointer-events:none}
 .chat-dock>*{pointer-events:auto}
 .notify-stack{display:flex;flex-direction:column;gap:8px;width:min(360px,92vw)}
@@ -283,7 +283,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
     <div class="login-wrap">
       <div class="login-left">
         <h1>Lecoo 用户中心<br>LEUC</h1>
-        <p>账号为姓名拼音全拼。全员可看「部门和人员」；员工只读+即时聊天；上级可管下级；系统消息右下角弹出提醒。</p>
+        <p>账号为姓名拼音全拼。全员可看「部门和人员」；员工只读+即时消息；上级可管下级；系统消息右下角弹出提醒。</p>
         <div class="caps"><span>错≥10次验证</span><span>忘记密码</span><span>拼音账号</span><span>部门和人员</span></div>
       </div>
       <div class="login-right">
@@ -389,7 +389,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 </div>
 
 <div class="screen" id="sc-home">
-  <div class="guide"><b>个人中心</b>：待办 / 自助申请 / 部门和人员；右下角即时聊天，系统消息会弹出并带提示音。</div>
+  <div class="guide"><b>个人中心</b>：待办 / 自助申请 / 部门和人员；右下角即时消息，系统消息会弹出并带提示音。</div>
   <div class="stage">
     <div class="app">
       <div class="side">
@@ -601,7 +601,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   <div class="notify-stack" id="notify-stack"></div>
   <div class="chat-panel" id="chat-panel">
     <div class="chat-hd">
-      <b id="chat-title">即时聊天</b>
+      <b id="chat-title">即时消息</b>
       <div>
         <button type="button" onclick="demoSysNotify()" title="演示系统提醒">演示系统消息</button>
         <button type="button" onclick="toggleChat(false)">收起</button>
@@ -619,7 +619,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
     </div>
   </div>
   <div class="chat-fab-wrap" id="chat-fab-wrap" style="display:none">
-    <button class="chat-fab" type="button" onclick="toggleChat(true)">聊天<span class="badge" id="chat-badge" style="display:none">0</span></button>
+    <button class="chat-fab" type="button" onclick="toggleChat(true)">消息<span class="badge" id="chat-badge" style="display:none">0</span></button>
   </div>
 </div>
 <div class="mask" id="m-sa-import"><div class="modal">
@@ -1295,8 +1295,8 @@ async function renderAdminRoles(el){
     if (!menusByGroup[g]) { menusByGroup[g] = []; groupOrder.push(g); }
     menusByGroup[g].push(m);
   });
-  const canConfig = hasBtn('config_roles') || state.user?.role === 'super_admin';
-  const canAssign = hasBtn('role_assign') || canConfig;
+  const canConfig = !!(data.can_config) || hasBtn('config_roles') || state.user?.role === 'super_admin';
+  const canAssign = !!(data.can_assign) || hasBtn('role_assign') || canConfig;
   const dis = canConfig ? '' : 'disabled';
   const treeHtml = groupOrder.map(g => {
     const menus = menusByGroup[g] || [];
@@ -1329,9 +1329,9 @@ async function renderAdminRoles(el){
   }).join('');
   el.innerHTML = `
     <div class="ptitle">角色与权限 <span class="pill p-blue">可配置</span>
-      <span class="pill p-gray">角色 + 菜单 + 按钮</span></div>
-    <div class="callout">角色清单可<strong>新增 / 改名 / 删除</strong>（内置角色不可删，可改名）。删除自定义角色时，占用人员自动改回「普通员工」。
-      树形勾选<strong>菜单</strong>与<strong>按钮</strong>；勾选菜单会自动勾选其下全部按钮。</div>
+      <span class="pill p-gray">角色 + 人员 + 菜单 + 按钮</span></div>
+    <div class="callout">左侧选角色可查看<strong>本角色人员</strong>；有分配权限时可<strong>解除绑定</strong>（改回普通员工）。
+      角色清单可新增/改名/删除；树形勾选菜单与按钮。</div>
     <div class="org-layout">
       <div class="org-tree" style="max-height:70vh">
         ${canConfig?`<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
@@ -1357,12 +1357,21 @@ async function renderAdminRoles(el){
             ${!cur?.is_builtin?`<button type="button" class="btn btn-sm btn-line" style="color:#b42318;border-color:#f3b4b0"
               onclick="deleteRole('${cur?.role||''}','${(cur?.label||'').replace(/'/g,"\\'")}',${cur?.user_count||0})">删除角色</button>`:''}
           </div>`:''}
-          <div class="org-tree role-perm-tree" style="max-height:56vh;border:1px solid #DDE7F7;padding:8px 10px;margin-bottom:12px">
+          <div class="org-tree role-perm-tree" style="max-height:40vh;border:1px solid #DDE7F7;padding:8px 10px;margin-bottom:12px">
             ${treeHtml || '<div class="note">暂无菜单目录</div>'}
           </div>
           ${canConfig?`<div class="foot" style="justify-content:flex-start">
             <button class="btn btn-pri" style="width:auto" onclick="saveRoleConfig('${cur?.role||''}')">保存配置</button>
-          </div>`:'<div class="note">无「配置角色」按钮权限，仅可查看</div>'}
+          </div>`:'<div class="note">无「配置角色」按钮权限，菜单树只读</div>'}
+        </div>
+        <div class="card" style="margin-top:12px" id="role-members-card">
+          <h4>本角色人员 <span class="pill p-blue" id="role-members-count">${cur?.user_count||0}</span></h4>
+          <div class="toolbar">
+            <input id="role-members-q" placeholder="筛选姓名/账号" style="width:180px"
+              onkeydown="if(event.key==='Enter')loadRoleMembers()">
+            <button class="btn btn-sm btn-line" onclick="loadRoleMembers()">筛选</button>
+          </div>
+          <div id="role-members-box" class="note">加载中…</div>
         </div>
         ${canAssign?`<div class="card" style="margin-top:12px">
           <h4>给人分配角色</h4>
@@ -1374,6 +1383,57 @@ async function renderAdminRoles(el){
         </div>`:''}
       </div>
     </div>`;
+  loadRoleMembers();
+  // AI-GEN-END
+}
+
+async function loadRoleMembers(){
+  // AI-GEN-BEGIN
+  const role = state.roleFocus;
+  const box = document.getElementById('role-members-box');
+  const cnt = document.getElementById('role-members-count');
+  if (!box || !role) return;
+  const q = (document.getElementById('role-members-q')?.value || '').trim();
+  box.innerHTML = '<span class="note">加载中…</span>';
+  const qs = q ? ('?q=' + encodeURIComponent(q)) : '';
+  const { data } = await api('/api/admin/roles/' + encodeURIComponent(role) + '/members' + qs);
+  if (!data.ok) { box.innerHTML = `<div class="warn">${data.error||'加载失败'}</div>`; return; }
+  if (cnt) cnt.textContent = String(data.total || 0);
+  const canAssign = !!(data.can_assign) || hasBtn('role_assign') || hasBtn('config_roles') || state.user?.role === 'super_admin';
+  const isEmployeeRole = role === 'employee';
+  const members = data.members || [];
+  if (!members.length) {
+    box.innerHTML = '<span class="note">本角色暂无人员' + (q ? '（筛选无结果）' : '') + '</span>';
+    return;
+  }
+  box.innerHTML = `${data.truncated ? '<div class="note" style="margin-bottom:8px">仅显示前 200 人，请用筛选缩小范围</div>' : ''}
+    <table>
+      <thead><tr><th>姓名</th><th>账号</th><th>部门</th><th>操作</th></tr></thead>
+      <tbody>${members.map(m => `
+        <tr>
+          <td>${m.display_name}${m.is_system_admin?' <span class="pill p-gray">超管账号</span>':''}</td>
+          <td><code>${m.username}</code></td>
+          <td class="note">${m.dept_name || '—'}</td>
+          <td>${
+            !canAssign || isEmployeeRole || m.is_system_admin
+              ? '<span class="note">—</span>'
+              : `<button class="btn btn-sm btn-line" style="color:#b42318;border-color:#f3b4b0"
+                  onclick="unbindUserRole(${m.id},'${(m.display_name||'').replace(/'/g,"\\'")}','${(m.role_label||'').replace(/'/g,"\\'")}')">解除绑定</button>`
+          }</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  // AI-GEN-END
+}
+
+async function unbindUserRole(uid, name, roleLabel){
+  // AI-GEN-BEGIN
+  if (!uid) return;
+  if (!confirm(`确定解除「${name}」与角色「${roleLabel||''}」的绑定？\n解除后将改回普通员工。`)) return;
+  const { data } = await api('/api/admin/users/' + uid + '/role', { method: 'DELETE' });
+  if (!data.ok) return toast(data.error);
+  toast(data.message);
+  renderMain();
   // AI-GEN-END
 }
 
@@ -1481,6 +1541,7 @@ async function assignUserRole(uid){
   if (!data.ok) return toast(data.error);
   toast(data.message);
   searchRoleAssign();
+  loadRoleMembers();
 }
 // AI-GEN-END
 
@@ -1634,7 +1695,7 @@ function orgMembersTableHtml(data){
         <td class="col-actions"><div class="row-actions">
           ${data.can_manage||m.id===state.user.id?`<button class="btn btn-sm btn-line" onclick="showPerm(${m.id})">权限</button>`:''}
           ${canExpire&&manageable?`<button class="btn btn-sm btn-line" onclick="openSetExpire([${m.id}])">设有效期</button>`:''}
-          ${m.id!==state.user.id?`<button class="btn btn-sm btn-line" onclick="openMsg(${m.id},'${m.display_name}')">聊天</button>`:''}
+          ${m.id!==state.user.id?`<button class="btn btn-sm btn-line" onclick="openMsg(${m.id},'${m.display_name}')">消息</button>`:''}
         </div></td>
       </tr>`;
     }).join('') || (() => {
@@ -1798,40 +1859,6 @@ async function renderOrg(el) {
   const showImport = hasBtn('org_import');
   const showDirect = hasBtn('direct_bind');
 
-  // 探测是否可管；无管理权则展示本人所属部门（只读）
-  const { data: probe } = await api('/api/org/overview?scope=mine');
-  if (!probe.ok) {
-    el.innerHTML = `<div class="ptitle">部门和人员</div><div class="warn">${probe.error||'加载失败'}</div>`;
-    return;
-  }
-  const canManage = !!probe.can_manage;
-  state.orgTab = canManage ? 'manage' : 'mine';
-
-  if (!canManage) {
-    state.deptData = { ...probe, tree: probe.tree || [] };
-    const path = probe.dept_path || '';
-    const me = (probe.members || [])[0];
-    el.innerHTML = `
-      <div class="ptitle">部门和人员
-        ${probe.unread_messages?`<span class="pill p-red">未读 ${probe.unread_messages}</span>`:''}</div>
-      <div class="callout">当前账号无部门管理权限，仅展示<strong>本人</strong>与<strong>所属部门</strong>。</div>
-      <div class="card" style="margin-bottom:14px">
-        <h4 style="margin:0 0 8px">所属部门</h4>
-        <div style="font-size:16px;font-weight:600;line-height:1.5;color:var(--ink)">
-          ${path || '<span class="pill p-gray">未分配部门</span>'}
-        </div>
-      </div>
-      <div class="org-actions" style="margin-bottom:12px">
-        <button class="btn btn-sm btn-line" onclick="openInbox()">即时聊天</button>
-        <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('apply')">账号、权限申请</button>
-      </div>
-      <div class="card" style="padding:0;overflow:auto">
-        ${orgMembersTableHtml(probe)}
-      </div>
-      ${!me ? '<div class="note" style="margin-top:8px">未找到本人资料</div>' : ''}`;
-    return;
-  }
-
   const q = state.deptQ || '';
   const deptId = state.deptFilter || '';
   let url = '/api/org/overview?scope=manage&q=' + encodeURIComponent(q);
@@ -1848,33 +1875,37 @@ async function renderOrg(el) {
     state.leorgSync = results[2].data.sync_state || null;
   }
   if (!data.ok) {
-    el.innerHTML = `<div class="ptitle">部门和人员</div><div class="warn">${data.error||'无权'}</div>`;
+    el.innerHTML = `<div class="ptitle">部门和人员</div><div class="warn">${data.error||'加载失败'}</div>`;
     return;
   }
   state.deptData = data;
+  state.orgTab = 'manage';
   ensureOrgCollapsedInit(data.tree || []);
   expandOrgAncestors(data.tree || [], deptId);
-  const mode = canAllOrg
-    ? '<span class="pill p-blue">全部可管</span>'
-    : '<span class="pill p-orange">可管理下级</span>';
+  const canManage = !!data.can_manage;
+  const mode = canManage
+    ? (canAllOrg ? '<span class="pill p-blue">全部可管</span>' : '<span class="pill p-orange">可管理下级</span>')
+    : '<span class="pill p-gray">只读查询 · 即时消息</span>';
   const roster = (syncData && syncData.ok) ? (syncData.roster || []) : [];
   el.innerHTML = `
     <div class="ptitle">部门和人员 ${mode}
       ${data.unread_messages?`<span class="pill p-red">未读 ${data.unread_messages}</span>`:''}</div>
-    <div class="callout">${canAllOrg
-      ? '<strong>可管全部部门</strong>：按角色按钮权限显示添加/导入/同步/直接绑定/代人申请/有效期。'
-      : '<strong>可管本级及下级</strong>：按角色按钮权限显示操作。' +
-        (canSetAccountExpire() ? ' 已开通<strong>设置账号有效期</strong>。' : '')}</div>
+    <div class="callout">${canManage
+      ? (canAllOrg
+        ? '<strong>可管全部部门</strong>：按角色按钮权限显示添加/导入/同步/直接绑定/代人申请/有效期。全员均可查询通讯录。'
+        : '<strong>可管本级及下级</strong>：按角色按钮权限显示操作。全员均可查询通讯录。' +
+          (canSetAccountExpire() ? ' 已开通<strong>设置账号有效期</strong>。' : ''))
+      : '<strong>全员可查询</strong>：可浏览全部部门与人员、即时消息；管理操作需相应权限。'}</div>
     <div class="org-actions">
-      <button class="btn btn-sm btn-line" onclick="openInbox()">即时聊天</button>
+      <button class="btn btn-sm btn-line" onclick="openInbox()">即时消息</button>
       <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('apply')">账号、权限申请</button>
       ${canApplyForOthers()?`<button class="btn btn-sm btn-line" onclick="openAccountBind('apply_for')">代人申请账号/权限</button>`:''}
-      ${showAdd?`<button class="btn btn-sm btn-line" onclick="openAdd()">添加人员</button>`:''}
-      ${showImport?`<button class="btn btn-sm btn-line" onclick="openImport()">导入</button>`:''}
-      ${canSetAccountExpire()?`<button class="btn btn-sm btn-line" onclick="openSetExpire()">设置有效期</button>`:''}
-      ${showDirect?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('direct')">直接绑定</button>`:''}
+      ${canManage && showAdd?`<button class="btn btn-sm btn-line" onclick="openAdd()">添加人员</button>`:''}
+      ${canManage && showImport?`<button class="btn btn-sm btn-line" onclick="openImport()">导入</button>`:''}
+      ${canManage && canSetAccountExpire()?`<button class="btn btn-sm btn-line" onclick="openSetExpire()">设置有效期</button>`:''}
+      ${canManage && showDirect?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('direct')">直接绑定</button>`:''}
     </div>
-    ${showSync?`
+    ${canManage && showSync?`
     <div class="card" style="margin-bottom:14px">
       <h4>部门同步 · 待初始化 <span class="pill p-orange">${roster.length}</span>
         ${state.leorgSync?`<span class="pill p-gray">${state.leorgSync.last_mode||'-'} · ${state.leorgSync.updated_at||'未同步'}</span>`:''}
@@ -2279,7 +2310,9 @@ async function loadApplyPreviewBox(elId, payload){
   });
   box.innerHTML = `<h5>预计审批链</h5>${renderFlowPreviewInline(data)}`;
 }
-async function openTodoFlow(tid){
+async function openTodoFlow(tid, opts){
+  // AI-GEN-BEGIN
+  opts = opts || {};
   const { data } = await api('/api/todo/' + tid + '/flow');
   if (!data.ok) return toast(data.error || '加载失败');
   const app = data.application || {};
@@ -2310,7 +2343,30 @@ async function openTodoFlow(tid){
         ? renderFlowTimelineHtml(forecast)
         : '<div class="note" style="margin:0">无后续步骤</div>'}
     </div>`;
+  const foot = document.querySelector('#m-flow .foot');
+  const canHandle = opts.handle
+    && todo.bucket === 'pending'
+    && todo.status === 'open'
+    && Number(todo.assignee_id) === Number(state.user && state.user.id);
+  if (foot) {
+    if (canHandle) {
+      if (todo.need_provision_form) {
+        foot.innerHTML = `
+          <button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>
+          <button class="btn btn-line" onclick="closeModal('m-flow');decideTodo(${tid},'rejected')">驳回</button>
+          <button class="btn btn-pri" style="width:auto" onclick="closeModal('m-flow');openProvision(${tid})">去开通</button>`;
+      } else {
+        foot.innerHTML = `
+          <button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>
+          <button class="btn btn-line" onclick="closeModal('m-flow');decideTodo(${tid},'rejected')">驳回</button>
+          <button class="btn btn-pri" style="width:auto" onclick="closeModal('m-flow');decideTodo(${tid},'approved')">通过</button>`;
+      }
+    } else {
+      foot.innerHTML = `<button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>`;
+    }
+  }
   openModal('m-flow');
+  // AI-GEN-END
 }
 async function refreshBindFlowPreview(){
   const wrap = document.getElementById('bg-flow-preview');
@@ -2758,7 +2814,7 @@ async function submitMsg(){
     method:'POST',
     body: JSON.stringify({
       to_user_id: state.msgTo,
-      title: '即时聊天',
+      title: '即时消息',
       body,
       msg_type: 'chat',
     })
@@ -2812,15 +2868,21 @@ function pushNotifyCard(msg){
   const stack = document.getElementById('notify-stack');
   if (!stack) return;
   const isSys = msg.msg_type === 'system' || msg.from_user_id === 0;
+  const isTodo = isSys && msg.ref_type === 'todo' && msg.ref_id;
   const el = document.createElement('div');
   el.className = 'notify-card ' + (isSys ? 'sys' : 'chat');
   const from = isSys ? '系统消息' : (msg.from_name || '同事');
   el.innerHTML = `<button class="nx" type="button">×</button>
-    <div class="nt">${isSys ? '⚡ 系统即时提醒' : '💬 ' + from}</div>
-    <div class="nb">${(msg.body||'').slice(0,80)}</div>`;
+    <div class="nt">${isTodo ? '📋 待办提醒' : (isSys ? '⚡ 系统即时提醒' : '💬 ' + from)}</div>
+    <div class="nb">${(msg.body||'').slice(0,80)}</div>
+    ${isTodo?'<div class="note" style="margin-top:6px;color:#1a6;">点击办理 →</div>':''}`;
   el.querySelector('.nx').onclick = (e) => { e.stopPropagation(); el.remove(); };
   el.onclick = async () => {
     el.remove();
+    if (isTodo) {
+      await openTodoFromMessage(Number(msg.ref_id));
+      return;
+    }
     toggleChat(true);
     await openChatPeer(isSys ? 0 : msg.from_user_id, from);
   };
@@ -2864,7 +2926,7 @@ async function refreshChatPeers(){
 
 async function openChatPeer(peerId, name){
   state.chatPeerId = peerId;
-  document.getElementById('chat-title').textContent = name || (peerId===0?'系统消息':'聊天');
+  document.getElementById('chat-title').textContent = name || (peerId===0?'系统消息':'消息');
   const bar = document.getElementById('chat-input-bar');
   if (bar) bar.style.display = peerId === 0 ? 'none' : 'flex';
   const { data } = await api('/api/chat/list?peer_id=' + peerId);
@@ -2875,10 +2937,29 @@ async function openChatPeer(peerId, name){
     const isSys = m.msg_type === 'system' || m.from_user_id === 0;
     const me = !isSys && m.from_user_id === state.user.id;
     const cls = isSys ? 'sys' : (me ? 'me' : 'them');
-    return `<div class="chat-bubble ${cls}"><div class="meta">${isSys?'系统':(me?'我':(m.peer_name||''))} · ${m.created_at||''}</div>${m.body}</div>`;
-  }).join('') : '<div class="note" style="padding:8px">暂无消息，打个招呼吧</div>';
+    const isTodo = isSys && m.ref_type === 'todo' && m.ref_id;
+    const action = isTodo
+      ? `<div style="margin-top:8px"><button class="btn btn-sm btn-pri" style="width:auto" onclick="event.stopPropagation();openTodoFromMessage(${Number(m.ref_id)})">去办理</button></div>`
+      : '';
+    return `<div class="chat-bubble ${cls}" ${isTodo?`style="cursor:pointer" onclick="openTodoFromMessage(${Number(m.ref_id)})"`:''}><div class="meta">${isSys?'系统':(me?'我':(m.peer_name||''))} · ${m.created_at||''}</div>${m.body}${action}</div>`;
+  }).join('') : '<div class="note" style="padding:8px">暂无消息</div>';
   box.scrollTop = box.scrollHeight;
   await refreshChatPeers();
+}
+
+async function openTodoFromMessage(tid){
+  // AI-GEN-BEGIN
+  if (!tid) return;
+  toggleChat(false);
+  if (!document.getElementById('sc-home')?.classList.contains('show')) {
+    await enterHome();
+  }
+  state.view = 'todo';
+  state.todoTab = 'pending';
+  renderSide();
+  await renderMain();
+  await openTodoFlow(tid, { handle: true });
+  // AI-GEN-END
 }
 
 async function sendChatLine(){
@@ -2887,7 +2968,7 @@ async function sendChatLine(){
   const body = (input.value || '').trim();
   if (!body) return;
   const { data } = await api('/api/chat/send', {
-    method:'POST', body: JSON.stringify({ to_user_id: state.chatPeerId, body, title:'即时聊天' })
+    method:'POST', body: JSON.stringify({ to_user_id: state.chatPeerId, body, title:'即时消息' })
   });
   if (!data.ok) return toast(data.error);
   input.value = '';
@@ -4632,7 +4713,7 @@ async function renderOaForms(el){
     };
     return `<span class="pill ${map[s]||'p-gray'}">${s}</span>`;
   };
-  const typeLabel = (t) => t === 'leave' ? '北森离职' : '账号申请';
+  const typeLabel = (t) => t === 'leave' ? '北森离职' : '其它';
   const samplePayload = {
     userId: 630702408,
     approvalResultType: 'Passed',
@@ -4645,12 +4726,10 @@ async function renderOaForms(el){
   el.innerHTML = `
     <div class="ptitle">北森消息 <span class="pill p-blue">${(data.forms||[]).length}</span></div>
     <div class="callout">
-      <strong>离职审批通过</strong>：对齐北森 OpenAPI 字段
-      <code>userId</code> / <code>approvalResultType=Passed</code> /
-      <code>processType=DimissionProcessNew</code> /
-      <code>lastWorkDate</code> / <code>EmployeeStatus</code>。
-      匹配到人则<strong>先关闭各业务系统</strong>可登录账号，<strong>最后关闭本系统（LEUC）</strong>账号；未匹配则派人人事核对。<br>
-      参考：ApprovalFinish、员工变动查询（不必真调北森，本页仅模拟消息）。
+      仅模拟<strong>北森离职审批通过</strong>。匹配到人后按账号是否敏感进入审批（与权限申请同规则）：
+      无敏感 → 直属 → <strong>系统负责人关闭</strong>；
+      有敏感 → 直属→一级→财务 → <strong>系统负责人关闭</strong>。
+      各业务系统一单；最后一单关闭<strong>本系统（LEUC）</strong>账号。
     </div>
     <div class="card" style="margin-bottom:14px">
       <div class="hd"><b>示例消息（离职审批通过）</b></div>
@@ -4659,9 +4738,6 @@ async function renderOaForms(el){
     <div class="toolbar">
       <button class="btn btn-sm btn-pri" style="width:auto" onclick="oaSimLeave('xuhaohao')">模拟离职审批通过（徐好好）</button>
       <button class="btn btn-sm btn-line" onclick="oaSimLeave('unknown')">模拟离职消息（未匹配人）</button>
-      <button class="btn btn-sm btn-line" onclick="oaSimApply('mixed')">次要：模拟账号申请通过</button>
-      <button class="btn btn-sm btn-line" onclick="oaSimApply('existing')">次要：已知人申请</button>
-      <button class="btn btn-sm btn-line" onclick="oaSimApply('new_person')">次要：新人申请</button>
     </div>
     ${(data.forms||[]).length ? data.forms.map(f => `
       <div class="card" style="margin-bottom:12px">
@@ -4677,18 +4753,16 @@ async function renderOaForms(el){
         ${f.beisen_payload ? `<pre style="background:#F4F7FB;border:1px solid #E2E8F0;padding:10px;border-radius:8px;font-size:11.5px;overflow:auto;margin:8px 0">${escapeHtml(JSON.stringify(f.beisen_payload, null, 2))}</pre>` : (f.remark && !String(f.remark).startsWith('{') ? `<div class="note">${escapeHtml(f.remark)}</div>` : '')}
         <table>
           <thead><tr>
-            <th>系统</th><th>需求分类</th><th>申请人</th><th>标识</th><th>岗位</th><th>处理状态</th><th>备注</th>
+            <th>系统</th><th>申请人</th><th>标识</th><th>处理状态</th><th>备注</th>
           </tr></thead>
           <tbody>${(f.lines||[]).map(l => `
             <tr>
               <td>${l.system_name || l.system_code || '-'}</td>
-              <td>${l.req_category || '-'}</td>
               <td>${l.applicant_name || '-'}</td>
               <td><code>${l.oa_person_code || '-'}</code></td>
-              <td>${l.applicant_job || '-'}</td>
               <td>${statusPill(l.handle_status)}</td>
               <td class="note">${l.remark || ''}</td>
-            </tr>`).join('') || '<tr><td colspan="7" class="note">无明细</td></tr>'}
+            </tr>`).join('') || '<tr><td colspan="5" class="note">无明细</td></tr>'}
           </tbody>
         </table>
       </div>`).join('') : '<div class="card note">暂无消息，请点上方按钮模拟北森离职审批通过</div>'}
@@ -4696,14 +4770,6 @@ async function renderOaForms(el){
 }
 function escapeHtml(s){
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-async function oaSimApply(scenario){
-  const { data } = await api('/api/oa/simulate-account-apply', {
-    method:'POST', body: JSON.stringify({ scenario })
-  });
-  if (!data.ok) return toast(data.error);
-  toast(data.message);
-  renderMain();
 }
 async function oaSimLeave(who){
   const today = new Date().toISOString().slice(0, 10);
@@ -4922,14 +4988,74 @@ async function toggleSys(id, status){
 function openAddSys(){
   // AI-GEN-BEGIN
   if (!(hasBtn('sys_add') || state.isSysSuper)) return toast('无「添加系统」按钮权限');
+  state._editSysId = null;
+  document.getElementById('sys-form-title').textContent = '添加登录系统';
+  document.getElementById('sys-form-hint').innerHTML =
+    '添加到「可登录系统」目录；账号申请读取此列表。仅<strong>超级管理员</strong>可添加并指定多名<strong>系统管理员</strong>。';
+  document.getElementById('sys-code-lock').style.display = 'none';
+  document.getElementById('sys-client-lock').style.display = 'none';
+  const codeEl = document.getElementById('sys-code');
+  const clientEl = document.getElementById('sys-client');
+  codeEl.readOnly = false; clientEl.readOnly = false;
+  codeEl.style.background = ''; clientEl.style.background = '';
   state.sysAccessMode = 'apply';
   document.querySelectorAll('#sys-mode div').forEach(d => d.classList.toggle('on', d.dataset.m==='apply'));
   const fe = document.getElementById('sys-forbid-ext');
   if (fe) fe.checked = false;
   document.getElementById('sys-name').value = '';
-  document.getElementById('sys-code').value = '';
-  document.getElementById('sys-client').value = '';
+  codeEl.value = '';
+  clientEl.value = '';
+  document.getElementById('sys-cb').value = 'http://127.0.0.1:5055/oidc/callback?app=';
+  document.getElementById('sys-sso-field').value = 'account_name';
+  document.getElementById('sys-owners-field').style.display = '';
   renderOwnerChecks([], 'sys-owners-box');
+  document.getElementById('sys-form-ok').textContent = '保存';
+  openModal('m-add-sys');
+  // AI-GEN-END
+}
+function openEditSys(sid){
+  // AI-GEN-BEGIN
+  const s = (state.adminSystems||[]).find(x => String(x.id)===String(sid));
+  if (!s) return toast('系统不存在');
+  if (!(s.can_manage || state.isSysSuper)) return toast('无权限编辑该系统');
+  state._editSysId = sid;
+  document.getElementById('sys-form-title').textContent = '编辑登录系统';
+  document.getElementById('sys-form-hint').innerHTML =
+    '可改名称、回调、准入方式、外部登录、SSO 登录字段'
+    + (state.isSysSuper ? '与系统管理员' : '')
+    + '。<strong>code</strong> 与 <strong>client_id</strong> 不可修改。';
+  document.getElementById('sys-code-lock').style.display = '';
+  document.getElementById('sys-client-lock').style.display = '';
+  const codeEl = document.getElementById('sys-code');
+  const clientEl = document.getElementById('sys-client');
+  codeEl.readOnly = true; clientEl.readOnly = true;
+  codeEl.style.background = '#f1f5f9'; clientEl.style.background = '#f1f5f9';
+  document.getElementById('sys-name').value = s.name || '';
+  codeEl.value = s.code || '';
+  clientEl.value = s.client_id || '';
+  const uris = (s.redirect_uri_list && s.redirect_uri_list[0])
+    || (s.redirect_uris || '').split(/[\s,]+/).filter(Boolean)[0]
+    || '';
+  document.getElementById('sys-cb').value = uris;
+  state.sysAccessMode = s.access_mode || 'apply';
+  document.querySelectorAll('#sys-mode div').forEach(d =>
+    d.classList.toggle('on', d.dataset.m === state.sysAccessMode));
+  const fe = document.getElementById('sys-forbid-ext');
+  if (fe) fe.checked = !!s.forbid_external;
+  const ssoSel = document.getElementById('sys-sso-field');
+  // 北森选项文案
+  if (s.code === 'beisen') {
+    const opt = [...ssoSel.options].find(o => o.value === 'account_uid');
+    if (opt) opt.textContent = '北森用户ID';
+  }
+  ssoSel.value = s.sso_login_field || (s.code==='beisen'?'account_uid':'account_name');
+  if (state.isSysSuper) {
+    document.getElementById('sys-owners-field').style.display = '';
+    renderOwnerChecks(s.owner_user_ids || (s.owners||[]).map(o=>o.id), 'sys-owners-box');
+  } else {
+    document.getElementById('sys-owners-field').style.display = 'none';
+  }
+  document.getElementById('sys-form-ok').textContent = '保存修改';
   openModal('m-add-sys');
   // AI-GEN-END
 }
@@ -4940,20 +5066,36 @@ function pickSysMode(el){
 }
 async function submitAddSys(){
   // AI-GEN-BEGIN
+  const editId = state._editSysId;
   const body = {
     name: document.getElementById('sys-name').value.trim(),
-    code: document.getElementById('sys-code').value.trim(),
-    client_id: document.getElementById('sys-client').value.trim() || undefined,
     redirect_uris: document.getElementById('sys-cb').value.trim(),
     require_pkce: true,
     access_mode: state.sysAccessMode || 'apply',
     forbid_external: !!document.getElementById('sys-forbid-ext')?.checked,
-    owner_user_ids: collectOwnerIds('sys-owners-box'),
+    sso_login_field: document.getElementById('sys-sso-field').value,
   };
-  const { data } = await api('/api/admin/systems', { method:'POST', body: JSON.stringify(body) });
-  if (!data.ok) return toast(data.error);
-  toast(data.message + ' secret=' + data.client_secret);
-  closeModal('m-add-sys'); renderMain();
+  if (!editId) {
+    body.code = document.getElementById('sys-code').value.trim();
+    body.client_id = document.getElementById('sys-client').value.trim() || undefined;
+    body.owner_user_ids = collectOwnerIds('sys-owners-box');
+    const { data } = await api('/api/admin/systems', { method:'POST', body: JSON.stringify(body) });
+    if (!data.ok) return toast(data.error);
+    toast(data.message + ' secret=' + data.client_secret);
+  } else {
+    if (state.isSysSuper) {
+      body.owner_user_ids = collectOwnerIds('sys-owners-box');
+    }
+    const { data } = await api('/api/admin/systems/'+editId, {
+      method:'PATCH', body: JSON.stringify(body),
+    });
+    if (!data.ok) return toast(data.error);
+    toast(data.message);
+  }
+  state._editSysId = null;
+  closeModal('m-add-sys');
+  state.adminSystems = null;
+  renderMain();
   // AI-GEN-END
 }
 async function submitSysOwners(){
