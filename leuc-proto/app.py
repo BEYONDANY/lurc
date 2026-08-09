@@ -4608,19 +4608,67 @@ def org_overview(user):
         )
 
     # scope=manage：全员可读完整部门树与人员；写操作仍由 can_manage / 按钮权限控制
-    sql = "SELECT * FROM users WHERE 1=1 AND username != ?"
-    params = [SYSTEM_ADMIN_USERNAME]
+    # AI-GEN-BEGIN
+    sql = "FROM users WHERE 1=1 AND username != ?"
+    params: list = [SYSTEM_ADMIN_USERNAME]
     if focus_id:
         ids = subtree_ids(depts, focus_id)
+        if not ids:
+            return jsonify(
+                {
+                    **base,
+                    "departments": depts,
+                    "tree": build_org_tree(depts, manage_ids),
+                    "focus_dept_id": focus_id,
+                    "my_dept_id": user.get("dept_id"),
+                    "dept_path": dept_path_label(
+                        dept_ancestor_chain(depts, user.get("dept_id"))
+                    ),
+                    "members": [],
+                    "pagination": {
+                        "page": 1,
+                        "page_size": 20,
+                        "total": 0,
+                        "total_pages": 1,
+                    },
+                }
+            )
         sql += f" AND dept_id IN ({','.join('?' * len(ids))})"
         params.extend(ids)
     if q:
         sql += " AND (display_name LIKE ? OR username LIKE ? OR phone LIKE ? OR email LIKE ?)"
         like = f"%{q}%"
         params.extend([like, like, like, like])
-    sql += " ORDER BY dept_id, id"
-    members = db.execute(sql, params).fetchall()
-    members = [m for m in members if not is_hidden_from_org(m)]
+    total = int(db.execute(f"SELECT COUNT(*) AS c {sql}", params).fetchone()["c"])
+    nopage = (request.args.get("nopage") or "").strip() in ("1", "true", "yes")
+    try:
+        page = int(request.args.get("page") or 1)
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = int(request.args.get("page_size") or 20)
+    except (TypeError, ValueError):
+        page_size = 20
+    page = max(1, page)
+    page_size = min(100, max(10, page_size))
+    if nopage:
+        # 选人/设负责人等需全量候选人
+        rows = db.execute(
+            f"SELECT * {sql} ORDER BY dept_id, id", params
+        ).fetchall()
+        page = 1
+        page_size = max(total, 1)
+        total_pages = 1
+    else:
+        total_pages = max(1, (total + page_size - 1) // page_size)
+        if page > total_pages:
+            page = total_pages
+        offset = (page - 1) * page_size
+        rows = db.execute(
+            f"SELECT * {sql} ORDER BY dept_id, id LIMIT ? OFFSET ?",
+            (*params, page_size, offset),
+        ).fetchall()
+    members = [member_row_enriched(m) for m in rows if not is_hidden_from_org(m)]
 
     return jsonify(
         {
@@ -4632,7 +4680,13 @@ def org_overview(user):
             "dept_path": dept_path_label(
                 dept_ancestor_chain(depts, user.get("dept_id"))
             ),
-            "members": [member_row_enriched(m) for m in members],
+            "members": members,
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": total_pages,
+            },
         }
     )
     # AI-GEN-END

@@ -2226,12 +2226,59 @@ function orgMembersTableHtml(data){
     </tbody>
   </table>`;
 }
+function orgMembersPagerHtml(data){
+  // AI-GEN-BEGIN
+  const pg = data.pagination || state.orgPage || { page:1, page_size:20, total:(data.members||[]).length, total_pages:1 };
+  const page = Number(pg.page || 1);
+  const pageSize = Number(pg.page_size || 20);
+  const total = Number(pg.total || 0);
+  const totalPages = Number(pg.total_pages || 1);
+  const fromN = total ? ((page - 1) * pageSize + 1) : 0;
+  const toN = Math.min(page * pageSize, total);
+  const pageSizes = [10, 20, 50, 100];
+  return `
+    <div class="pager">
+      <div class="pager-meta">显示 ${fromN}-${toN} / 共 ${total} 人 · 第 ${page}/${totalPages} 页</div>
+      <div class="pager-actions">
+        <span class="note" style="margin:0">每页</span>
+        <select onchange="orgSetPageSize(this.value)">
+          ${pageSizes.map(n => `<option value="${n}" ${pageSize===n?'selected':''}>${n}</option>`).join('')}
+        </select>
+        <button class="btn btn-sm btn-line" ${page<=1?'disabled':''} onclick="orgGotoPage(1)">首页</button>
+        <button class="btn btn-sm btn-line" ${page<=1?'disabled':''} onclick="orgGotoPage(${page-1})">上一页</button>
+        <button class="btn btn-sm btn-line" ${page>=totalPages?'disabled':''} onclick="orgGotoPage(${page+1})">下一页</button>
+        <button class="btn btn-sm btn-line" ${page>=totalPages?'disabled':''} onclick="orgGotoPage(${totalPages})">末页</button>
+      </div>
+    </div>`;
+  // AI-GEN-END
+}
+function orgGotoPage(p){
+  // AI-GEN-BEGIN
+  if (!state.orgPage) state.orgPage = { page:1, page_size:20 };
+  const tp = Number((state.deptData && state.deptData.pagination && state.deptData.pagination.total_pages) || 1);
+  const next = Math.max(1, Math.min(Number(p)||1, tp));
+  if (next === Number(state.orgPage.page)) return;
+  state.orgPage.page = next;
+  refreshOrgMembers();
+  // AI-GEN-END
+}
+function orgSetPageSize(size){
+  // AI-GEN-BEGIN
+  if (!state.orgPage) state.orgPage = { page:1, page_size:20 };
+  state.orgPage.page_size = Number(size) || 20;
+  state.orgPage.page = 1;
+  refreshOrgMembers();
+  // AI-GEN-END
+}
 function orgRightPanelHtml(data){
+  // AI-GEN-BEGIN
   const q = state.deptQ || '';
   const deptId = state.deptFilter || '';
   const focusName = deptId
     ? (((data.departments||[]).find(d=>String(d.id)===String(deptId))||{}).name || deptId)
     : '全部';
+  const pg = data.pagination || {};
+  const total = pg.total != null ? pg.total : (data.members||[]).length;
   let ownerCard = '';
   if (deptId) {
     const d = (data.departments||[]).find(x => String(x.id)===String(deptId));
@@ -2274,13 +2321,15 @@ function orgRightPanelHtml(data){
     ${ownerCard}
     <div class="toolbar">
       <input id="dept-q" value="${q}" placeholder="搜索姓名/账号/手机/邮箱" style="width:200px"
-        onkeydown="if(event.key==='Enter')refreshOrgMembers()">
-      <button class="btn btn-sm btn-line" onclick="refreshOrgMembers()">查询</button>
-      <span class="note" id="org-focus-meta">当前：${focusName} · ${(data.members||[]).length} 人</span>
+        onkeydown="if(event.key==='Enter')refreshOrgMembers({resetPage:true})">
+      <button class="btn btn-sm btn-line" onclick="refreshOrgMembers({resetPage:true})">查询</button>
+      <span class="note" id="org-focus-meta">当前：${focusName} · 共 ${total} 人</span>
     </div>
     <div class="card" style="padding:0;overflow:auto" id="org-members-card">
       ${orgMembersTableHtml(data)}
+      ${orgMembersPagerHtml(data)}
     </div>`;
+  // AI-GEN-END
 }
 function paintOrgRight(data){
   const box = document.getElementById('org-right-panel');
@@ -2295,6 +2344,8 @@ async function selectOrgDept(deptId){
     return;
   }
   state.deptFilter = next;
+  if (!state.orgPage) state.orgPage = { page:1, page_size:20 };
+  state.orgPage.page = 1;
   const tree = (state.deptData && state.deptData.tree) || [];
   const before = JSON.stringify(state.orgCollapsed || {});
   expandOrgAncestors(tree, next);
@@ -2309,23 +2360,35 @@ async function selectOrgDept(deptId){
   await refreshOrgMembers();
   // AI-GEN-END
 }
-async function refreshOrgMembers(){
+async function refreshOrgMembers(opts){
   // AI-GEN-BEGIN
+  opts = opts || {};
+  if (!state.orgPage) state.orgPage = { page:1, page_size:20 };
+  if (opts.resetPage) state.orgPage.page = 1;
   const qEl = document.getElementById('dept-q');
   if (qEl) state.deptQ = qEl.value;
   const q = state.deptQ || '';
   const deptId = state.deptFilter || '';
-  let url = '/api/org/overview?scope=manage&q=' + encodeURIComponent(q);
+  const page = state.orgPage.page || 1;
+  const pageSize = state.orgPage.page_size || 20;
+  let url = '/api/org/overview?scope=manage&q=' + encodeURIComponent(q)
+    + '&page=' + encodeURIComponent(page)
+    + '&page_size=' + encodeURIComponent(pageSize);
   if (deptId) url += '&dept_id=' + deptId;
   const { data } = await api(url);
   if (!data.ok) {
     toast(data.error || '加载失败');
     return;
   }
+  if (data.pagination) {
+    state.orgPage.page = data.pagination.page;
+    state.orgPage.page_size = data.pagination.page_size;
+  }
   // 保留树与可管范围；成员按筛选更新
   if (state.deptData) {
     state.deptData.members = data.members;
     state.deptData.focus_dept_id = data.focus_dept_id;
+    state.deptData.pagination = data.pagination;
     if (data.departments) state.deptData.departments = data.departments;
     if (data.manage_dept_ids) state.deptData.manage_dept_ids = data.manage_dept_ids;
     state.deptData.can_manage = data.can_manage;
@@ -2399,7 +2462,10 @@ async function renderOrg(el) {
 
   const q = state.deptQ || '';
   const deptId = state.deptFilter || '';
-  let url = '/api/org/overview?scope=manage&q=' + encodeURIComponent(q);
+  if (!state.orgPage) state.orgPage = { page:1, page_size:20 };
+  let url = '/api/org/overview?scope=manage&q=' + encodeURIComponent(q)
+    + '&page=' + encodeURIComponent(state.orgPage.page || 1)
+    + '&page_size=' + encodeURIComponent(state.orgPage.page_size || 20);
   if (deptId) url += '&dept_id=' + deptId;
   const reqs = [api(url)];
   if (showSync) {
@@ -2417,6 +2483,12 @@ async function renderOrg(el) {
     return;
   }
   state.deptData = data;
+  if (data.pagination) {
+    state.orgPage = {
+      page: data.pagination.page || 1,
+      page_size: data.pagination.page_size || 20,
+    };
+  }
   state.orgTab = 'manage';
   ensureOrgCollapsedInit(data.tree || []);
   expandOrgAncestors(data.tree || [], deptId);
@@ -2507,8 +2579,8 @@ async function openSetDeptOwner(deptId){
   if (!canSetDeptOwner(deptId)) return toast('无权设置负责人');
   const d = (state.deptData?.departments||[]).find(x => String(x.id)===String(deptId));
   if (!d) return toast('请先选择部门');
-  // 拉全量子树人员作候选人（不带搜索）
-  const { data } = await api('/api/org/overview?scope=manage&dept_id='+deptId);
+  // 拉全量子树人员作候选人（不带搜索，nopage 跳过分页）
+  const { data } = await api('/api/org/overview?scope=manage&nopage=1&dept_id='+deptId);
   if (!data.ok) return toast(data.error);
   const members = data.members || [];
   deptOwnerDraft = {
@@ -4118,7 +4190,7 @@ async function openAccountBind(mode){
 
 async function ensureBindPeoplePool(){
   if (state.bindDraft.selfOnly) return;
-  const { data } = await api('/api/org/overview?scope=manage');
+  const { data } = await api('/api/org/overview?scope=manage&nopage=1');
   if (!data.ok) return;
   const manageIds = new Set(data.manage_dept_ids || []);
   const role = state.user?.role;
@@ -4582,7 +4654,7 @@ async function loadPickPeople(){
   // AI-GEN-BEGIN
   const isDemo = state.pickMode === 'demo_switch';
   let url = (isDemo ? '/api/demo/org-pick' : '/api/org/overview')
-    + (isDemo ? '?q=' : '?scope=manage&q=') + encodeURIComponent(state.pickQ || '');
+    + (isDemo ? '?q=' : '?scope=manage&nopage=1&q=') + encodeURIComponent(state.pickQ || '');
   if (state.pickDept) url += '&dept_id=' + state.pickDept;
   // AI-GEN-END
   const { data } = await api(url);
