@@ -647,9 +647,13 @@ def row_user(row):
         menus = [m["id"] for m in ALL_MENUS]
         caps = [b["id"] for b in ALL_BUTTONS]
     # AI-GEN-BEGIN
-    # 外部人员：仅个人中心 + 密码管理（安全管理）
+    # 外部人员角色 / person_type：仅个人中心 + 安全管理
     ptype = row["person_type"] if "person_type" in keys else "internal"
-    if ptype == "external" and (row["username"] or "") != SYSTEM_ADMIN_USERNAME:
+    is_external = (
+        "external" in role_codes
+        or ptype == "external"
+    ) and (row["username"] or "") != SYSTEM_ADMIN_USERNAME
+    if is_external:
         menus = list(EXTERNAL_MENUS)
         caps = []
     # AI-GEN-END
@@ -7346,10 +7350,11 @@ def add_member(user):
     display_name = (data.get("display_name") or "").strip()
     phone = (data.get("phone") or "").strip()
     email = (data.get("email") or "").strip()
-    role = "employee_a"
+    role = "external"
     person_type = "external"
     db = get_db()
     migrate_schema(db)
+    ensure_roles_seeded(db)
     dept_id = get_external_dept_id(db)
     if not dept_id:
         return jsonify({"ok": False, "error": "外部人员部门未初始化"}), 500

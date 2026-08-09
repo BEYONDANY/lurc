@@ -484,13 +484,13 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 <div class="mask" id="m-add"><div class="modal">
   <!-- AI-GEN-BEGIN -->
   <h3>新建外部人员</h3>
-  <div class="callout">外部人员统一归属内置部门「外部人员」（与公司平级、不可删除）。创建后账号密码写入发信记录（优先手机，不真实发送）。登录后仅可查看个人中心与密码管理。</div>
+  <div class="callout">外部人员统一归属内置部门「外部人员」（与公司平级、不可删除），并绑定<strong>外部人员</strong>角色。创建后账号密码写入发信记录（优先手机，不真实发送）。登录后仅可查看<strong>个人中心</strong>与<strong>安全管理</strong>。</div>
   <div class="field"><label>姓名</label><input id="add-name" oninput="previewUser()" placeholder="如：外包协作人"></div>
   <div class="field"><label>登录用户名（可编辑确认）</label><input id="add-username" placeholder="默认姓名拼音，可改"></div>
   <div class="note" id="add-user-hint" style="margin-top:-6px;margin-bottom:10px"></div>
   <div class="field"><label>手机（优先接收账号密码）</label><input id="add-phone"></div>
   <div class="field"><label>邮箱（无手机时）</label><input id="add-email"></div>
-  <input type="hidden" id="add-role" value="employee_a">
+  <input type="hidden" id="add-role" value="external">
   <div class="foot">
     <button class="btn btn-line" onclick="closeModal('m-add')">取消</button>
     <button class="btn btn-pri" style="width:auto" onclick="submitAdd()">确认创建</button>
@@ -1761,8 +1761,8 @@ async function renderAdminRoles(el){
   el.innerHTML = `
     <div class="ptitle">角色与权限 <span class="pill p-blue">可配置</span>
       <span class="pill p-gray">角色 → 人员 · 菜单 · 按钮</span></div>
-    <div class="callout">左侧选角色可查看<strong>本角色人员</strong>；有分配权限时可<strong>解除该角色绑定</strong>。
-      新增人员绑定请到「按用户」页签。部门负责人是部门属性，与角色无必然关系。</div>
+    <div class="callout">左侧选角色可查看<strong>本角色人员</strong>；勾选菜单/按钮后点保存即可生效。
+      <strong>外部人员</strong>角色默认仅「个人中心」「安全管理」。新增人员绑定请到「按用户」页签；部门负责人是部门属性，与角色无必然关系。</div>
     ${tabs}
     <div class="org-layout">
       <div class="org-tree" style="max-height:70vh">
@@ -5653,7 +5653,7 @@ async function submitAdd(){
     username: document.getElementById('add-username').value.trim(),
     phone: document.getElementById('add-phone').value.trim(),
     email: document.getElementById('add-email').value.trim(),
-    role: 'employee_a',
+    role: 'external',
     person_type: 'external',
   };
   const { data } = await api('/api/dept/members', { method:'POST', body: JSON.stringify(body) });

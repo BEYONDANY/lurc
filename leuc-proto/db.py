@@ -811,6 +811,9 @@ def ensure_leuc_system(conn: PgConnection) -> None:
 # 内置角色：code 固定（业务硬编码依赖）；可改显示名，不可删除
 BUILTIN_ROLE_DEFS = [
     ("employee", "普通员工", 10),
+    ("external", "外部人员", 12),
+    ("employee_a", "普通员工A", 15),
+    ("employee_b", "普通员工B", 16),
     ("dept_owner", "部门负责人", 20),
     ("hr_specialist", "人事专员", 30),
     ("system_owner", "系统管理员", 40),
@@ -849,21 +852,55 @@ def ensure_roles_seeded(conn: PgConnection) -> None:
             )
     # AI-GEN-END
     # AI-GEN-BEGIN
-    # 同步会创建 employee_a 用户并写 user_roles；角色目录必须先存在
-    for code, label, sort in (
-        ("employee_a", "普通员工A", 15),
-        ("employee_b", "普通员工B", 16),
-    ):
+    # 外部人员角色默认菜单；存量 person_type=external 绑到 external
+    for mid in ("home", "security"):
         conn.execute(
-            """INSERT OR IGNORE INTO roles (code, label, is_builtin, sort_order, created_at)
-            VALUES (?, ?, 1, ?, ?)""",
-            (code, label, sort, now),
+            "INSERT OR IGNORE INTO role_menus (role, menu_id) VALUES ('external', ?)",
+            (mid,),
+        )
+    try:
+        conn.execute(
+            """INSERT OR IGNORE INTO user_roles (user_id, role)
+            SELECT id, 'external' FROM users
+            WHERE person_type = 'external'"""
+        )
+        conn.execute(
+            """DELETE FROM user_roles
+            WHERE role IN ('employee', 'employee_a', 'employee_b')
+              AND user_id IN (SELECT id FROM users WHERE person_type = 'external')"""
+        )
+        conn.execute(
+            "UPDATE users SET role = 'external' WHERE person_type = 'external'"
+        )
+    except Exception:
+        pass
+    # 软补：各内置角色缺省菜单/按钮（不删已有自定义勾选）
+    for role, menus in DEFAULT_ROLE_MENUS.items():
+        for mid in menus:
+            conn.execute(
+                "INSERT OR IGNORE INTO role_menus (role, menu_id) VALUES (?, ?)",
+                (role, mid),
+            )
+    for role, caps in DEFAULT_ROLE_CAPS.items():
+        for cid in caps:
+            conn.execute(
+                "INSERT OR IGNORE INTO role_caps (role, cap_id) VALUES (?, ?)",
+                (role, cid),
+            )
+    # 仅当显示名仍为空/旧占位时回填，不覆盖管理员已改名
+    for code, label, _sort in BUILTIN_ROLE_DEFS:
+        conn.execute(
+            """UPDATE roles SET label = ?
+            WHERE code = ? AND is_builtin = 1
+              AND (label IS NULL OR TRIM(label) = '' OR label = code)""",
+            (label, code),
         )
     # AI-GEN-END
 
 
 # AI-GEN-BEGIN
 EMPLOYEE_ROLE_CODES = frozenset({"employee", "employee_a", "employee_b"})
+EXTERNAL_ROLE_CODE = "external"
 SYSTEM_ROLE_EXCLUDE = EMPLOYEE_ROLE_CODES  # 「本系统角色」不含普通员工类
 
 
@@ -1209,13 +1246,13 @@ ALL_MENUS = [
     {"id": "admin_roles", "label": "角色与权限", "group": "系统设置"},
 ]
 
-# 外部人员仅个人中心 + 密码管理（安全管理）
+# 外部人员角色默认菜单：仅个人中心 + 安全管理
 EXTERNAL_MENUS = ["home", "security"]
 
 # 按钮权限（挂在菜单下；写入 role_caps）
 ALL_BUTTONS = [
     {"id": "manage_all_org", "label": "管理全部部门", "menu": "my_org"},
-    {"id": "org_add", "label": "添加人员", "menu": "my_org"},
+    {"id": "org_add", "label": "新建外部人员", "menu": "my_org"},
     {"id": "org_import", "label": "导入人员", "menu": "my_org"},
     {"id": "org_sync", "label": "部门同步", "menu": "my_org"},
     {"id": "org_set_owner", "label": "设置部门负责人", "menu": "my_org"},
@@ -1237,6 +1274,7 @@ ALL_CAPS = ALL_BUTTONS  # 兼容旧名
 # 默认菜单（写入 role_menus；兼容旧 ROLE_MENUS 读取）
 DEFAULT_ROLE_MENUS = {
     "employee": ["home", "security", "todo", "apply", "my_org"],
+    "external": ["home", "security"],
     "finance": ["home", "security", "todo", "apply", "my_org"],
     "hr_specialist": [
         "home", "security", "todo", "apply", "my_org", "oa_forms",
@@ -1256,6 +1294,7 @@ DEFAULT_ROLE_MENUS = {
 
 DEFAULT_ROLE_CAPS = {
     "employee": [],
+    "external": [],
     "finance": [],
     "hr_specialist": [
         "manage_all_org", "org_add", "org_import", "org_sync", "org_set_owner",
@@ -1275,14 +1314,17 @@ DEFAULT_ROLE_CAPS = {
         "org_dept_add", "org_dept_delete",
         "proxy_apply", "set_account_expire",
     ],
+    "employee_a": [],
+    "employee_b": [],
 }
 
 ROLE_MENUS = DEFAULT_ROLE_MENUS  # 兼容旧引用；运行时优先 DB
 
 ROLE_LABELS = {
     "employee": "普通员工",
-    "employee_a": "普通员工",
-    "employee_b": "普通员工",
+    "external": "外部人员",
+    "employee_a": "普通员工A",
+    "employee_b": "普通员工B",
     "dept_owner": "部门负责人",
     "hr_specialist": "人事专员",
     "system_owner": "系统管理员",
