@@ -14,6 +14,8 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - leuc_pgdata:/var/lib/postgresql/data
+      # 首次创建数据卷时自动导入全量快照（已有卷不会重复执行）
+      - ./docker/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U leuc -d leuc"]
       interval: 5s

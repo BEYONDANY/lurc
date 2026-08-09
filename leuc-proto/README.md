@@ -17,16 +17,20 @@ python app.py
 
 ### Docker 本地部署（推荐）
 
+仓库已附带 PostgreSQL 全量快照（`docker/init/01-leuc-data.sql.gz`：部门/人员/角色/账号等）。  
+**拉取后首次启动请带 `-v` 清卷**，才会自动导入快照：
+
 ```bash
 cd leuc-proto
 
-# 可选：配置 LeOrg / 北森
+# 可选：配置 LeOrg / 北森（勿提交 .env）
 cp -n .env.example .env
 
-# 构建并启动（前台看日志用 up；后台加 -d）
+# 清空旧卷并构建启动（导入全量数据）
+docker compose down -v
 docker compose up --build -d
 
-# 查看日志 / 停止
+# 查看日志 / 停止（保留数据卷）
 docker compose logs -f
 docker compose down
 ```
@@ -35,9 +39,11 @@ docker compose down
 手机同网访问：`http://<电脑局域网IP>:5055`
 
 说明：
-- Postgres 数据卷 `leuc_pgdata`；`./data` 挂载非库文件
-- 端口可用环境变量覆盖：`LEUC_PORT=5055 docker compose up --build -d`
-- 首次强制重建种子库（会清空）：`LEUC_FORCE_INIT=1 docker compose up --build -d`
+- Postgres 数据卷 `leuc_pgdata`；仅**卷为空**时执行 `docker/init/*.sql.gz`
+- 已有本地卷想换成仓库快照：必须 `docker compose down -v` 后再 `up`
+- `./data` 挂载非库文件；端口可用 `LEUC_PORT=5055` 覆盖
+- 忽略快照、强制走代码种子重建（会清空业务数据）：`LEUC_FORCE_INIT=1 docker compose up --build -d`
+- 维护导出快照：`./scripts/export_pg_snapshot.sh`（需容器已在跑）
 
 重建种子数据（会删除库）：
 
