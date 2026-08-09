@@ -1,0 +1,25 @@
+DATABASE_URL=postgresql://leuc:leuc@db:5432/leuc
+# AI-GEN-BEGIN
+# 复制为 .env 后填写真实值（勿提交 .env）
+
+# 时区（中国）
+TZ=Asia/Shanghai
+
+# LeOrg 部门/人员同步
+LEORG_BASE_URL=https://leorg-ai.lecoosys.com
+LEORG_CLIENT_ID=kF92HXbfyNyWKKW5Q5PQLXLl6Ag4ayjmzTBMdqE4
+LEORG_CLIENT_SECRET=mn5MS55q8EDHU1m-au24EJPfMwYZ2BZ_i5ALdfnNNas
+LEORG_SCOPE=org:read emp:read
+
+# 北森 iTalent SSO（PEM 可用 \n 表示换行，整段加双引号）
+BEISEN_SSO_TENANT_ID=614218
+BEISEN_SSO_APP_ID=100
+BEISEN_SSO_ISS=127.0.0.1:5055
+BEISEN_SSO_UTY=id
+BEISEN_SSO_AUTH_URL=https://oapi.italent.cn/SSO/AuthCenter
+# SSO 成功后进入北森门户
+BEISEN_SSO_RETURN_URL=https://www.italent.cn/
+BEISEN_SSO_TTL_SECONDS=900
+BEISEN_SSO_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"
+BEISEN_SSO_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----\n"
+# AI-GEN-END
