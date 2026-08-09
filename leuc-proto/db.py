@@ -665,9 +665,11 @@ def migrate_schema(conn: PgConnection) -> None:
         ("super_admin", "admin_tasks"),
         ("super_admin", "admin_notify"),
         ("super_admin", "admin_audit"),
+        ("super_admin", "admin_leave_close"),
         ("hr_specialist", "admin_tasks"),
         ("hr_specialist", "admin_notify"),
         ("hr_specialist", "admin_audit"),
+        ("hr_specialist", "admin_leave_close"),
     ):
         conn.execute(
             "INSERT OR IGNORE INTO role_menus (role, menu_id) VALUES (?, ?)",
@@ -1202,6 +1204,7 @@ ALL_MENUS = [
     {"id": "admin_tasks", "label": "任务管理", "group": "系统设置"},
     {"id": "admin_notify", "label": "发信记录", "group": "系统设置"},
     {"id": "admin_audit", "label": "审计日志", "group": "系统设置"},
+    {"id": "admin_leave_close", "label": "离职关账记录", "group": "系统设置"},
     {"id": "admin_sensitive", "label": "敏感审批链", "group": "系统设置"},
     {"id": "admin_roles", "label": "角色与权限", "group": "系统设置"},
 ]
@@ -1237,13 +1240,13 @@ DEFAULT_ROLE_MENUS = {
     "finance": ["home", "security", "todo", "apply", "my_org"],
     "hr_specialist": [
         "home", "security", "todo", "apply", "my_org", "oa_forms",
-        "admin_tasks", "admin_notify", "admin_audit",
+        "admin_tasks", "admin_notify", "admin_audit", "admin_leave_close",
     ],
     "system_owner": ["home", "security", "todo", "apply", "my_org", "my_systems", "sys_accounts", "oa_forms"],
     "super_admin": [
         "home", "security", "todo", "apply", "my_org",
         "my_systems", "sys_accounts", "oa_forms",
-        "admin_tasks", "admin_notify", "admin_audit",
+        "admin_tasks", "admin_notify", "admin_audit", "admin_leave_close",
         "admin_sensitive", "admin_roles",
     ],
     "employee_a": ["home", "security", "todo", "apply", "my_org"],

@@ -1161,6 +1161,7 @@ function renderSide() {
         { id: 'admin_tasks', label: '任务管理' },
         { id: 'admin_notify', label: '发信记录' },
         { id: 'admin_audit', label: '审计日志' },
+        { id: 'admin_leave_close', label: '离职关账记录' },
         { id: 'admin_sensitive', label: '敏感审批链' },
         { id: 'admin_roles', label: '角色与权限' },
       ],
@@ -1429,6 +1430,11 @@ async function renderMain() {
   if (state.view === 'admin_audit') {
     await renderAdminAudit(el); return;
   }
+  // AI-GEN-BEGIN
+  if (state.view === 'admin_leave_close') {
+    await renderAdminLeaveClose(el); return;
+  }
+  // AI-GEN-END
   // AI-GEN-END
   if (state.view === 'admin_roles' || state.view === 'admin_perms') {
     await renderAdminRoles(el); return;
@@ -1587,6 +1593,70 @@ async function renderAdminAudit(el){
     <table class="tbl"><thead><tr>
       <th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>详情</th><th>IP</th>
     </tr></thead><tbody>${rows||'<tr><td colspan="6">暂无日志</td></tr>'}</tbody></table>`;
+}
+
+async function renderAdminLeaveClose(el){
+  // AI-GEN-BEGIN
+  el.innerHTML = `<div class="ptitle">离职关账记录</div><div class="note">加载中…</div>`;
+  const q = (state.leaveCloseQ || '').trim();
+  const qs = new URLSearchParams({ limit: '100' });
+  if (q) qs.set('q', q);
+  const { data } = await api('/api/admin/leave-closes?' + qs.toString());
+  if (!data.ok) {
+    el.innerHTML = `<div class="ptitle">离职关账记录</div><div class="warn">${data.error||'无权'}</div>`;
+    return;
+  }
+  const rows = (data.records || []).map(r => `<tr>
+    <td class="note" style="white-space:nowrap">${fmtDateTime(r.closed_at)}</td>
+    <td><b>${r.display_name||'—'}</b><div class="note">${r.username||''} · #${r.user_id}</div></td>
+    <td class="note">${r.source||'—'}</td>
+    <td class="note">${r.reason||'—'}</td>
+    <td class="note" style="max-width:360px">${r.summary||'—'}</td>
+    <td><button class="btn btn-sm btn-line" style="width:auto" onclick="openLeaveCloseDetail(${r.id})">明细</button></td>
+  </tr>`).join('');
+  el.innerHTML = `
+    <div class="ptitle">离职关账记录</div>
+    <div class="callout">增量同步发现在职→离职时立即关闭本系统及全部绑定账号；每条记录可查看子系统本地关闭与远程回执。</div>
+    <div class="row" style="gap:8px;margin:10px 0;align-items:center">
+      <input id="leave-close-q" class="inp" style="max-width:240px" placeholder="姓名/账号/用户ID"
+        value="${(q||'').replace(/"/g,'&quot;')}"
+        onkeydown="if(event.key==='Enter'){state.leaveCloseQ=this.value;renderAdminLeaveClose(document.getElementById('main'))}" />
+      <button class="btn btn-sm btn-pri" style="width:auto" onclick="state.leaveCloseQ=document.getElementById('leave-close-q').value;renderAdminLeaveClose(document.getElementById('main'))">查询</button>
+      <span class="note">共 ${data.total||0} 条</span>
+    </div>
+    <table class="tbl"><thead><tr>
+      <th>关闭时间</th><th>人员</th><th>来源</th><th>原因</th><th>摘要</th><th></th>
+    </tr></thead><tbody>${rows||'<tr><td colspan="6">暂无离职关账记录</td></tr>'}</tbody></table>
+    <div class="mask" id="m-leave-close"><div class="modal modal-md">
+      <div class="hd"><b>关账明细</b><button class="x" onclick="closeModal('m-leave-close')">×</button></div>
+      <div id="leave-close-detail" class="bd"></div>
+    </div></div>`;
+  // AI-GEN-END
+}
+async function openLeaveCloseDetail(id){
+  // AI-GEN-BEGIN
+  const box = document.getElementById('leave-close-detail');
+  if (box) box.innerHTML = '<div class="note">加载中…</div>';
+  openModal('m-leave-close');
+  const { data } = await api('/api/admin/leave-closes/' + id);
+  if (!data.ok) { if (box) box.innerHTML = `<div class="warn">${data.error||'加载失败'}</div>`; return; }
+  const r = data.record || {};
+  const items = (r.items || []).map((it,i) => `<tr>
+    <td>${i+1}</td>
+    <td><b>${it.system_name||it.system_code||'—'}</b><div class="note">${it.system_code||''}</div></td>
+    <td><code>${it.account_name||'—'}</code></td>
+    <td>${it.local_status||'—'}</td>
+    <td><span class="pill ${it.remote_status==='success'||it.remote_status==='simulated'||it.remote_status==='local_only'?'p-green':'p-orange'}">${it.remote_status||'—'}</span>
+      <div class="note">${it.remote_message||''}</div></td>
+  </tr>`).join('');
+  if (box) box.innerHTML = `
+    <div class="note">#${r.id} · ${r.display_name||''}（${r.username||''}）· ${fmtDateTime(r.closed_at)}</div>
+    <div style="margin:8px 0">${r.reason||''}</div>
+    <div class="note" style="margin-bottom:8px">${r.summary||''}</div>
+    <table class="tbl"><thead><tr>
+      <th>#</th><th>系统</th><th>账号</th><th>本地</th><th>子系统回执</th>
+    </tr></thead><tbody>${items||'<tr><td colspan="5">无明细</td></tr>'}</tbody></table>`;
+  // AI-GEN-END
 }
 // AI-GEN-END
 

@@ -161,6 +161,67 @@ def ensure_ops_tables(conn) -> None:
           created_at TEXT NOT NULL
         )"""
     )
+    # AI-GEN-BEGIN
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS leave_close_records (
+          id INTEGER PRIMARY KEY,
+          user_id INTEGER NOT NULL,
+          username TEXT,
+          display_name TEXT,
+          leorg_emp_id INTEGER,
+          beisen_user_id TEXT,
+          source TEXT NOT NULL DEFAULT 'leorg_incr',
+          reason TEXT,
+          sync_run_id INTEGER,
+          closed_at TEXT NOT NULL,
+          summary TEXT,
+          detail_json TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS leave_close_items (
+          id INTEGER PRIMARY KEY,
+          record_id INTEGER NOT NULL,
+          system_id INTEGER,
+          system_code TEXT,
+          system_name TEXT,
+          account_id INTEGER,
+          pool_account_id INTEGER,
+          account_name TEXT,
+          local_status TEXT,
+          remote_status TEXT,
+          remote_http_status INTEGER,
+          remote_message TEXT,
+          closed_at TEXT
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS subsystem_close_inbox (
+          id INTEGER PRIMARY KEY,
+          system_id INTEGER,
+          system_code TEXT,
+          account_name TEXT,
+          account_uid TEXT,
+          leuc_user_id INTEGER,
+          reason TEXT,
+          payload_json TEXT,
+          created_at TEXT NOT NULL
+        )"""
+    )
+    # 子系统关闭回调地址（空则走本地模拟回执）
+    sys_cols = [r[1] for r in conn.execute("PRAGMA table_info(systems)").fetchall()]
+    if sys_cols and "close_api_url" not in sys_cols:
+        conn.execute("ALTER TABLE systems ADD COLUMN close_api_url TEXT")
+    # 原型默认指向内置回调，便于子系统侧落库验示
+    try:
+        conn.execute(
+            """UPDATE systems
+            SET close_api_url = '/api/internal/subsystem-account-close'
+            WHERE COALESCE(is_builtin, 0) = 0
+              AND (close_api_url IS NULL OR close_api_url = '')"""
+        )
+    except Exception:
+        pass
     # AI-GEN-END
     dept_cols = [r[1] for r in conn.execute("PRAGMA table_info(departments)").fetchall()]
     if dept_cols and "is_builtin" not in dept_cols:
@@ -461,6 +522,56 @@ def list_audit_logs(
                 d["detail"] = d["detail_json"]
         out.append(d)
     return out
+
+
+def list_leave_close_records(
+    db, *, q: str | None = None, limit: int = 100, offset: int = 0
+) -> tuple[list[dict], int]:
+    """离职关账记录列表。"""
+    # AI-GEN-BEGIN
+    limit = max(1, min(int(limit or 100), 300))
+    offset = max(0, int(offset or 0))
+    params: list[Any] = []
+    where = ""
+    if q and str(q).strip():
+        where = """WHERE username ILIKE ? OR display_name ILIKE ?
+            OR CAST(user_id AS TEXT) = ? OR CAST(leorg_emp_id AS TEXT) = ?"""
+        like = f"%{str(q).strip()}%"
+        params.extend([like, like, str(q).strip(), str(q).strip()])
+    total = db.execute(
+        f"SELECT COUNT(*) AS c FROM leave_close_records {where}", params
+    ).fetchone()["c"]
+    rows = db.execute(
+        f"""SELECT * FROM leave_close_records {where}
+        ORDER BY id DESC LIMIT ? OFFSET ?""",
+        (*params, limit, offset),
+    ).fetchall()
+    return [dict(r) for r in rows], int(total)
+    # AI-GEN-END
+
+
+def get_leave_close_record(db, record_id: int) -> dict | None:
+    """离职关账详情（含子系统明细）。"""
+    # AI-GEN-BEGIN
+    row = db.execute(
+        "SELECT * FROM leave_close_records WHERE id = ?", (int(record_id),)
+    ).fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    if d.get("detail_json"):
+        try:
+            d["detail"] = json.loads(d["detail_json"])
+        except Exception:
+            d["detail"] = d["detail_json"]
+    items = db.execute(
+        """SELECT * FROM leave_close_items
+        WHERE record_id = ? ORDER BY id""",
+        (int(record_id),),
+    ).fetchall()
+    d["items"] = [dict(x) for x in items]
+    return d
+    # AI-GEN-END
 
 
 # AI-GEN-END

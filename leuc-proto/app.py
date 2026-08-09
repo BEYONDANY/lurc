@@ -55,6 +55,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
+from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory, session
@@ -108,7 +109,9 @@ from leuc_ops import (
     finish_task_run,
     gen_account_password,
     get_external_dept_id,
+    get_leave_close_record,
     list_audit_logs,
+    list_leave_close_records,
     list_scheduled_tasks,
     list_sync_changes,
     list_task_runs,
@@ -2518,6 +2521,348 @@ def user_is_closed(row) -> bool:
     if "status" not in keys:
         return False
     return (row["status"] or "active") == "closed"
+
+
+def _notify_subsystem_account_close(
+    db,
+    *,
+    system_row,
+    user_id: int,
+    account_name: str,
+    pool_account_id=None,
+    account_uid: str | None = None,
+    reason: str,
+    closed_at: str,
+) -> dict:
+    """通知子系统关闭账号：有 close_api_url 则 HTTP 回调，否则写入本地模拟回执。"""
+    # AI-GEN-BEGIN
+    keys = system_row.keys() if hasattr(system_row, "keys") else []
+    sid = int(system_row["system_id"] if "system_id" in keys else system_row["id"])
+    scode = (
+        system_row["system_code"]
+        if "system_code" in keys
+        else (system_row["code"] if "code" in keys else "")
+    ) or ""
+    sname = (
+        system_row["system_name"]
+        if "system_name" in keys
+        else (system_row["name"] if "name" in keys else "")
+    ) or ""
+    payload = {
+        "event": "account.close",
+        "reason": reason,
+        "system_id": sid,
+        "system_code": scode,
+        "system_name": sname,
+        "leuc_user_id": int(user_id),
+        "account_name": account_name,
+        "account_uid": account_uid,
+        "pool_account_id": pool_account_id,
+        "closed_at": closed_at,
+    }
+    # 本系统：无需远程
+    if scode == LEUC_SYSTEM_CODE:
+        return {
+            "remote_status": "local_only",
+            "remote_http_status": None,
+            "remote_message": "本系统本地关闭",
+        }
+    close_url = None
+    if "close_api_url" in keys:
+        close_url = (system_row["close_api_url"] or "").strip() or None
+    client_id = system_row["client_id"] if "client_id" in keys else ""
+
+    def _write_inbox(msg: str):
+        db.execute(
+            """INSERT INTO subsystem_close_inbox
+            (system_id, system_code, account_name, account_uid, leuc_user_id,
+             reason, payload_json, created_at)
+            VALUES (?,?,?,?,?,?,?,?)""",
+            (
+                sid,
+                scode,
+                account_name,
+                account_uid,
+                int(user_id),
+                reason,
+                json.dumps(payload, ensure_ascii=False),
+                closed_at,
+            ),
+        )
+        return msg
+
+    if not close_url:
+        # 原型：未配置回调时本地模拟「子系统侧记录」
+        _write_inbox("simulated")
+        return {
+            "remote_status": "simulated",
+            "remote_http_status": None,
+            "remote_message": "未配置 close_api_url，已写入本地子系统关闭回执",
+        }
+
+    try:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json; charset=utf-8",
+            "X-Leuc-System-Code": scode,
+            "X-Leuc-Client-Id": client_id or "",
+        }
+        # 同源相对路径：转为本服务绝对地址
+        if close_url.startswith("/"):
+            base = "http://127.0.0.1:5055"
+            try:
+                if request and getattr(request, "host_url", None):
+                    base = request.host_url.rstrip("/")
+            except Exception:
+                pass
+            close_url = base + close_url
+        req = Request(close_url, data=body, headers=headers, method="POST")
+        with urlopen(req, timeout=8) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            code = getattr(resp, "status", None) or 200
+        try:
+            data = json.loads(raw) if raw else {}
+        except Exception:
+            data = {"raw": raw[:300]}
+        ok = bool(data.get("ok", True)) if isinstance(data, dict) else True
+        return {
+            "remote_status": "success" if ok else "failed",
+            "remote_http_status": int(code),
+            "remote_message": (
+                (data.get("message") if isinstance(data, dict) else None)
+                or raw[:200]
+                or "ok"
+            ),
+        }
+    except Exception as ex:
+        _write_inbox(f"http_error:{ex}")
+        return {
+            "remote_status": "failed",
+            "remote_http_status": None,
+            "remote_message": f"回调失败：{ex}",
+        }
+    # AI-GEN-END
+
+
+def close_user_for_leave(
+    db,
+    user_id: int,
+    *,
+    source: str = "leorg_incr",
+    reason: str = "LeOrg 在职转离职",
+    sync_run_id: int | None = None,
+    leorg_emp: dict | None = None,
+) -> dict:
+    """离职立即关闭：本系统 + 全部绑定业务账号，并写独立关闭记录 / 通知子系统。"""
+    # AI-GEN-BEGIN
+    from leuc_ops import ensure_ops_tables
+
+    ensure_ops_tables(db)
+    uid = int(user_id)
+    urow = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+    if not urow:
+        return {"ok": False, "error": "用户不存在"}
+    # 幂等：已关闭且已有离职记录则直接返回最近一条
+    if user_is_closed(urow):
+        last = db.execute(
+            """SELECT id FROM leave_close_records
+            WHERE user_id = ? ORDER BY id DESC LIMIT 1""",
+            (uid,),
+        ).fetchone()
+        if last:
+            return {
+                "ok": True,
+                "already_closed": True,
+                "record_id": int(last["id"]),
+                "closed_count": 0,
+            }
+
+    try:
+        now = now_ts()
+    except Exception:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    leuc_r = close_leuc_user(db, uid)
+    if not leuc_r.get("ok"):
+        return leuc_r
+
+    accts = db.execute(
+        """SELECT a.*, s.code AS system_code, s.name AS system_name,
+                  s.client_id, s.close_api_url, s.is_builtin
+        FROM user_system_accounts a
+        JOIN systems s ON s.id = a.system_id
+        WHERE a.user_id = ?
+        ORDER BY a.id""",
+        (uid,),
+    ).fetchall()
+
+    items_out = []
+    closed_names = []
+    for a in accts:
+        sid = int(a["system_id"])
+        aname = a["account_name"]
+        # 本地关闭（LEUC 已在 close_leuc_user 处理）
+        local_status = "closed"
+        if (a["system_code"] or "") != LEUC_SYSTEM_CODE:
+            db.execute(
+                "UPDATE user_system_accounts SET can_login = 0 WHERE id = ?",
+                (int(a["id"]),),
+            )
+            db.execute(
+                """UPDATE system_accounts SET status = 'closed'
+                WHERE leuc_user_id = ? AND system_id = ? AND account_name = ?""",
+                (uid, sid, aname),
+            )
+        pool = db.execute(
+            """SELECT id, account_uid FROM system_accounts
+            WHERE system_id = ? AND account_name = ? LIMIT 1""",
+            (sid, aname),
+        ).fetchone()
+        pool_id = int(pool["id"]) if pool else None
+        account_uid = (pool["account_uid"] if pool and "account_uid" in pool.keys() else None)
+        remote = _notify_subsystem_account_close(
+            db,
+            system_row=a,
+            user_id=uid,
+            account_name=aname,
+            pool_account_id=pool_id,
+            account_uid=account_uid,
+            reason=reason,
+            closed_at=now,
+        )
+        label = f"{a['system_name']}/{aname}"
+        closed_names.append(label)
+        items_out.append(
+            {
+                "system_id": sid,
+                "system_code": a["system_code"],
+                "system_name": a["system_name"],
+                "account_id": int(a["id"]),
+                "pool_account_id": pool_id,
+                "account_name": aname,
+                "local_status": local_status,
+                "remote_status": remote.get("remote_status"),
+                "remote_http_status": remote.get("remote_http_status"),
+                "remote_message": remote.get("remote_message"),
+            }
+        )
+
+    # 无绑定业务账号时也保证有本系统一行
+    if not items_out:
+        items_out.append(
+            {
+                "system_id": None,
+                "system_code": LEUC_SYSTEM_CODE,
+                "system_name": leuc_r.get("system"),
+                "account_id": None,
+                "pool_account_id": None,
+                "account_name": leuc_r.get("account"),
+                "local_status": "closed",
+                "remote_status": "local_only",
+                "remote_http_status": None,
+                "remote_message": "本系统本地关闭",
+            }
+        )
+
+    leorg_emp_id = None
+    beisen_user_id = urow["beisen_user_id"] if "beisen_user_id" in urow.keys() else None
+    if "leorg_emp_id" in urow.keys() and urow["leorg_emp_id"] is not None:
+        leorg_emp_id = int(urow["leorg_emp_id"])
+    if leorg_emp and isinstance(leorg_emp, dict):
+        if leorg_emp.get("id") is not None:
+            leorg_emp_id = int(leorg_emp["id"])
+        bid = (
+            leorg_emp.get("beisen_id")
+            or leorg_emp.get("beisenId")
+            or leorg_emp.get("beisen_user_id")
+        )
+        if bid:
+            beisen_user_id = str(bid).strip()
+
+    summary = (
+        f"关闭 {len(items_out)} 个账号："
+        + "；".join(closed_names[:8])
+        + ("…" if len(closed_names) > 8 else "")
+    )
+    cur = db.execute(
+        """INSERT INTO leave_close_records
+        (user_id, username, display_name, leorg_emp_id, beisen_user_id,
+         source, reason, sync_run_id, closed_at, summary, detail_json)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            uid,
+            urow["username"],
+            urow["display_name"],
+            leorg_emp_id,
+            beisen_user_id,
+            source,
+            reason,
+            sync_run_id,
+            now,
+            summary,
+            json.dumps(
+                {"leorg_emp": leorg_emp, "item_count": len(items_out)},
+                ensure_ascii=False,
+                default=str,
+            ),
+        ),
+    )
+    rid = int(cur.lastrowid)
+    for it in items_out:
+        db.execute(
+            """INSERT INTO leave_close_items
+            (record_id, system_id, system_code, system_name, account_id,
+             pool_account_id, account_name, local_status, remote_status,
+             remote_http_status, remote_message, closed_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                rid,
+                it.get("system_id"),
+                it.get("system_code"),
+                it.get("system_name"),
+                it.get("account_id"),
+                it.get("pool_account_id"),
+                it.get("account_name"),
+                it.get("local_status"),
+                it.get("remote_status"),
+                it.get("remote_http_status"),
+                it.get("remote_message"),
+                now,
+            ),
+        )
+
+    write_audit_log(
+        db,
+        action="leave.close",
+        actor_user_id=None,
+        actor_name=source,
+        target_type="user",
+        target_id=str(uid),
+        detail={
+            "record_id": rid,
+            "reason": reason,
+            "summary": summary,
+            "sync_run_id": sync_run_id,
+        },
+    )
+    try:
+        push_system_message(
+            db,
+            uid,
+            "离职关账已执行",
+            f"因「{reason}」，已关闭本系统及关联业务账号（共 {len(items_out)} 个）。",
+        )
+    except Exception:
+        pass
+    return {
+        "ok": True,
+        "record_id": rid,
+        "user_id": uid,
+        "closed_count": len(items_out),
+        "summary": summary,
+        "items": items_out,
+    }
+    # AI-GEN-END
 # AI-GEN-END
 
 
@@ -7516,9 +7861,13 @@ def hr_sync_pull(user):
             change_rows = len(new_changes)
             emp_ids = sorted(
                 {
-                    int(c["entity_id"])
+                    int(c.get("entity_id") or c.get("emp_id") or c.get("employee_id"))
                     for c in new_changes
-                    if c.get("entity_id") is not None
+                    if (
+                        c.get("entity_id") is not None
+                        or c.get("emp_id") is not None
+                        or c.get("employee_id") is not None
+                    )
                 }
             )
             emps = []
@@ -8279,12 +8628,18 @@ def _diff_leorg_employees(db, emps, leorg_to_local=None):
                         "key": f"close:{user['id']}",
                         "kind": "close",
                         "action": "close",
-                        "title": f"建议关闭：{user['display_name']}",
-                        "detail": f"LeOrg 已离职 · {user['username']}",
+                        "title": f"关闭账号：{user['display_name']}",
+                        "detail": f"LeOrg 已离职 · {user['username']}（将关闭本系统及全部绑定账号）",
                         "fields": [
                             {"field": "status", "old": "active", "new": "closed"}
                         ],
-                        "payload": {"user_id": int(user["id"]), "mode": "close"},
+                        "payload": {
+                            "user_id": int(user["id"]),
+                            "mode": "close",
+                            "leorg_emp_id": int(leorg_emp_id)
+                            if leorg_emp_id is not None
+                            else None,
+                        },
                     }
                 )
             continue
@@ -8608,8 +8963,17 @@ def _apply_leorg_sync_changes(db, selected):
             )
             counts["roster"] += 1
         elif mode == "close":
-            close_leuc_user(db, int(p["user_id"]))
-            counts["close"] += 1
+            # AI-GEN-BEGIN
+            r = close_user_for_leave(
+                db,
+                int(p["user_id"]),
+                source="leorg_preview_apply",
+                reason="LeOrg 同步确认：在职转离职",
+                leorg_emp={"id": p.get("leorg_emp_id")} if p.get("leorg_emp_id") else None,
+            )
+            if r.get("ok"):
+                counts["close"] += 1
+            # AI-GEN-END
     return counts
 # AI-GEN-END
 
@@ -8840,7 +9204,9 @@ def _realign_users_dept_from_leorg(db, emps):
 # AI-GEN-END
 
 
-def _sync_leorg_employees(db, emps, change_sink: list | None = None):
+def _sync_leorg_employees(
+    db, emps, change_sink: list | None = None, *, sync_run_id: int | None = None
+):
     """幂等写入：已有用户按 leorg_emp_id/工号/邮箱/北森ID更新；否则 upsert 花名册。"""
     # AI-GEN-BEGIN
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -8860,6 +9226,7 @@ def _sync_leorg_employees(db, emps, change_sink: list | None = None):
     users_updated = 0
     skipped = 0
     beisen_filled = 0
+    closed = 0
 
     def _beisen_id_of(row):
         v = row.get("beisen_id")
@@ -8885,7 +9252,7 @@ def _sync_leorg_employees(db, emps, change_sink: list | None = None):
             skipped += 1
             continue
 
-        # 离职：不入花名册；已有用户仅跳过（幂等）
+        # 离职：删除 pending 花名册；本地未关则立即关闭本系统+全部绑定账号
         if emp_status == 0:
             if leorg_emp_id is not None:
                 db.execute(
@@ -8893,7 +9260,35 @@ def _sync_leorg_employees(db, emps, change_sink: list | None = None):
                     WHERE leorg_emp_id = ? AND status = 'pending'""",
                     (int(leorg_emp_id),),
                 )
-            skipped += 1
+            user = _find_user_for_leorg_emp(db, e, beisen_user_id, emp_no, email)
+            if user and not user_is_closed(user):
+                # AI-GEN-BEGIN
+                r = close_user_for_leave(
+                    db,
+                    int(user["id"]),
+                    source="leorg_incr",
+                    reason="LeOrg emp_status=0 在职转离职",
+                    sync_run_id=sync_run_id,
+                    leorg_emp=e,
+                )
+                if r.get("ok") and not r.get("already_closed"):
+                    closed += 1
+                    if change_sink is not None:
+                        change_sink.append(
+                            {
+                                "entity_type": "user",
+                                "change_type": "leave_close",
+                                "entity_key": str(user["id"]),
+                                "entity_name": user["display_name"],
+                                "detail": {
+                                    "record_id": r.get("record_id"),
+                                    "summary": r.get("summary"),
+                                },
+                            }
+                        )
+                # AI-GEN-END
+            else:
+                skipped += 1
             continue
 
         # AI-GEN-BEGIN
@@ -9140,6 +9535,7 @@ def _sync_leorg_employees(db, emps, change_sink: list | None = None):
         "users_updated": users_updated,
         "beisen_filled": beisen_filled,
         "skipped": skipped,
+        "closed": closed,
     }
     # AI-GEN-END
 
@@ -12874,7 +13270,9 @@ def risk_set():
 
 
 # AI-GEN-BEGIN
-def _run_scheduled_leorg_sync(conn, change_sink: list | None = None) -> tuple[str, dict]:
+def _run_scheduled_leorg_sync(
+    conn, change_sink: list | None = None, *, sync_run_id: int | None = None
+) -> tuple[str, dict]:
     """定时/手动同步：拉取并应用；change_sink 收集明细变化。"""
     from leorg_client import LeorgClient, load_config, status_dict
 
@@ -12901,14 +13299,25 @@ def _run_scheduled_leorg_sync(conn, change_sink: list | None = None) -> tuple[st
             if not isinstance(ch, dict):
                 continue
             max_cid = max(max_cid, int(ch.get("id") or 0))
-            eid = ch.get("emp_id") or ch.get("employee_id")
+            # AI-GEN-BEGIN
+            eid = (
+                ch.get("emp_id")
+                or ch.get("employee_id")
+                or ch.get("entity_id")
+            )
+            # AI-GEN-END
             if eid is None:
                 continue
             detail = client.get_employee(int(eid))
             if detail:
                 emps.append(detail)
     emps = [e for e in emps if isinstance(e, dict)]
-    emp_stats = _sync_leorg_employees(conn, emps, change_sink=change_sink) or {}
+    emp_stats = (
+        _sync_leorg_employees(
+            conn, emps, change_sink=change_sink, sync_run_id=sync_run_id
+        )
+        or {}
+    )
     _resolve_dept_owners_from_leorg(conn)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     _save_leorg_sync_state(
@@ -12916,7 +13325,11 @@ def _run_scheduled_leorg_sync(conn, change_sink: list | None = None) -> tuple[st
         mode=mode,
         last_change_id=int(max_cid or 0),
         org_mapped=int(org_stats.get("inserted", 0) + org_stats.get("updated", 0)),
-        emp_touched=int(emp_stats.get("users_updated", 0) + emp_stats.get("roster_added", 0)),
+        emp_touched=int(
+            emp_stats.get("users_updated", 0)
+            + emp_stats.get("roster_added", 0)
+            + emp_stats.get("closed", 0)
+        ),
         now=now,
         is_full=(mode == "full"),
     )
@@ -12948,7 +13361,9 @@ def _execute_leorg_sync_job(
     )
     change_sink: list = []
     try:
-        msg, summary = _run_scheduled_leorg_sync(conn, change_sink=change_sink)
+        msg, summary = _run_scheduled_leorg_sync(
+            conn, change_sink=change_sink, sync_run_id=run_id
+        )
         status = "ok" if not summary.get("skipped") else "skipped"
         append_sync_change_logs(conn, run_id, change_sink)
         finish_task_run(conn, run_id, status=status, message=msg, summary=summary)
@@ -13163,6 +13578,82 @@ def admin_audit_logs(user):
     limit = int(request.args.get("limit") or 100)
     action = request.args.get("action") or None
     return jsonify({"ok": True, "logs": list_audit_logs(db, limit=limit, action=action)})
+    # AI-GEN-END
+
+
+@app.get("/api/admin/leave-closes")
+@login_required
+def admin_leave_closes(user):
+    """离职关账记录列表（独立列表）。"""
+    # AI-GEN-BEGIN
+    if not user_has_role(user, "super_admin", "hr_specialist"):
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    db = get_db()
+    migrate_schema(db)
+    from leuc_ops import ensure_ops_tables
+
+    ensure_ops_tables(db)
+    q = request.args.get("q") or None
+    limit = int(request.args.get("limit") or 100)
+    offset = int(request.args.get("offset") or 0)
+    rows, total = list_leave_close_records(db, q=q, limit=limit, offset=offset)
+    return jsonify({"ok": True, "records": rows, "total": total})
+    # AI-GEN-END
+
+
+@app.get("/api/admin/leave-closes/<int:rid>")
+@login_required
+def admin_leave_close_detail(user, rid):
+    """离职关账详情（含各子系统本地/远程状态）。"""
+    # AI-GEN-BEGIN
+    if not user_has_role(user, "super_admin", "hr_specialist"):
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    db = get_db()
+    migrate_schema(db)
+    from leuc_ops import ensure_ops_tables
+
+    ensure_ops_tables(db)
+    rec = get_leave_close_record(db, rid)
+    if not rec:
+        return jsonify({"ok": False, "error": "记录不存在"}), 404
+    return jsonify({"ok": True, "record": rec})
+    # AI-GEN-END
+
+
+@app.post("/api/internal/subsystem-account-close")
+def internal_subsystem_account_close():
+    """子系统关闭回调（原型/联调）：落库 subsystem_close_inbox，模拟子系统侧记录。"""
+    # AI-GEN-BEGIN
+    data = request.get_json(force=True, silent=True) or {}
+    db = get_db()
+    from leuc_ops import ensure_ops_tables
+
+    ensure_ops_tables(db)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute(
+        """INSERT INTO subsystem_close_inbox
+        (system_id, system_code, account_name, account_uid, leuc_user_id,
+         reason, payload_json, created_at)
+        VALUES (?,?,?,?,?,?,?,?)""",
+        (
+            data.get("system_id"),
+            data.get("system_code"),
+            data.get("account_name"),
+            data.get("account_uid"),
+            data.get("leuc_user_id"),
+            data.get("reason") or "account.close",
+            json.dumps(data, ensure_ascii=False, default=str),
+            now,
+        ),
+    )
+    db.commit()
+    return jsonify(
+        {
+            "ok": True,
+            "message": "子系统已接收关闭指令并落库",
+            "received_at": now,
+        }
+    )
     # AI-GEN-END
 
 
