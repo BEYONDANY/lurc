@@ -388,15 +388,12 @@ CREATE TABLE IF NOT EXISTS oa_form_lines (
 
 
 def name_to_pinyin(display_name: str) -> str:
-    name = (display_name or "").strip()
-    if not name:
-        return "user"
-    if _lazy_pinyin:
-        raw = "".join(_lazy_pinyin(name))
-    else:
-        raw = "".join(_FALLBACK.get(ch, ch if re.match(r"[A-Za-z0-9]", ch) else "") for ch in name)
-    raw = re.sub(r"[^a-zA-Z0-9]", "", raw).lower()
-    return raw or "user"
+    # AI-GEN-BEGIN
+    from surname_pinyin import name_to_pinyin as _surname_name_to_pinyin
+    return _surname_name_to_pinyin(
+        display_name, lazy_pinyin=_lazy_pinyin, fallback=_FALLBACK
+    )
+    # AI-GEN-END
 
 
 def alloc_username(conn: PgConnection, display_name: str) -> str:
@@ -414,6 +411,70 @@ def alloc_username(conn: PgConnection, display_name: str) -> str:
 
 
 # AI-GEN-BEGIN
+
+# AI-GEN-BEGIN
+def ensure_surname_usernames_repaired(conn: PgConnection) -> int:
+    """校正多音姓导致的错误用户名（如 ceng→zeng、jie→xie、di→zhai）。
+    仅当现用户名基数等于「未按姓氏读音」的旧全拼时才改，避免动手工账号。
+    """
+    from surname_pinyin import expected_username_base
+    fixed = 0
+    rows = conn.execute(
+        "SELECT id, username, display_name FROM users ORDER BY id"
+    ).fetchall()
+    for r in rows:
+        name = (r["display_name"] or "").strip()
+        un = (r["username"] or "").strip()
+        if not name or not un or un == "admin":
+            continue
+        want = expected_username_base(
+            name, lazy_pinyin=_lazy_pinyin, fallback=_FALLBACK
+        )
+        if not want or want == "user":
+            continue
+        if _lazy_pinyin:
+            naive = re.sub(r"[^a-zA-Z0-9]", "", "".join(_lazy_pinyin(name))).lower()
+        else:
+            naive = re.sub(
+                r"[^a-zA-Z0-9]",
+                "",
+                "".join(_FALLBACK.get(ch, ch if re.match(r"[A-Za-z0-9]", ch) else "") for ch in name),
+            ).lower()
+        base = un
+        while base and base[-1].isdigit():
+            base = base[:-1]
+        if base == want or not naive or base != naive:
+            continue
+        cand = want
+        if conn.execute(
+            "SELECT 1 FROM users WHERE username = ? AND id != ?", (cand, int(r["id"]))
+        ).fetchone():
+            n = 1
+            while conn.execute(
+                "SELECT 1 FROM users WHERE username = ? AND id != ?",
+                (f"{want}{n}", int(r["id"])),
+            ).fetchone():
+                n += 1
+            cand = f"{want}{n}"
+        try:
+            conn.execute(
+                "UPDATE users SET username = ? WHERE id = ?",
+                (cand, int(r["id"])),
+            )
+            try:
+                conn.execute(
+                    "UPDATE users SET itcode = ? WHERE id = ? AND itcode = ?",
+                    (cand, int(r["id"]), un),
+                )
+            except Exception:
+                pass
+            fixed += 1
+        except Exception:
+            continue
+    return fixed
+# AI-GEN-END
+
+
 def normalize_username(username: str) -> str:
     raw = (username or "").strip().lower()
     return re.sub(r"[^a-z0-9_]", "", raw)
@@ -604,6 +665,10 @@ def migrate_schema(conn: PgConnection) -> None:
         )"""
     )
     ensure_roles_seeded(conn)
+    try:
+        ensure_surname_usernames_repaired(conn)
+    except Exception:
+        pass
     # AI-GEN-BEGIN
     conn.execute(
         """CREATE TABLE IF NOT EXISTS user_roles (

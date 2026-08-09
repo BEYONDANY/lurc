@@ -95,6 +95,7 @@ from leuc_approval_ext import (
     build_apply_form_view,
     collect_cc_for_system_owners,
     editable_form_keys,
+    expand_account_permissions,
     group_bind_items_by_owner,
     jump_to_reject_from_step,
     merge_todo_meta_updates,
@@ -2980,6 +2981,7 @@ def user_accounts_for_system(user_id: int, system_code: str, only_loginable: boo
 
 
 def my_systems(user_id: int):
+    # AI-GEN-BEGIN
     db = get_db()
     systems = db.execute(
         """SELECT DISTINCT s.*
@@ -2998,18 +3000,26 @@ def my_systems(user_id: int):
             ORDER BY is_default DESC, id""",
             (user_id, s["id"]),
         ).fetchall()
+        acct_list = []
+        for a in accts:
+            item = dict(a)
+            item["permissions"] = expand_account_permissions(
+                db, s["id"], a["perm_summary"], bool(a["has_sensitive"])
+            )
+            acct_list.append(item)
         out.append(
             {
                 "code": s["code"],
                 "name": s["name"],
                 "client_id": s["client_id"],
-                "account_count": len(accts),
-                "can_login_any": any(a["can_login"] for a in accts),
-                "has_sensitive_any": any(a["has_sensitive"] for a in accts),
-                "accounts": [dict(a) for a in accts],
+                "account_count": len(acct_list),
+                "can_login_any": any(a["can_login"] for a in acct_list),
+                "has_sensitive_any": any(a["has_sensitive"] for a in acct_list),
+                "accounts": acct_list,
             }
         )
     return out
+    # AI-GEN-END
 
 
 def member_row_enriched(m):
@@ -3150,11 +3160,10 @@ def _can_view_roles(user) -> bool:
 
 
 def _can_assign_roles(user) -> bool:
-    return (
-        user_has_cap(user, "role_assign")
-        or user_has_cap(user, "config_roles")
-        or user_has_role(user, "super_admin")
-    )
+    # AI-GEN-BEGIN
+    # 分配人员角色：仅 role_assign / 超管（配置菜单的 config_roles 不能代替分配）
+    return user_has_cap(user, "role_assign") or user_has_role(user, "super_admin")
+    # AI-GEN-END
 
 
 def _slug_role_code(label: str) -> str:
@@ -5764,7 +5773,13 @@ def apply_my_accounts(user):
     items = []
     for r in rows:
         item = dict(r)
-        item["permissions"] = perms_by_sys.get(r["system_id"], [])
+        # AI-GEN-BEGIN
+        # permissions=已拥有（展开）；perm_catalog=系统权限目录（关闭勾选用）
+        item["permissions"] = expand_account_permissions(
+            db, r["system_id"], r["perm_summary"], bool(r["has_sensitive"])
+        )
+        item["perm_catalog"] = perms_by_sys.get(r["system_id"], [])
+        # AI-GEN-END
         items.append(item)
     return jsonify(
         {

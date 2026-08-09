@@ -1677,7 +1677,10 @@ async function renderAdminRoles(el){
   const tab = state.roleUiTab === 'by_role' ? 'by_role' : 'by_user';
   state.roleUiTab = tab;
   const canConfig = !!(data.can_config) || hasBtn('config_roles') || state.user?.role === 'super_admin';
-  const canAssign = !!(data.can_assign) || hasBtn('role_assign') || canConfig;
+  // AI-GEN-BEGIN
+  // 分配人员角色：仅 role_assign / 超管（配置菜单不能代替分配）
+  const canAssign = !!(data.can_assign) || hasBtn('role_assign') || state.user?.role === 'super_admin';
+  // AI-GEN-END
   const tabs = `<div class="tabs">
     <div class="${tab==='by_user'?'on':''}" onclick="state.roleUiTab='by_user';renderMain()">按用户</div>
     <div class="${tab==='by_role'?'on':''}" onclick="state.roleUiTab='by_role';renderMain()">按角色</div>
@@ -1866,7 +1869,9 @@ async function showRoleUserDetail(uid){
     !['employee','employee_a','employee_b'].includes(r.role)
   );
   const selected = new Set((data.roles || []).filter(c => !['employee','employee_a','employee_b'].includes(c)));
-  const canAssign = !!(data.can_assign) || hasBtn('role_assign') || hasBtn('config_roles') || state.user?.role === 'super_admin';
+  // AI-GEN-BEGIN
+  const canAssign = !!(data.can_assign) || hasBtn('role_assign') || state.user?.role === 'super_admin';
+  // AI-GEN-END
   const isSysAdmin = (data.username || '') === 'admin';
   const dis = canAssign && !isSysAdmin ? '' : 'disabled';
   box.innerHTML = `
@@ -1934,7 +1939,9 @@ async function loadRoleMembers(){
   const { data } = await api('/api/admin/roles/' + encodeURIComponent(role) + '/members' + qs);
   if (!data.ok) { box.innerHTML = `<div class="warn">${data.error||'加载失败'}</div>`; return; }
   if (cnt) cnt.textContent = String(data.total || 0);
-  const canAssign = !!(data.can_assign) || hasBtn('role_assign') || hasBtn('config_roles') || state.user?.role === 'super_admin';
+  // AI-GEN-BEGIN
+  const canAssign = !!(data.can_assign) || hasBtn('role_assign') || state.user?.role === 'super_admin';
+  // AI-GEN-END
   const isEmployeeRole = role === 'employee';
   const members = data.members || [];
   if (!members.length) {
@@ -2168,11 +2175,12 @@ function highlightOrgTreeSelection(){
   });
 }
 function orgMembersTableHtml(data){
+  // AI-GEN-BEGIN
   const canExpire = canSetAccountExpire();
   return `<table class="org-members-table">
     <thead><tr>
       ${data.can_manage?'<th><input type="checkbox" onchange="toggleAll(this.checked)"></th>':''}
-      <th>姓名</th><th>账号</th><th>状态</th><th>部门</th><th>北森用户ID</th>
+      <th>姓名</th><th>详情</th><th>账号</th><th>状态</th><th>部门</th><th>北森用户ID</th>
       <th style="min-width:220px">关联系统账号</th><th>敏感</th>
       ${canExpire?'<th class="col-expire">有效期</th>':''}
       <th class="col-actions">操作</th>
@@ -2205,6 +2213,7 @@ function orgMembersTableHtml(data){
       return `<tr>
         ${data.can_manage?`<td>${manageable?`<input type="checkbox" ${state.selectedIds.has(m.id)?'checked':''} onchange="togSel(${m.id},this.checked)">`:''}</td>`:''}
         <td style="white-space:nowrap">${m.display_name}${m.person_type==='external'?' <span class="pill p-orange">外部</span>':''}</td>
+        <td><button class="btn btn-sm btn-line" onclick="showPerm(${m.id})">详情</button></td>
         <td style="white-space:nowrap"><code>${m.username}</code></td>
         <td>${st}</td>
         <td>${dname}</td>
@@ -2216,15 +2225,16 @@ function orgMembersTableHtml(data){
           ${manageable?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openEditMember(${m.id})">编辑</button>`:''}
           ${data.can_manage||m.id===state.user.id?`<button class="btn btn-sm btn-line" onclick="showPerm(${m.id})">权限</button>`:''}
           ${canExpire&&manageable?`<button class="btn btn-sm btn-line" onclick="openSetExpire([${m.id}])">设有效期</button>`:''}
-          ${m.id!==state.user.id?`<button class="btn btn-sm btn-line" onclick="openMsg(${m.id},'${m.display_name}')">消息</button>`:''}
+          ${m.id!==state.user.id?`<button class="btn btn-sm btn-line" onclick="openMsg(${m.id},'${(m.display_name||'').replace(/'/g,"\\'")}')">消息</button>`:''}
         </div></td>
       </tr>`;
     }).join('') || (() => {
-      const colSpan = (data.can_manage?8:7) + (canExpire?1:0) + 1;
+      const colSpan = (data.can_manage?9:8) + (canExpire?1:0) + 1;
       return `<tr><td colspan="${colSpan}" class="note">无人员</td></tr>`;
     })()}
     </tbody>
   </table>`;
+  // AI-GEN-END
 }
 function orgMembersPagerHtml(data){
   // AI-GEN-BEGIN
@@ -3037,6 +3047,16 @@ async function openTodoFlow(tid, opts){
   const showRemark = canHandle;
   const canResubmit = !!(todo.can_resubmit && canHandle);
   const formView = todo.form_view || { section_title: '申请明细', rows: todo.form_fields || [] };
+  // AI-GEN-BEGIN
+  const snap = formView.user_permissions || todo.user_permissions || null;
+  const fullBtn = (formView.show_full_perm_detail || snap)
+    ? `<div style="margin:8px 0 12px">
+        <button class="btn btn-sm btn-line" onclick='openPermDetailFromAccounts(${JSON.stringify(
+          `${ap.display_name||''}（${ap.username||''}）· 全部账号权限全项详情`
+        )}, ${JSON.stringify((snap && snap.accounts) || [])})'>全项详情</button>
+      </div>`
+    : '';
+  // AI-GEN-END
   document.getElementById('flow-body').innerHTML = `
     <div style="margin-bottom:12px">
       <div class="kv"><span class="lab">创建时间</span><b>${fmtDateTime(app.created_at || todo.created_at)}</b></div>
@@ -3044,6 +3064,7 @@ async function openTodoFlow(tid, opts){
       <div class="kv"><span class="lab">申请状态</span><b>${statusMap[app.status] || app.status || todo.status || '—'}</b></div>
     </div>
     ${renderApplyFormViewHtml(formView, { editable: canResubmit, editableKeys: todo.editable_keys || [] })}
+    ${fullBtn}
     <h4 style="font-size:13px;margin:0 0 8px">流程时间线（各节点明细）</h4>
     ${renderFlowTimelineHtml(data.timeline)}
     <div class="flow-preview" style="margin-top:14px">
@@ -4923,7 +4944,7 @@ async function openAccountExtend(){
   };
   document.getElementById('bg-title').textContent = '账号延期';
   document.getElementById('bg-hint').textContent =
-    '仅本人。默认延长 LEUC 账号有效期 90 天；若任一业务账号含敏感权限，审批走直属→一级→财务。';
+    '仅本人。展示全部关联账号与权限；默认延长 LEUC 有效期 90 天；含敏感则走直属→一级→财务。';
   const label = document.getElementById('bg-lines-label');
   if (label) label.textContent = '延期明细';
   const addBtn = document.getElementById('bg-add-line');
@@ -4946,14 +4967,24 @@ function renderAccountExtendBody(){
     : `<div class="note" style="margin-top:10px">当前无可登录的敏感业务账号，审批为<strong>直属领导</strong>。</div>`;
   const acctRows = (d.accounts||[]).length
     ? `<table style="width:100%;margin-top:8px;font-size:12.5px"><thead><tr>
-        <th>系统</th><th>账号</th><th>登录</th><th>敏感</th></tr></thead><tbody>
-        ${d.accounts.map(a => `<tr>
+        <th>系统</th><th>账号</th><th>登录</th><th>敏感</th><th>权限</th></tr></thead><tbody>
+        ${d.accounts.map(a => {
+          const perms = a.permissions || [];
+          const permText = perms.length
+            ? perms.map(p => `${p.perm_name||p.perm_code}${p.is_sensitive?'(敏)':''}`).join('、')
+            : (a.perm_summary || '—');
+          return `<tr>
           <td>${a.system_name||'-'}</td>
           <td><code>${a.account_name||'-'}</code></td>
           <td>${a.can_login?'<span class="pill p-green">可登</span>':'<span class="pill p-gray">已关</span>'}</td>
           <td>${a.has_sensitive?'<span class="pill p-red">敏感</span>':'—'}</td>
-        </tr>`).join('')}
-      </tbody></table>`
+          <td style="max-width:280px;font-size:12px">${permText}</td>
+        </tr>`;
+        }).join('')}
+      </tbody></table>
+      <div style="margin-top:10px">
+        <button class="btn btn-sm btn-line" onclick="openPermDetailFromAccounts('本人全部账号与权限（全项详情）', state.extendDraft?.accounts||[])">全项详情</button>
+      </div>`
     : '<div class="note" style="margin-top:8px">暂无关联业务账号（仍可申请 LEUC 账号延期）</div>';
   document.getElementById('bg-lines').innerHTML = `
     <div style="padding:14px 16px">
@@ -4967,7 +4998,7 @@ function renderAccountExtendBody(){
         <span class="note">默认 90 天</span>
       </div>
       ${sensHtml}
-      <div style="margin-top:12px"><b>关联业务账号（用于判断是否含敏感）</b>${acctRows}</div>
+      <div style="margin-top:12px"><b>本人全部账号与权限</b>${acctRows}</div>
     </div>`;
   refreshExtendFlowPreview();
   // AI-GEN-END
@@ -5031,7 +5062,7 @@ async function openAccountPermClose(){
         code: a.system_code,
         has_sensitive: !!(a.sys_has_sensitive || a.has_sensitive),
         is_builtin: !!a.system_is_builtin,
-        permissions: (a.permissions || []).filter(
+        permissions: (a.perm_catalog || a.permissions || []).filter(
           p => p.perm_code && !['biz_root','kj_root','hr_root'].includes(p.perm_code)
         ),
       });
@@ -5408,20 +5439,59 @@ async function hrOrgClear(){
 function togSel(id, on){ if(on) state.selectedIds.add(id); else state.selectedIds.delete(id); }
 function toggleAll(on){ (state.deptData?.members||[]).forEach(m => { if(on) state.selectedIds.add(m.id); else state.selectedIds.delete(m.id); }); renderMain(); }
 
+function renderSystemsPermDetailHtml(systems){
+  // AI-GEN-BEGIN
+  const list = systems || [];
+  if (!list.length) return '<div class="note">无关联系统账号</div>';
+  return list.map(s => `
+    <div class="sys-block"><div class="hd"><b>${s.name||s.system_name||'-'}</b>
+      ${s.has_sensitive_any?'<span class="pill p-red">含敏感</span>':''}</div>
+      ${(s.accounts||[]).map(a => {
+        const perms = a.permissions || [];
+        const permHtml = perms.length
+          ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">${perms.map(p =>
+              `<span class="pill ${p.is_sensitive?'p-red':'p-gray'}">${p.perm_name||p.perm_code||'—'}${p.is_sensitive?' ·敏感':''}</span>`
+            ).join('')}</div>`
+          : `<div class="note" style="margin-top:4px">权限摘要：${a.perm_summary||'—'}</div>`;
+        return `<div class="acct">
+          <code>${a.account_name}</code>${a.account_label?` · ${a.account_label}`:''}
+          · 可登录：${a.can_login?'是':'否'}
+          · 账号敏感：${a.has_sensitive?'<span class="pill p-red">是</span>':'否'}
+          ${permHtml}
+        </div>`;
+      }).join('') || '<div class="note">无账号</div>'}
+    </div>`).join('');
+  // AI-GEN-END
+}
+function openPermDetailFromAccounts(title, accounts){
+  // AI-GEN-BEGIN
+  const bySys = {};
+  (accounts||[]).forEach(a => {
+    const key = a.system_id || a.system_code || a.system_name || 'sys';
+    if (!bySys[key]) {
+      bySys[key] = {
+        name: a.system_name || a.system_code || '系统',
+        has_sensitive_any: false,
+        accounts: [],
+      };
+    }
+    bySys[key].accounts.push(a);
+    if (a.has_sensitive) bySys[key].has_sensitive_any = true;
+  });
+  document.getElementById('perm-title').textContent = title || '全项权限详情';
+  document.getElementById('perm-body').innerHTML = renderSystemsPermDetailHtml(Object.values(bySys));
+  openModal('m-perm');
+  // AI-GEN-END
+}
 async function showPerm(uid) {
+  // AI-GEN-BEGIN
   const { data } = await api('/api/member/' + uid + '/permissions');
   if (!data.ok) return toast(data.error);
-  document.getElementById('perm-title').textContent = `${data.user.display_name}（${data.user.username}）· 关联系统账号与权限`;
-  document.getElementById('perm-body').innerHTML = data.systems.map(s => `
-    <div class="sys-block"><div class="hd"><b>${s.name}</b>
-      ${s.has_sensitive_any?'<span class="pill p-red">含敏感</span>':''}</div>
-      ${s.accounts.map(a=>`<div class="acct">
-        <code>${a.account_name}</code>${a.account_label?` · ${a.account_label}`:''}<br>
-        权限：${a.perm_summary||'—'}
-        · 可登录：${a.can_login?'是':'否'} · 敏感：${a.has_sensitive?'是':'否'}
-      </div>`).join('')}
-    </div>`).join('') || '<div class="note">无关联系统账号</div>';
+  document.getElementById('perm-title').textContent =
+    `${data.user.display_name}（${data.user.username}）· 全部系统账号与权限`;
+  document.getElementById('perm-body').innerHTML = renderSystemsPermDetailHtml(data.systems);
   openModal('m-perm');
+  // AI-GEN-END
 }
 
 async function openAdd(){

@@ -48,12 +48,18 @@ def clean_text(s) -> str:
 
 
 def to_py(name: str) -> str:
+    # AI-GEN-BEGIN
     name = clean_text(name)
     if not name:
         return "user"
-    if lazy_pinyin:
-        return "".join(lazy_pinyin(name)).lower()
-    return "user"
+    try:
+        from surname_pinyin import name_to_pinyin as _snp
+        return _snp(name, lazy_pinyin=lazy_pinyin)
+    except Exception:
+        if lazy_pinyin:
+            return "".join(lazy_pinyin(name)).lower()
+        return "user"
+    # AI-GEN-END
 
 
 def main() -> None:

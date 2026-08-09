@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from typing import Any
 
@@ -92,8 +93,83 @@ def spawn_cc_todos(db, *, app_id, initiator_id, todo_type, title, meta, ccs, now
     return created
 
 
+def expand_account_permissions(db, system_id, perm_summary, has_sensitive=False) -> list[dict]:
+    """把账号 perm_summary 展开为权限项列表（含敏感标识）。"""
+    # AI-GEN-BEGIN
+    defs = db.execute(
+        """SELECT id, perm_code, perm_name, parent_id, is_sensitive, enabled
+        FROM sensitive_perm_defs
+        WHERE system_id = ? AND enabled = 1
+        ORDER BY id""",
+        (int(system_id),),
+    ).fetchall()
+    catalog = [dict(d) for d in defs]
+    summary = (perm_summary or "").strip()
+    if not catalog:
+        if not summary:
+            return []
+        return [
+            {
+                "id": None,
+                "perm_code": "",
+                "perm_name": summary,
+                "is_sensitive": 1 if has_sensitive else 0,
+                "matched": True,
+            }
+        ]
+    # 全部 / 全部·敏感 → 目录全项
+    if ("全部" in summary) or summary in ("", "敏感权限"):
+        out = []
+        for d in catalog:
+            item = dict(d)
+            item["matched"] = True
+            if "敏感" in summary or has_sensitive:
+                # 保留目录自身敏感标记；账号级敏感时仍展示全部
+                pass
+            out.append(item)
+        if summary == "敏感权限":
+            out = [x for x in out if x.get("is_sensitive")] or out
+        return out
+    # 按分隔符拆名称匹配
+    parts = [
+        p.strip()
+        for p in re.split(r"[·,/、;；|]+", summary)
+        if p and p.strip() and p.strip() not in ("敏感", "普通开通", "普通权限")
+    ]
+    if not parts:
+        return [
+            {
+                "id": None,
+                "perm_code": "",
+                "perm_name": summary or ("敏感权限" if has_sensitive else "普通权限"),
+                "is_sensitive": 1 if has_sensitive else 0,
+                "matched": True,
+            }
+        ]
+    out = []
+    for d in catalog:
+        if d["perm_name"] in parts or d["perm_code"] in parts:
+            item = dict(d)
+            item["matched"] = True
+            out.append(item)
+    if not out:
+        for p in parts:
+            out.append(
+                {
+                    "id": None,
+                    "perm_code": "",
+                    "perm_name": p,
+                    "is_sensitive": 1 if has_sensitive else 0,
+                    "matched": True,
+                }
+            )
+    return out
+    # AI-GEN-END
+
+
 def user_permission_snapshot(db, user_id: int) -> dict[str, Any]:
     """延期审批详情：用户权限快照（突出敏感）。"""
+    # AI-GEN-BEGIN
     rows = db.execute(
         """SELECT a.id, a.account_name, a.account_label, a.can_login, a.has_sensitive,
                   a.perm_summary, s.id AS system_id, s.code AS system_code, s.name AS system_name
@@ -103,7 +179,13 @@ def user_permission_snapshot(db, user_id: int) -> dict[str, Any]:
            ORDER BY a.has_sensitive DESC, s.id, a.id""",
         (int(user_id),),
     ).fetchall()
-    accounts = [dict(r) for r in rows]
+    accounts = []
+    for r in rows:
+        item = dict(r)
+        item["permissions"] = expand_account_permissions(
+            db, r["system_id"], r["perm_summary"], bool(r["has_sensitive"])
+        )
+        accounts.append(item)
     sensitive = [a for a in accounts if a.get("has_sensitive")]
     return {
         "accounts": accounts,
@@ -111,6 +193,7 @@ def user_permission_snapshot(db, user_id: int) -> dict[str, Any]:
         "sensitive_count": len(sensitive),
         "account_count": len(accounts),
     }
+    # AI-GEN-END
 
 
 def _meta_with_resubmit(meta_raw, *, reject_from_step: int, reject_to_step: int) -> str:
@@ -467,16 +550,25 @@ def build_apply_form_view(db, meta: dict | None, app=None) -> dict:
         if not accts and uid:
             snap = user_permission_snapshot(db, int(uid))
             accts = snap.get("accounts") or []
+        if not isinstance(snap, dict):
+            snap = {"accounts": accts or []}
         if accts:
             table = {
-                "title": "关联业务账号（用于判断是否含敏感）",
-                "headers": ["系统", "账号", "登录", "敏感"],
+                "title": "本人全部账号与权限",
+                "headers": ["系统", "账号", "登录", "敏感", "权限"],
                 "rows": [
                     [
                         a.get("system_name") or "—",
                         a.get("account_name") or "—",
                         "可登" if a.get("can_login") else "已关",
                         "敏感" if a.get("has_sensitive") else "—",
+                        a.get("perm_summary")
+                        or "、".join(
+                            (p.get("perm_name") or "")
+                            for p in (a.get("permissions") or [])
+                            if p.get("perm_name")
+                        )
+                        or "—",
                     ]
                     for a in accts
                 ],
@@ -487,6 +579,9 @@ def build_apply_form_view(db, meta: dict | None, app=None) -> dict:
             "table": table,
             "line_headers": None,
             "lines": None,
+            # 供详情页「全项详情」按钮
+            "user_permissions": snap if isinstance(snap, dict) else {"accounts": accts or []},
+            "show_full_perm_detail": True,
         }
 
     # —— 账号/权限关闭 ——
