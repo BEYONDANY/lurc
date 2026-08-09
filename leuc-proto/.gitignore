@@ -10,7 +10,4 @@ __pycache__/
 *.pyc
 .DS_Store
 # AI-GEN-END
-
-
-.env copy
-.env*copy*
+# 私有仓库允许提交「.env copy」作本地配置备份；正式 .env 仍忽略
