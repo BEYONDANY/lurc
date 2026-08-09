@@ -15,5 +15,6 @@
 
 ## 说明
 
-- 示例「黎洋（liyang）」姓名与拼音本身正确；同拼还有「李杨」冲突项
-- 已校正如 `ceng*`→`zeng*`、`jie*`→`xie*`、`dihai*`→`zhai*`、`cha*`→`zha*`
+- 同拼冲突：通讯录「李杨」应对应演示账号 `liyang`；「黎洋」为 `liyang2`
+- 已增加 `ensure_demo_liyang_identity`，并收紧同步时拼音匹配须姓名一致
+- 多音姓已校正如 `ceng*`→`zeng*`、`jie*`→`xie*`、`dihai*`→`zhai*`、`cha*`→`zha*`

@@ -475,6 +475,107 @@ def ensure_surname_usernames_repaired(conn: PgConnection) -> int:
 # AI-GEN-END
 
 
+
+# AI-GEN-BEGIN
+def ensure_demo_liyang_identity(conn: PgConnection) -> None:
+    """通讯录同拼冲突：演示账号 liyang 固定为「李杨」(工号 00000303)；
+    「黎洋」(00022356) 使用 liyang2，避免部门和人员/快速切换显示错人。
+    """
+    try:
+        li_yang = conn.execute(
+            "SELECT id, username, display_name, itcode FROM users WHERE itcode = ?",
+            ("00000303",),
+        ).fetchone()
+        li_yang_zi = conn.execute(
+            "SELECT id, username, display_name, itcode FROM users WHERE itcode = ?",
+            ("00022356",),
+        ).fetchone()
+        # 黎洋占用了 liyang → 改到 liyang2
+        if li_yang_zi and (li_yang_zi["username"] or "") == "liyang":
+            cand = "liyang2"
+            if conn.execute(
+                "SELECT 1 FROM users WHERE username = ? AND id != ?",
+                (cand, int(li_yang_zi["id"])),
+            ).fetchone():
+                n = 2
+                while conn.execute(
+                    "SELECT 1 FROM users WHERE username = ?", (f"liyang{n}",)
+                ).fetchone():
+                    n += 1
+                cand = f"liyang{n}"
+            conn.execute(
+                "UPDATE users SET username = ?, display_name = ? WHERE id = ?",
+                (cand, "黎洋", int(li_yang_zi["id"])),
+            )
+        # 李杨 → username=liyang
+        if li_yang:
+            occ = conn.execute(
+                "SELECT id, display_name, itcode FROM users WHERE username = ?",
+                ("liyang",),
+            ).fetchone()
+            if occ and int(occ["id"]) != int(li_yang["id"]):
+                # 仍被他人占用则再挤走
+                bump = "liyang9"
+                n = 9
+                while conn.execute(
+                    "SELECT 1 FROM users WHERE username = ?", (bump,)
+                ).fetchone():
+                    n += 1
+                    bump = f"liyang{n}"
+                conn.execute(
+                    "UPDATE users SET username = ? WHERE id = ?",
+                    (bump, int(occ["id"])),
+                )
+            conn.execute(
+                "UPDATE users SET username = ?, display_name = ? WHERE id = ?",
+                ("liyang", "李杨", int(li_yang["id"])),
+            )
+        else:
+            # 尚无李杨：若 liyang 空闲则创建；否则只改显示名兜底
+            occ = conn.execute(
+                "SELECT id, display_name, itcode FROM users WHERE username = ?",
+                ("liyang",),
+            ).fetchone()
+            if not occ:
+                # 挂到招聘管理或根部门
+                dept = conn.execute(
+                    "SELECT id FROM departments WHERE name = ? ORDER BY id LIMIT 1",
+                    ("招聘管理",),
+                ).fetchone()
+                dept_id = int(dept["id"]) if dept else None
+                conn.execute(
+                    """INSERT INTO users
+                    (username, password, display_name, role, dept_id, email, itcode,
+                     password_expire, person_type, status)
+                    VALUES ('liyang', '123456', '李杨', 'employee', ?,
+                            'lecoo_hr2@lenovo-store.cn', '00000303',
+                            '2099-12-31', 'internal', 'active')""",
+                    (dept_id,),
+                )
+                uid = conn.execute(
+                    "SELECT id FROM users WHERE username = 'liyang'"
+                ).fetchone()["id"]
+                try:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'employee')",
+                        (int(uid),),
+                    )
+                except Exception:
+                    pass
+            elif (occ["display_name"] or "") == "黎洋" or (occ["itcode"] or "") == "00022356":
+                # 已被上面黎洋分支处理；此处仅兜底改名
+                pass
+            elif (occ["itcode"] or "") in ("", None) and (occ["display_name"] or "") != "李杨":
+                conn.execute(
+                    """UPDATE users SET display_name = '李杨', itcode = '00000303'
+                    WHERE id = ?""",
+                    (int(occ["id"]),),
+                )
+    except Exception:
+        pass
+# AI-GEN-END
+
+
 def normalize_username(username: str) -> str:
     raw = (username or "").strip().lower()
     return re.sub(r"[^a-z0-9_]", "", raw)
@@ -667,6 +768,10 @@ def migrate_schema(conn: PgConnection) -> None:
     ensure_roles_seeded(conn)
     try:
         ensure_surname_usernames_repaired(conn)
+    except Exception:
+        pass
+    try:
+        ensure_demo_liyang_identity(conn)
     except Exception:
         pass
     # AI-GEN-BEGIN

@@ -3067,6 +3067,7 @@ def demo_users():
     ]
     button_labels = {
         "admin": "超级管理员",
+        "liyang": "李杨",  # 演示账号固定为通讯录「李杨」，避免与「黎洋」混淆
     }
     rows = get_db().execute(
         f"""SELECT username, display_name, role, password FROM users
@@ -8603,11 +8604,14 @@ def _find_user_for_leorg_emp(db, e, beisen_user_id, emp_no, email):
         if name:
             py = name_to_pinyin(name)
             if py:
+                # AI-GEN-BEGIN
                 bare = db.execute(
                     """SELECT * FROM users
-                    WHERE (username = ? OR itcode = ?) AND leorg_emp_id IS NULL""",
-                    (py, py),
+                    WHERE (username = ? OR itcode = ?) AND leorg_emp_id IS NULL
+                      AND display_name = ?""",
+                    (py, py, name),
                 ).fetchall()
+                # AI-GEN-END
                 if bare:
                     user = _prefer_bare(list(bare) + list(rows))
         if not user and rows:
@@ -8635,14 +8639,18 @@ def _find_user_for_leorg_emp(db, e, beisen_user_id, emp_no, email):
             "SELECT * FROM users WHERE lower(email) = lower(?)", (email,)
         ).fetchone()
     # 拼音用户名：清空部门后保留的演示账号（gaojia / wuhongliang / …）
+    # AI-GEN-BEGIN
+    # 同拼不同人（李杨/黎洋）时必须姓名一致，避免抢占 liyang
     if not user and name:
         py = name_to_pinyin(name)
         if py:
             rows = db.execute(
-                "SELECT * FROM users WHERE username = ? OR itcode = ?",
-                (py, py),
+                """SELECT * FROM users
+                WHERE (username = ? OR itcode = ?) AND display_name = ?""",
+                (py, py, name),
             ).fetchall()
             user = _prefer_bare(rows)
+    # AI-GEN-END
     # 唯一同名且未绑 leorg
     if not user and name:
         rows = db.execute(
