@@ -11,3 +11,6 @@ __pycache__/
 .DS_Store
 # AI-GEN-END
 
+
+.env copy
+.env*copy*
