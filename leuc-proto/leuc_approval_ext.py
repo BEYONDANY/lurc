@@ -62,6 +62,7 @@ def collect_cc_for_system_owners(db, find_approver_fn, steps, applicant_id: int)
 
 def spawn_cc_todos(db, *, app_id, initiator_id, todo_type, title, meta, ccs, now=None):
     """与系统管理员节点同步创建知会待办（不阻塞主链）。"""
+    # AI-GEN-BEGIN
     now = now or datetime.now().strftime("%Y-%m-%d")
     created = []
     for cc in ccs or []:
@@ -69,7 +70,7 @@ def spawn_cc_todos(db, *, app_id, initiator_id, todo_type, title, meta, ccs, now
             """INSERT INTO todos
             (assignee_id, initiator_id, title, todo_type, bucket, status, created_at,
              application_id, step_order, meta)
-            VALUES (?,?,?,?, 'pending', 'open', ?, ?, NULL, ?)""",
+            VALUES (?,?,?,?, 'pending', 'unread', ?, ?, NULL, ?)""",
             (
                 cc["assignee_id"],
                 initiator_id,
@@ -91,6 +92,89 @@ def spawn_cc_todos(db, *, app_id, initiator_id, todo_type, title, meta, ccs, now
         )
         created.append(tcur.lastrowid)
     return created
+    # AI-GEN-END
+
+
+def normalize_cc_status(status: str | None, bucket: str | None = None) -> str:
+    """知会状态归一：unread/read（兼容旧 open/approved/rejected）。"""
+    # AI-GEN-BEGIN
+    st = (status or "").strip().lower()
+    if st in ("read", "approved", "done"):
+        return "read"
+    if st in ("unread", "open", "pending", ""):
+        if bucket == "done" and st in ("",):
+            return "read"
+        return "unread"
+    if bucket == "done":
+        return "read"
+    return "unread"
+    # AI-GEN-END
+
+
+def cc_status_label(cc_status: str) -> str:
+    # AI-GEN-BEGIN
+    return "已阅" if cc_status == "read" else "待阅"
+    # AI-GEN-END
+
+
+def build_cc_dimension(db, app_id, user_brief_fn=None):
+    """申请单知会维度：不入主审批链，独立待阅/已阅。"""
+    # AI-GEN-BEGIN
+    if not app_id:
+        return {"items": [], "summary": "无知会", "read_count": 0, "total": 0}
+    # 不用 LIKE '%…%'：psycopg 会把 % 当成占位符导致 500
+    rows = db.execute(
+        """SELECT * FROM todos
+        WHERE application_id = ?
+        ORDER BY id""",
+        (int(app_id),),
+    ).fetchall()
+    items = []
+    read_count = 0
+    for r in rows:
+        try:
+            meta = json.loads(r["meta"] or "{}")
+        except Exception:
+            meta = {}
+        if not (meta.get("cc") or r["todo_type"] == "知会确认"):
+            continue
+        cc_st = normalize_cc_status(r["status"], r["bucket"])
+        if cc_st == "read":
+            read_count += 1
+        assignee = None
+        if user_brief_fn:
+            assignee = user_brief_fn(db, r["assignee_id"])
+        else:
+            u = db.execute(
+                "SELECT id, username, display_name, role FROM users WHERE id = ?",
+                (r["assignee_id"],),
+            ).fetchone()
+            assignee = dict(u) if u else {"id": r["assignee_id"]}
+        items.append(
+            {
+                "todo_id": r["id"],
+                "assignee": assignee,
+                "assignee_id": r["assignee_id"],
+                "cc_label": meta.get("cc_label") or "知会确认",
+                "cc_status": cc_st,
+                "status_label": cc_status_label(cc_st),
+                "read_at": meta.get("read_at"),
+                "remark": (r["remark"] if "remark" in r.keys() else None) or None,
+                "created_at": r["created_at"],
+            }
+        )
+    total = len(items)
+    if total == 0:
+        summary = "无知会"
+    else:
+        summary = f"已阅 {read_count}/{total}"
+    return {
+        "items": items,
+        "summary": summary,
+        "read_count": read_count,
+        "total": total,
+    }
+    # AI-GEN-END
 
 
 def expand_account_permissions(db, system_id, perm_summary, has_sensitive=False) -> list[dict]:
@@ -294,6 +378,19 @@ def reject_to_specified_step(
             WHERE application_id = ? AND bucket = 'initiated'""",
             (f"{app['title']}（已驳回至申请人，待修改重提）", app_id),
         )
+        append_flow_event(
+            db,
+            app_id,
+            "rejected",
+            step_order=cur_order,
+            step_key="reject",
+            step_label="驳回至申请人",
+            actor_user_id=todo_row["assignee_id"],
+            assignee_id=assignee_id,
+            remark=note,
+            detail={"reject_to_step": 0, "reject_to_label": "申请人"},
+            now=now,
+        )
         return {
             "ok": True,
             "message": "已驳回至申请人，可修改后再次提交",
@@ -342,6 +439,22 @@ def reject_to_specified_step(
             f"{app['title']}（已驳回至{target_row['step_label']}，待修改重提）",
             app_id,
         ),
+    )
+    append_flow_event(
+        db,
+        app_id,
+        "rejected",
+        step_order=cur_order,
+        step_key="reject",
+        step_label=f"驳回至{target_row['step_label']}",
+        actor_user_id=todo_row["assignee_id"],
+        assignee_id=target_row["assignee_id"],
+        remark=note,
+        detail={
+            "reject_to_step": target,
+            "reject_to_label": target_row["step_label"],
+        },
+        now=now,
     )
     return {
         "ok": True,
@@ -427,6 +540,22 @@ def jump_to_reject_from_step(
     au = db.execute(
         "SELECT display_name FROM users WHERE id = ?", (target_row["assignee_id"],)
     ).fetchone()
+    append_flow_event(
+        db,
+        app_id,
+        "resubmitted",
+        step_order=int(cur_order or 0),
+        step_key="resubmit",
+        step_label="再次提交",
+        actor_user_id=todo_row["assignee_id"],
+        assignee_id=target_row["assignee_id"],
+        remark=note or "修改后重提",
+        detail={
+            "jump_to_step": target,
+            "jump_to_label": target_row["step_label"],
+        },
+        now=now,
+    )
     return {
         "ok": True,
         "message": f"已重新提交，流转至 {au['display_name'] if au else ''}（{target_row['step_label']}）",
@@ -518,14 +647,14 @@ def build_apply_form_view(db, meta: dict | None, app=None) -> dict:
     if flow in ("account_extend", "account_extend_sensitive") or meta.get("days") is not None:
         section_title = "延期明细"
         row("applicant", "申请人", _user_label(db, uid))
-        # 当前有效期
+        # 当前有效期至
         if uid:
             u = db.execute(
                 "SELECT account_expire FROM users WHERE id = ?", (int(uid),)
             ).fetchone()
             row(
                 "account_expire",
-                "当前有效期",
+                "当前有效期至",
                 (u["account_expire"] if u and u["account_expire"] else "未设置"),
             )
         row(
@@ -583,6 +712,54 @@ def build_apply_form_view(db, meta: dict | None, app=None) -> dict:
             "user_permissions": snap if isinstance(snap, dict) else {"accounts": accts or []},
             "show_full_perm_detail": True,
         }
+
+    # AI-GEN-BEGIN
+    # —— 新建外部人员（审批通过后落库）——
+    if flow == "external_create" or meta.get("external_create"):
+        section_title = "新建外部人员"
+        row("initiator", "发起人", _user_label(db, meta.get("initiator_id") or uid))
+        row("display_name", "姓名", meta.get("display_name"), editable=True)
+        row("username", "登录用户名", meta.get("username") or "（通过后生成）")
+        row("phone", "手机", meta.get("phone") or "—", editable=True)
+        row("email", "邮箱", meta.get("email") or "—", editable=True)
+        row("person_type", "人员类型", "外部人员")
+        row("dept", "归属部门", meta.get("dept_name") or "外部人员")
+        if meta.get("created_user_id"):
+            row("created_user", "已创建账号", _user_label(db, meta.get("created_user_id")))
+        if meta.get("remark"):
+            row("remark", "说明", meta.get("remark"), editable=True, input_type="textarea")
+        return {
+            "section_title": section_title,
+            "rows": rows,
+            "table": None,
+            "line_headers": None,
+            "lines": None,
+        }
+    # AI-GEN-END
+
+    # AI-GEN-BEGIN
+    # —— 本系统角色申请 ——
+    if flow == "leuc_roles" or meta.get("roles"):
+        section_title = "本系统角色申请"
+        row("applicant", "申请人", _user_label(db, uid))
+        row("system", "系统", meta.get("system_name") or _sys_label(db, meta.get("system_id")))
+        labels = meta.get("role_labels") or meta.get("roles") or []
+        if isinstance(labels, list):
+            labels = "、".join(str(x) for x in labels if x)
+        row("roles", "申请角色", labels or "—")
+        if meta.get("granted_roles"):
+            granted = meta.get("granted_roles")
+            if isinstance(granted, list):
+                granted = "、".join(str(x) for x in granted)
+            row("granted_roles", "生效后角色", granted)
+        return {
+            "section_title": section_title,
+            "rows": rows,
+            "table": None,
+            "line_headers": None,
+            "lines": None,
+        }
+    # AI-GEN-END
 
     # —— 账号/权限关闭 ——
     if flow in (
@@ -838,4 +1015,145 @@ def group_bind_items_by_owner(db, items, list_system_owner_ids_fn):
         g["with_sensitive"] = g["with_sensitive"] or bool(it.get("with_sensitive"))
         g["items"].append(it)
     return list(groups.values())
+
+
+# AI-GEN-BEGIN
+def ensure_flow_events_table(db) -> None:
+    db.execute(
+        """CREATE TABLE IF NOT EXISTS application_flow_events (
+          id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+          application_id INTEGER NOT NULL,
+          event_type TEXT NOT NULL,
+          step_order INTEGER,
+          step_key TEXT,
+          step_label TEXT,
+          actor_user_id INTEGER,
+          assignee_id INTEGER,
+          remark TEXT,
+          detail_json TEXT,
+          created_at TEXT NOT NULL
+        )"""
+    )
+
+
+def append_flow_event(
+    db,
+    app_id: int,
+    event_type: str,
+    *,
+    step_order: int | None = None,
+    step_key: str | None = None,
+    step_label: str | None = None,
+    actor_user_id: int | None = None,
+    assignee_id: int | None = None,
+    remark: str | None = None,
+    detail: Any = None,
+    now: str | None = None,
+) -> int | None:
+    """追加流程事件（驳回/重提等不可变历史）。"""
+    ensure_flow_events_table(db)
+    now = now or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    detail_json = None
+    if detail is not None:
+        detail_json = (
+            detail
+            if isinstance(detail, str)
+            else json.dumps(detail, ensure_ascii=False, default=str)
+        )
+    cur = db.execute(
+        """INSERT INTO application_flow_events
+        (application_id, event_type, step_order, step_key, step_label,
+         actor_user_id, assignee_id, remark, detail_json, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (
+            int(app_id),
+            event_type,
+            step_order,
+            step_key,
+            step_label,
+            actor_user_id,
+            assignee_id,
+            (remark or None),
+            detail_json,
+            now,
+        ),
+    )
+    return int(cur.lastrowid) if cur.lastrowid is not None else None
+
+
+def list_flow_events(db, app_id: int) -> list[dict]:
+    ensure_flow_events_table(db)
+    rows = db.execute(
+        """SELECT * FROM application_flow_events
+        WHERE application_id = ? ORDER BY id""",
+        (int(app_id),),
+    ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        if d.get("detail_json"):
+            try:
+                d["detail"] = json.loads(d["detail_json"])
+            except Exception:
+                d["detail"] = d["detail_json"]
+        else:
+            d["detail"] = None
+        out.append(d)
+    return out
+
+
+def cancel_application_flow(
+    db,
+    *,
+    app_id: int,
+    actor_user_id: int,
+    remark: str | None = None,
+    now: str | None = None,
+) -> dict:
+    """撤销未结束的申请（pending / returned）。"""
+    now = now or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    app = db.execute("SELECT * FROM applications WHERE id = ?", (int(app_id),)).fetchone()
+    if not app:
+        return {"ok": False, "error": "申请不存在"}
+    st = (app["status"] or "").strip()
+    if st not in ("pending", "returned"):
+        return {"ok": False, "error": "申请已结束，无法撤销"}
+    note = (remark or "").strip() or "申请人撤销"
+    # 关闭未完成待办
+    db.execute(
+        """UPDATE todos SET bucket = 'done', status = 'cancelled', remark = ?
+        WHERE application_id = ? AND bucket = 'pending'
+          AND status IN ('open', 'unread')""",
+        (note, int(app_id)),
+    )
+    db.execute(
+        """UPDATE todos SET status = 'cancelled', remark = ?
+        WHERE application_id = ? AND bucket = 'initiated'""",
+        (note, int(app_id)),
+    )
+    db.execute(
+        """UPDATE application_steps SET status = 'cancelled', decided_at = ?, remark = ?
+        WHERE application_id = ? AND status IN ('pending', 'waiting')""",
+        (now, note, int(app_id)),
+    )
+    db.execute(
+        """UPDATE applications SET status = 'cancelled', updated_at = ?,
+            reject_to_step = NULL, reject_from_step = NULL
+        WHERE id = ?""",
+        (now, int(app_id)),
+    )
+    append_flow_event(
+        db,
+        int(app_id),
+        "cancelled",
+        step_order=None,
+        step_key="cancel",
+        step_label="撤销申请",
+        actor_user_id=int(actor_user_id),
+        assignee_id=int(actor_user_id),
+        remark=note,
+        detail={"by": "applicant_or_initiator"},
+        now=now,
+    )
+    return {"ok": True, "message": "已撤销申请"}
 # AI-GEN-END

@@ -18,7 +18,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_BASE_URL = "https://leorg-ai.lecoosys.com"
-DEFAULT_SCOPE = "org:read emp:read"
+# emp:read_full：手机号不脱敏；需在 LeOrg 为该 client 开通，否则 token 会静默降级为 emp:read
+DEFAULT_SCOPE = "org:read emp:read emp:read_full"
 _DOTENV_LOADED = False
 
 
@@ -81,13 +82,33 @@ def status_dict() -> dict[str, Any]:
             "error": "未配置 LeOrg（复制 .env.example → .env，填写 LEORG_*）",
             "base_url": DEFAULT_BASE_URL,
         }
-    return {
+    out: dict[str, Any] = {
         "ok": True,
         "enabled": True,
         "base_url": cfg.base_url,
         "scope": cfg.scope,
         "client_id_suffix": cfg.client_id[-6:] if len(cfg.client_id) >= 6 else "***",
+        "has_emp_read_full": "emp:read_full" in (cfg.scope or ""),
     }
+    # AI-GEN-BEGIN
+    # 探测实际换票 scope：未开通 emp:read_full 时 LeOrg 会静默降级，手机号仍脱敏
+    try:
+        client = LeorgClient(cfg)
+        token_body = client._fetch_token_raw()
+        granted = (token_body.get("scope") or "").strip()
+        out["token_scope"] = granted
+        out["token_has_emp_read_full"] = "emp:read_full" in granted
+        if "emp:read_full" not in granted:
+            out["phone_warning"] = (
+                "当前 client 未获得 emp:read_full，LeOrg 返回脱敏手机号（如 136****1644），"
+                "同步无法写入明文。请在 LeOrg 为该应用开通 scope：emp:read_full，"
+                "并在 .env 的 LEORG_SCOPE 中包含 emp:read_full 后重同步。"
+            )
+            out["ok"] = True  # 连接仍可用，但手机同步不完整
+    except Exception as exc:
+        out["token_scope_error"] = str(exc)
+    # AI-GEN-END
+    return out
 
 
 class LeorgClient:
@@ -135,11 +156,10 @@ class LeorgClient:
             return {}
         return json.loads(raw)
 
-    def _ensure_token(self) -> str:
-        now = time.time()
-        if self._token and now < self._token_exp - 60:
-            return self._token
-        payload = self._request(
+    def _fetch_token_raw(self) -> dict[str, Any]:
+        """换票原始响应（含 scope），供状态探测。"""
+        # AI-GEN-BEGIN
+        return self._request(
             "POST",
             "/oauth/token",
             form={
@@ -150,11 +170,19 @@ class LeorgClient:
             },
             auth=False,
         )
+        # AI-GEN-END
+
+    def _ensure_token(self) -> str:
+        now = time.time()
+        if self._token and now < self._token_exp - 60:
+            return self._token
+        payload = self._fetch_token_raw()
         token = payload.get("access_token")
         if not token:
             raise RuntimeError(f"LeOrg 换票失败: {payload}")
         self._token = token
         self._token_exp = now + int(payload.get("expires_in") or 7200)
+        self._token_scope = (payload.get("scope") or "").strip()
         return token
 
     def _paginate(

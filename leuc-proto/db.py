@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS users (
   can_proxy_apply INTEGER DEFAULT 0,
   can_set_account_expire INTEGER DEFAULT 0,
   beisen_user_id TEXT,
+  feishu_user_id TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   FOREIGN KEY (dept_id) REFERENCES departments(id)
 );
@@ -104,6 +105,11 @@ CREATE TABLE IF NOT EXISTS systems (
   status TEXT NOT NULL DEFAULT 'enabled',
   is_builtin INTEGER NOT NULL DEFAULT 0,
   owner_user_id INTEGER,
+  -- AI-GEN-BEGIN
+  nav_icon TEXT,
+  home_url TEXT,
+  show_in_nav INTEGER NOT NULL DEFAULT 1,
+  -- AI-GEN-END
   created_at TEXT
 );
 
@@ -600,6 +606,344 @@ def ensure_username_available(
     if row:
         return False, f"用户名 {uname} 已被占用"
     return True, uname
+
+
+# AI-GEN-BEGIN
+def normalize_phone(phone: str | None) -> str | None:
+    raw = (phone or "").strip().replace(" ", "")
+    return raw or None
+
+
+def normalize_email(email: str | None) -> str | None:
+    raw = (email or "").strip().lower()
+    return raw or None
+
+
+# AI-GEN-BEGIN
+# 系统配置默认项（落库 system_settings；可在配置中心修改）
+SYSTEM_SETTING_DEFS = {
+    "email_allowed_suffixes": {
+        "label": "允许的邮箱后缀",
+        "hint": "逗号分隔，如 @lecoo.com,@lenovo-store.cn。绑定/注册邮箱必须匹配其一；留空表示暂不校验后缀。",
+        "default": "@lecoo.com,@lenovo-store.cn,@lenovo.com",
+    },
+}
+
+
+def ensure_system_settings_table(conn: PgConnection) -> None:
+    """系统配置表 + 默认种子。"""
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS system_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL DEFAULT '',
+          label TEXT,
+          hint TEXT,
+          updated_at TEXT
+        )"""
+    )
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    for key, meta in SYSTEM_SETTING_DEFS.items():
+        hit = conn.execute(
+            "SELECT 1 FROM system_settings WHERE key = ?", (key,)
+        ).fetchone()
+        if hit:
+            # 仅补 label/hint，不覆盖管理员已改 value
+            conn.execute(
+                """UPDATE system_settings
+                SET label = COALESCE(label, ?), hint = COALESCE(hint, ?)
+                WHERE key = ?""",
+                (meta["label"], meta["hint"], key),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO system_settings (key, value, label, hint, updated_at)
+                VALUES (?,?,?,?,?)""",
+                (key, meta["default"], meta["label"], meta["hint"], now),
+            )
+
+
+def get_setting(conn: PgConnection, key: str, default: str | None = None) -> str:
+    ensure_system_settings_table(conn)
+    row = conn.execute(
+        "SELECT value FROM system_settings WHERE key = ?", (key,)
+    ).fetchone()
+    if not row:
+        if default is not None:
+            return default
+        return (SYSTEM_SETTING_DEFS.get(key) or {}).get("default") or ""
+    return row["value"] if row["value"] is not None else ""
+
+
+def set_setting(conn: PgConnection, key: str, value: str) -> None:
+    ensure_system_settings_table(conn)
+    meta = SYSTEM_SETTING_DEFS.get(key) or {}
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute(
+        """INSERT INTO system_settings (key, value, label, hint, updated_at)
+        VALUES (?,?,?,?,?)
+        ON CONFLICT(key) DO UPDATE SET
+          value = excluded.value,
+          updated_at = excluded.updated_at""",
+        (
+            key,
+            value if value is not None else "",
+            meta.get("label") or key,
+            meta.get("hint") or "",
+            now,
+        ),
+    )
+
+
+def list_system_settings(conn: PgConnection) -> list[dict]:
+    ensure_system_settings_table(conn)
+    rows = {
+        r["key"]: dict(r)
+        for r in conn.execute("SELECT * FROM system_settings ORDER BY key").fetchall()
+    }
+    out = []
+    for key, meta in SYSTEM_SETTING_DEFS.items():
+        r = rows.get(key) or {}
+        out.append(
+            {
+                "key": key,
+                "value": r.get("value", meta["default"]),
+                "label": r.get("label") or meta["label"],
+                "hint": r.get("hint") or meta["hint"],
+                "updated_at": r.get("updated_at"),
+            }
+        )
+    # 自定义键（非内置）也列出
+    for key, r in rows.items():
+        if key in SYSTEM_SETTING_DEFS:
+            continue
+        out.append(
+            {
+                "key": key,
+                "value": r.get("value") or "",
+                "label": r.get("label") or key,
+                "hint": r.get("hint") or "",
+                "updated_at": r.get("updated_at"),
+            }
+        )
+    return out
+
+
+def parse_email_allowed_suffixes(raw: str | None) -> list[str]:
+    """解析后缀配置：返回小写、带 @ 前缀的列表。"""
+    out = []
+    for part in (raw or "").replace("；", ",").replace(";", ",").split(","):
+        s = part.strip().lower()
+        if not s:
+            continue
+        if not s.startswith("@"):
+            s = "@" + s
+        out.append(s)
+    return out
+
+
+def ensure_email_suffix_allowed(
+    conn: PgConnection, email: str | None
+) -> tuple[bool, str]:
+    """校验邮箱后缀是否在配置白名单；空邮箱视为通过（未填写）。"""
+    e = normalize_email(email)
+    if not e:
+        return True, ""
+    if "@" not in e:
+        return False, "邮箱格式不正确"
+    suffixes = parse_email_allowed_suffixes(
+        get_setting(conn, "email_allowed_suffixes")
+    )
+    if not suffixes:
+        # 未配置后缀：暂不限制
+        return True, e
+    if not any(e.endswith(suf) for suf in suffixes):
+        shown = "、".join(suffixes)
+        return False, f"邮箱须为指定后缀：{shown}"
+    return True, e
+# AI-GEN-END
+
+
+def find_user_id_by_phone(
+    conn: PgConnection, phone: str | None, exclude_user_id: int | None = None
+) -> int | None:
+    """按规范化手机号查占用者；空值返回 None。"""
+    p = normalize_phone(phone)
+    if not p:
+        return None
+    if exclude_user_id:
+        row = conn.execute(
+            """SELECT id FROM users
+            WHERE replace(coalesce(phone,''),' ','') = ? AND id != ?
+            LIMIT 1""",
+            (p, int(exclude_user_id)),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """SELECT id FROM users
+            WHERE replace(coalesce(phone,''),' ','') = ?
+            LIMIT 1""",
+            (p,),
+        ).fetchone()
+    return int(row["id"]) if row else None
+
+
+def find_user_id_by_email(
+    conn: PgConnection, email: str | None, exclude_user_id: int | None = None
+) -> int | None:
+    """按规范化邮箱查占用者；空值返回 None。"""
+    e = normalize_email(email)
+    if not e:
+        return None
+    if exclude_user_id:
+        row = conn.execute(
+            """SELECT id FROM users
+            WHERE lower(coalesce(email,'')) = ? AND id != ?
+            LIMIT 1""",
+            (e, int(exclude_user_id)),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """SELECT id FROM users
+            WHERE lower(coalesce(email,'')) = ?
+            LIMIT 1""",
+            (e,),
+        ).fetchone()
+    return int(row["id"]) if row else None
+
+
+def ensure_contact_available(
+    conn: PgConnection,
+    *,
+    phone: str | None = None,
+    email: str | None = None,
+    exclude_user_id: int | None = None,
+) -> tuple[bool, str]:
+    """手工录入/编辑：手机、邮箱全局唯一。返回 (ok, error)。"""
+    p = normalize_phone(phone)
+    e = normalize_email(email)
+    if p and find_user_id_by_phone(conn, p, exclude_user_id):
+        return False, f"手机号 {p} 已被其他账号占用"
+    if e and find_user_id_by_email(conn, e, exclude_user_id):
+        return False, f"邮箱 {e} 已被其他账号占用"
+    return True, ""
+
+
+def resolve_contacts_for_create(
+    conn: PgConnection,
+    phone: str | None = None,
+    email: str | None = None,
+    *,
+    exclude_user_id: int | None = None,
+    batch_phones: set[str] | None = None,
+    batch_emails: set[str] | None = None,
+) -> tuple[str | None, str | None, list[str]]:
+    """建用户时处理联系方式。
+
+    手机：必填且唯一 —— 缺失/冲突由调用方报警并跳过创建（本函数不静默置空手机）。
+    邮箱：冲突可置空。
+    返回 (phone, email, skipped)；若手机无效则 phone=None 且 skipped 含 phone_missing/phone_duplicate。
+    """
+    p = normalize_phone(phone)
+    e = normalize_email(email)
+    skipped: list[str] = []
+    bp = batch_phones if batch_phones is not None else set()
+    be = batch_emails if batch_emails is not None else set()
+    if not p:
+        skipped.append("phone_missing")
+        p = None
+    elif p in bp or find_user_id_by_phone(conn, p, exclude_user_id):
+        skipped.append("phone_duplicate")
+        p = None
+    else:
+        bp.add(p)
+    if e:
+        if e in be or find_user_id_by_email(conn, e, exclude_user_id):
+            skipped.append("email")
+            e = None
+        else:
+            be.add(e)
+    return p, e, skipped
+
+
+def resolve_contacts_for_update(
+    conn: PgConnection,
+    *,
+    user_id: int,
+    new_phone: str | None,
+    new_email: str | None,
+    cur_phone: str | None = None,
+    cur_email: str | None = None,
+) -> tuple[str | None, str | None, list[str]]:
+    """同步更新：返回最终应写入的 phone/email；冲突字段保留原值并记入 skipped。"""
+    skipped: list[str] = []
+    cur_p = normalize_phone(cur_phone)
+    cur_e = normalize_email(cur_email)
+    out_p = cur_p
+    out_e = cur_e
+    if new_phone is not None:
+        p = normalize_phone(new_phone)
+        if p and p != cur_p and find_user_id_by_phone(conn, p, user_id):
+            skipped.append("phone")
+        else:
+            out_p = p
+    if new_email is not None:
+        e = normalize_email(new_email)
+        if e and e != cur_e and find_user_id_by_email(conn, e, user_id):
+            skipped.append("email")
+        else:
+            out_e = e
+    return out_p, out_e, skipped
+
+
+def ensure_unique_contact_indexes(conn: PgConnection) -> None:
+    """去重后建手机/邮箱唯一索引（空值允许多条）。"""
+    # 保留最小 id，其余重复手机置空
+    rows = conn.execute(
+        """SELECT id, replace(coalesce(phone,''),' ','') AS p
+        FROM users
+        WHERE coalesce(phone,'') != ''
+        ORDER BY id"""
+    ).fetchall()
+    seen_p: set[str] = set()
+    for r in rows:
+        p = (r["p"] or "").strip()
+        if not p:
+            continue
+        if p in seen_p:
+            conn.execute("UPDATE users SET phone = NULL WHERE id = ?", (int(r["id"]),))
+        else:
+            seen_p.add(p)
+    rows = conn.execute(
+        """SELECT id, lower(coalesce(email,'')) AS e
+        FROM users
+        WHERE coalesce(email,'') != ''
+        ORDER BY id"""
+    ).fetchall()
+    seen_e: set[str] = set()
+    for r in rows:
+        e = (r["e"] or "").strip()
+        if not e:
+            continue
+        if e in seen_e:
+            conn.execute("UPDATE users SET email = NULL WHERE id = ?", (int(r["id"]),))
+        else:
+            seen_e.add(e)
+    try:
+        conn.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone_unique
+            ON users (replace(coalesce(phone,''),' ',''))
+            WHERE coalesce(phone,'') != ''"""
+        )
+    except Exception:
+        pass
+    try:
+        conn.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
+            ON users (lower(coalesce(email,'')))
+            WHERE coalesce(email,'') != ''"""
+        )
+    except Exception:
+        pass
 # AI-GEN-END
 
 
@@ -691,6 +1035,19 @@ def migrate_schema(conn: PgConnection) -> None:
             )
         except Exception:
             pass
+    # AI-GEN-BEGIN
+    user_cols = _table_cols(conn, "users")
+    if user_cols and "feishu_user_id" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN feishu_user_id TEXT")
+        try:
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_feishu_user_id "
+                "ON users(feishu_user_id) WHERE feishu_user_id IS NOT NULL "
+                "AND feishu_user_id != ''"
+            )
+        except Exception:
+            pass
+    # AI-GEN-END
     # AI-GEN-BEGIN
     sa_cols = _table_cols(conn, "system_accounts")
     if sa_cols and "account_uid" not in sa_cols:
@@ -797,6 +1154,35 @@ def migrate_schema(conn: PgConnection) -> None:
         conn.execute(
             "ALTER TABLE systems ADD COLUMN is_builtin INTEGER NOT NULL DEFAULT 0"
         )
+    # AI-GEN-BEGIN
+    sys_cols_nav = _table_cols(conn, "systems")
+    if sys_cols_nav and "nav_icon" not in sys_cols_nav:
+        conn.execute("ALTER TABLE systems ADD COLUMN nav_icon TEXT")
+    if sys_cols_nav and "home_url" not in sys_cols_nav:
+        conn.execute("ALTER TABLE systems ADD COLUMN home_url TEXT")
+    if sys_cols_nav and "show_in_nav" not in sys_cols_nav:
+        conn.execute(
+            "ALTER TABLE systems ADD COLUMN show_in_nav INTEGER NOT NULL DEFAULT 1"
+        )
+    # 缺省图标（仅空值时补，不覆盖手工配置）
+    _nav_defaults = {
+        "oa": "OA",
+        "bip": "BIP",
+        "laiku_erp": "来",
+        "keji_erp": "科",
+        "beisen": "北",
+        "feishu": "飞",
+    }
+    for _code, _ico in _nav_defaults.items():
+        try:
+            conn.execute(
+                """UPDATE systems SET nav_icon = ?
+                WHERE code = ? AND (nav_icon IS NULL OR nav_icon = '')""",
+                (_ico, _code),
+            )
+        except Exception:
+            pass
+    # AI-GEN-END
     ensure_leuc_system(conn)
     # AI-GEN-BEGIN
     msg_cols = _table_cols(conn, "messages")
@@ -811,6 +1197,11 @@ def migrate_schema(conn: PgConnection) -> None:
     step_cols = _table_cols(conn, "application_steps")
     if step_cols and "remark" not in step_cols:
         conn.execute("ALTER TABLE application_steps ADD COLUMN remark TEXT")
+    # AI-GEN-BEGIN
+    from leuc_approval_ext import ensure_flow_events_table
+
+    ensure_flow_events_table(conn)
+    # AI-GEN-END
     # AI-GEN-END
     ensure_todo_notify_trigger(conn)
     # AI-GEN-BEGIN
@@ -994,7 +1385,7 @@ BUILTIN_ROLE_CODES = {c for c, _, _ in BUILTIN_ROLE_DEFS}
 
 
 def ensure_roles_seeded(conn: PgConnection) -> None:
-    """补种内置角色目录（不覆盖已改显示名）。"""
+    """补种内置角色目录（不覆盖已改显示名 / 已保存的菜单按钮配置）。"""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     for code, label, sort in BUILTIN_ROLE_DEFS:
         conn.execute(
@@ -1007,27 +1398,91 @@ def ensure_roles_seeded(conn: PgConnection) -> None:
         "UPDATE roles SET label='部门负责人' WHERE code='dept_owner' AND label='组织负责人'"
     )
     # AI-GEN-BEGIN
-    # 软补：北森消息菜单（不覆盖角色其它菜单配置）
-    for role in ("hr_specialist", "system_owner", "super_admin"):
+    # 一次性补丁表：新默认菜单/按钮只补一次，避免覆盖管理员「保存配置」
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS schema_patches (
+          id TEXT PRIMARY KEY,
+          applied_at TEXT NOT NULL
+        )"""
+    )
+
+    def _apply_patch_once(patch_id: str, apply_fn) -> None:
+        hit = conn.execute(
+            "SELECT 1 FROM schema_patches WHERE id = ?", (patch_id,)
+        ).fetchone()
+        if hit:
+            return
+        apply_fn()
         conn.execute(
-            "INSERT OR IGNORE INTO role_menus (role, menu_id) VALUES (?, 'oa_forms')",
-            (role,),
+            "INSERT INTO schema_patches (id, applied_at) VALUES (?, ?)",
+            (patch_id, now),
         )
-    # 软补：添加/删除部门按钮
-    for role in ("super_admin", "hr_specialist", "dept_owner"):
-        for cap in ("org_dept_add", "org_dept_delete"):
+
+    def _patch_oa_forms():
+        for role in ("hr_specialist", "system_owner", "super_admin"):
             conn.execute(
-                "INSERT OR IGNORE INTO role_caps (role, cap_id) VALUES (?, ?)",
-                (role, cap),
+                "INSERT OR IGNORE INTO role_menus (role, menu_id) VALUES (?, 'oa_forms')",
+                (role,),
             )
+
+    def _patch_org_dept_btns():
+        for role in ("super_admin", "hr_specialist", "dept_owner"):
+            for cap in ("org_dept_add", "org_dept_delete"):
+                conn.execute(
+                    "INSERT OR IGNORE INTO role_caps (role, cap_id) VALUES (?, ?)",
+                    (role, cap),
+                )
+
+    def _patch_org_reset_password():
+        for role in ("super_admin", "hr_specialist", "dept_owner"):
+            conn.execute(
+                "INSERT OR IGNORE INTO role_caps (role, cap_id) VALUES (?, 'org_reset_password')",
+                (role,),
+            )
+
+    def _patch_external_menus():
+        for mid in ("home", "security"):
+            conn.execute(
+                "INSERT OR IGNORE INTO role_menus (role, menu_id) VALUES ('external', ?)",
+                (mid,),
+            )
+
+    def _patch_org_add_cap():
+        # 补回「新建外部人员」按钮，与 DEFAULT_ROLE_CAPS 对齐（不覆盖已删自定义角色）
+        for role in ("super_admin", "hr_specialist", "dept_owner"):
+            conn.execute(
+                "INSERT OR IGNORE INTO role_caps (role, cap_id) VALUES (?, 'org_add')",
+                (role,),
+            )
+
+    def _patch_admin_alerts_menu():
+        for role in ("super_admin", "hr_specialist"):
+            conn.execute(
+                "INSERT OR IGNORE INTO role_menus (role, menu_id) VALUES (?, 'admin_alerts')",
+                (role,),
+            )
+
+    def _patch_admin_settings_menu():
+        for role in ("super_admin", "hr_specialist"):
+            conn.execute(
+                "INSERT OR IGNORE INTO role_menus (role, menu_id) VALUES (?, 'admin_settings')",
+                (role,),
+            )
+
+    _apply_patch_once("role_menu_oa_forms_v1", _patch_oa_forms)
+    _apply_patch_once("role_cap_org_dept_v1", _patch_org_dept_btns)
+    _apply_patch_once("role_cap_org_reset_password_v1", _patch_org_reset_password)
+    _apply_patch_once("role_menu_external_v1", _patch_external_menus)
+    _apply_patch_once("role_cap_org_add_v1", _patch_org_add_cap)
+    _apply_patch_once(
+        "users_unique_phone_email_v1", lambda: ensure_unique_contact_indexes(conn)
+    )
+    _apply_patch_once("role_menu_admin_alerts_v1", _patch_admin_alerts_menu)
+    _apply_patch_once("role_menu_admin_settings_v1", _patch_admin_settings_menu)
+    ensure_system_settings_table(conn)
     # AI-GEN-END
     # AI-GEN-BEGIN
-    # 外部人员角色默认菜单；存量 person_type=external 绑到 external
-    for mid in ("home", "security"):
-        conn.execute(
-            "INSERT OR IGNORE INTO role_menus (role, menu_id) VALUES ('external', ?)",
-            (mid,),
-        )
+    # 外部人员角色绑定（与菜单补丁无关，可重复幂等）
     try:
         conn.execute(
             """INSERT OR IGNORE INTO user_roles (user_id, role)
@@ -1044,14 +1499,24 @@ def ensure_roles_seeded(conn: PgConnection) -> None:
         )
     except Exception:
         pass
-    # 软补：各内置角色缺省菜单/按钮（不删已有自定义勾选）
+    # 仅当该角色尚无任何菜单/按钮时补缺省（首次），之后以「保存配置」为准
     for role, menus in DEFAULT_ROLE_MENUS.items():
+        has = conn.execute(
+            "SELECT 1 FROM role_menus WHERE role = ? LIMIT 1", (role,)
+        ).fetchone()
+        if has:
+            continue
         for mid in menus:
             conn.execute(
                 "INSERT OR IGNORE INTO role_menus (role, menu_id) VALUES (?, ?)",
                 (role, mid),
             )
     for role, caps in DEFAULT_ROLE_CAPS.items():
+        has = conn.execute(
+            "SELECT 1 FROM role_caps WHERE role = ? LIMIT 1", (role,)
+        ).fetchone()
+        if has:
+            continue
         for cid in caps:
             conn.execute(
                 "INSERT OR IGNORE INTO role_caps (role, cap_id) VALUES (?, ?)",
@@ -1250,7 +1715,7 @@ def seed(conn: PgConnection) -> None:
     conn.execute(
         """INSERT INTO messages (id, from_user_id, to_user_id, title, body, created_at, is_read, msg_type)
         VALUES
-        (1, 0, 1, '系统通知', '欢迎使用 LEUC；请用 admin / 123456 登录后从 LeOrg 同步部门。', '2026-08-04 09:00:00', 0, 'system')
+        (1, 0, 1, '系统通知', '欢迎使用 LEUC；超管用 admin / 123456 登录；普通用户用手机号+密码。用户唯一标识为数字 ID。', '2026-08-04 09:00:00', 0, 'system')
         """
     )
 
@@ -1411,6 +1876,8 @@ ALL_MENUS = [
     {"id": "admin_tasks", "label": "任务管理", "group": "系统设置"},
     {"id": "admin_notify", "label": "发信记录", "group": "系统设置"},
     {"id": "admin_audit", "label": "审计日志", "group": "系统设置"},
+    {"id": "admin_alerts", "label": "系统报警", "group": "系统设置"},
+    {"id": "admin_settings", "label": "系统配置", "group": "系统设置"},
     {"id": "admin_leave_close", "label": "离职关账记录", "group": "系统设置"},
     {"id": "admin_sensitive", "label": "敏感审批链", "group": "系统设置"},
     {"id": "admin_roles", "label": "角色与权限", "group": "系统设置"},
@@ -1428,9 +1895,9 @@ ALL_BUTTONS = [
     {"id": "org_set_owner", "label": "设置部门负责人", "menu": "my_org"},
     {"id": "org_dept_add", "label": "添加部门", "menu": "my_org"},
     {"id": "org_dept_delete", "label": "删除部门", "menu": "my_org"},
-    {"id": "proxy_apply", "label": "代人申请账号/权限", "menu": "my_org"},
-    {"id": "direct_bind", "label": "直接绑定", "menu": "my_org"},
     {"id": "set_account_expire", "label": "设置账号有效期", "menu": "my_org"},
+    {"id": "org_reset_password", "label": "修改人员密码", "menu": "my_org"},
+    {"id": "proxy_apply", "label": "代人申请账号/权限", "menu": "my_org"},
     {"id": "manage_systems", "label": "维护业务系统", "menu": "my_systems"},
     {"id": "sys_add", "label": "添加系统", "menu": "my_systems"},
     {"id": "sys_perm_edit", "label": "维护权限目录", "menu": "my_systems"},
@@ -1448,13 +1915,13 @@ DEFAULT_ROLE_MENUS = {
     "finance": ["home", "security", "todo", "apply", "my_org"],
     "hr_specialist": [
         "home", "security", "todo", "apply", "my_org", "oa_forms",
-        "admin_tasks", "admin_notify", "admin_audit", "admin_leave_close",
+        "admin_tasks", "admin_notify", "admin_audit", "admin_alerts", "admin_settings", "admin_leave_close",
     ],
     "system_owner": ["home", "security", "todo", "apply", "my_org", "my_systems", "sys_accounts", "oa_forms"],
     "super_admin": [
         "home", "security", "todo", "apply", "my_org",
         "my_systems", "sys_accounts", "oa_forms",
-        "admin_tasks", "admin_notify", "admin_audit", "admin_leave_close",
+        "admin_tasks", "admin_notify", "admin_audit", "admin_alerts", "admin_settings", "admin_leave_close",
         "admin_sensitive", "admin_roles",
     ],
     "employee_a": ["home", "security", "todo", "apply", "my_org"],
@@ -1469,20 +1936,20 @@ DEFAULT_ROLE_CAPS = {
     "hr_specialist": [
         "manage_all_org", "org_add", "org_import", "org_sync", "org_set_owner",
         "org_dept_add", "org_dept_delete",
-        "proxy_apply", "direct_bind", "set_account_expire",
+        "proxy_apply", "set_account_expire", "org_reset_password",
     ],
     "system_owner": ["manage_systems", "sys_perm_edit", "sys_acct_sync"],
     "super_admin": [
         "manage_all_org", "org_add", "org_import", "org_sync", "org_set_owner",
         "org_dept_add", "org_dept_delete",
-        "proxy_apply", "direct_bind", "set_account_expire",
+        "proxy_apply", "set_account_expire", "org_reset_password",
         "manage_systems", "sys_add", "sys_perm_edit", "sys_acct_sync",
         "config_roles", "role_assign", "sensitive_config",
     ],
     "dept_owner": [
         "org_add", "org_import", "org_set_owner",
         "org_dept_add", "org_dept_delete",
-        "proxy_apply", "set_account_expire",
+        "proxy_apply", "set_account_expire", "org_reset_password",
     ],
     "employee_a": [],
     "employee_b": [],

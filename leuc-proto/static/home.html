@@ -54,10 +54,12 @@ pre{background:#0F1630;color:#7CE7A8;padding:12px;border-radius:10px;overflow:au
 <div class="wrap">
   <div class="card" id="portal">
     <h1>选择业务系统</h1>
-    <div class="sub">点击系统后跳转 LEUC 完成认证；按<strong>账号绑定关系</strong>校验是否可登录（全员登录系统可自动开通）。多业务账号时在 LEUC 侧选择。</div>
+    <div class="sub">点击系统将<strong>新标签</strong>打开并跳转 LEUC 完成认证；按<strong>账号绑定关系</strong>校验是否可登录（全员登录系统可自动开通）。多业务账号时在 LEUC 侧选择。</div>
     <div class="callout">
-      建议：<code>zhangsan</code> 来酷×1 自动回跳；<code>lisi</code> 来酷×3 需选账号；BIP 为全员登录；OA/北森/科技需账号绑定。
-      <strong>北森</strong>真实 SSO：须先申请开通并绑定账号池中的北森用户ID（通讯录里的北森ID不可直接登录），成功后进入 <a href="https://www.italent.cn/" target="_blank" rel="noopener">iTalent 门户</a>。
+      <!-- AI-GEN-BEGIN -->
+      建议默认：<code>admin</code> / 123456。BIP 为全员登录；北森/飞书同步到用户 ID 后自动开通；其它系统需账号绑定。
+      <!-- AI-GEN-END -->
+      <strong>北森</strong>真实 SSO：通讯录北森用户ID 非空即可自动绑定登录，成功后进入 <a href="https://www.italent.cn/" target="_blank" rel="noopener">iTalent 门户</a>。
     </div>
     <div class="grid" id="app-grid"><div class="meta">加载中…</div></div>
     <div class="links">
@@ -124,22 +126,43 @@ function renderPortal() {
   }
   grid.innerHTML = SYSTEMS.map(s => {
     const sess = sessions[s.code];
-    const letter = (s.name || s.code).slice(0,1);
     const color = COLORS[s.code] || '#64748B';
-    return `<button type="button" class="app" onclick="enterApp('${s.code}')">
-      <div class="ico" style="background:${color}">${letter}</div>
+    // AI-GEN-BEGIN
+    const ico = (s.nav_icon || '').trim() || (s.name || s.code || '?').slice(0, 1);
+    const isImg = /^https?:\/\//i.test(ico) || /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(ico);
+    const icoHtml = isImg
+      ? `<div class="ico" style="padding:0;overflow:hidden"><img src="${ico.replace(/"/g,'&quot;')}" alt="" style="width:100%;height:100%;object-fit:cover"></div>`
+      : `<div class="ico" style="background:${color}">${ico.replace(/</g,'')}</div>`;
+    return `<button type="button" class="app" onclick="openAppInNewTab('${s.code}')">
+      ${icoHtml}
       <b>${s.name}</b>
       <div class="meta">${s.mode_label || ''} · ${s.code}</div>
       <span class="pill ${s.access_mode==='open'?'p-green':'p-orange'}">${s.access_mode==='open'?'全员登录':'需账号绑定'}</span>
       ${sess ? `<div class="meta" style="margin-top:8px"><span class="sess-dot on"></span>已登录 · ${sess.userinfo?.account_name || sess.userinfo?.name || ''}</div>`
              : `<div class="meta" style="margin-top:8px"><span class="sess-dot"></span>${
                  s.code==='beisen' && s.beisen_sso_enabled
-                   ? '未登录 · 点击真实 SSO 进入北森'
-                   : '未登录 · 点击经 LEUC 进入'
+                   ? '未登录 · 新标签真实 SSO 进入北森'
+                   : (s.home_url ? '未登录 · 直达首页链接' : '未登录 · 新标签经 LEUC 进入')
                }</div>`}
     </button>`;
+    // AI-GEN-END
   }).join('');
 }
+
+// AI-GEN-BEGIN
+function openAppInNewTab(code) {
+  const s = findSys(code);
+  const url = (s && (s.home_url || s.launch_url)) || `/demo/home?open=${encodeURIComponent(code)}`;
+  // 已配置外部首页链接：直接打开；否则仍走本页 open 流程（含北森 SSO）
+  if (s && s.home_url) {
+    const w = window.open(s.home_url, '_blank');
+    if (!w) alert('浏览器拦截了新标签，请允许弹窗后重试');
+    return;
+  }
+  const w = window.open(`/demo/home?open=${encodeURIComponent(code)}`, '_blank');
+  if (!w) alert('浏览器拦截了新标签，请允许弹窗后重试');
+}
+// AI-GEN-END
 
 async function enterApp(code) {
   // AI-GEN-BEGIN
@@ -274,11 +297,15 @@ function backPortal() {
 (async function boot(){
   await loadSystems();
   if (await handleCallback()) return;
+  // AI-GEN-BEGIN
   const q = new URLSearchParams(location.search);
-  if (q.get('open')) {
-    enterApp(q.get('open'));
+  const openCode = q.get('open');
+  if (openCode) {
+    history.replaceState({}, '', '/demo/home');
+    await enterApp(openCode);
     return;
   }
+  // AI-GEN-END
   renderPortal();
 })();
 // AI-GEN-END

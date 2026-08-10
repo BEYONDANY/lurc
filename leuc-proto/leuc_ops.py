@@ -16,7 +16,10 @@ _PASSWORD_SPECIAL = "!@#$%^&*_-+=?"
 
 
 def extract_leorg_phone(emp: dict[str, Any]) -> str | None:
-    """LeOrg 人员手机号：优先 mobilePhone，其次 mobile / phone。"""
+    """LeOrg 人员手机号：优先 mobilePhone，其次 mobile / phone。
+
+    含 * 的视为脱敏号，不可作为登录凭证，返回 None。
+    """
     for key in ("mobilePhone", "mobile_phone", "mobile", "phone", "Phone", "MobilePhone"):
         v = emp.get(key)
         if v is None:
@@ -57,11 +60,21 @@ def record_credential_notify(
     channel = "phone" if phone else ("email" if email else "none")
     target = phone or email or ""
     status = "recorded" if target else "skipped"
-    body = (
-        f"【LEUC】账号已创建\n登录名：{username}\n初始密码：{password}\n"
-        f"请尽快登录并修改密码。"
-    )
-    title = "账号开通通知"
+    # AI-GEN-BEGIN
+    login_hint = phone or f"用户ID {user_id}"
+    if reason == "org_reset_password":
+        title = "密码重置通知"
+        body = (
+            f"【LEUC】登录密码已重置\n登录手机：{login_hint}\n用户ID：{user_id}\n"
+            f"新密码：{password}\n请尽快登录并修改密码。"
+        )
+    else:
+        title = "账号开通通知"
+        body = (
+            f"【LEUC】账号已创建\n登录手机：{login_hint}\n用户ID：{user_id}\n"
+            f"初始密码：{password}\n请用手机号+密码登录。"
+        )
+    # AI-GEN-END
     cur = db.execute(
         """INSERT INTO notify_send_records
         (user_id, channel, target, title, body, status, reason, meta_json, created_at)
@@ -75,7 +88,12 @@ def record_credential_notify(
             status,
             reason,
             json.dumps(
-                {"username": username, "has_password": True},
+                {
+                    "username": username,
+                    "user_id": user_id,
+                    "phone": phone,
+                    "has_password": True,
+                },
                 ensure_ascii=False,
             ),
             now,
@@ -208,20 +226,40 @@ def ensure_ops_tables(conn) -> None:
           created_at TEXT NOT NULL
         )"""
     )
-    # 子系统关闭回调地址（空则走本地模拟回执）
+    # AI-GEN-BEGIN
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS system_alerts (
+          id INTEGER PRIMARY KEY,
+          code TEXT NOT NULL,
+          level TEXT NOT NULL DEFAULT 'error',
+          title TEXT NOT NULL,
+          detail_json TEXT,
+          target_type TEXT,
+          target_id TEXT,
+          created_at TEXT NOT NULL,
+          is_read INTEGER NOT NULL DEFAULT 0
+        )"""
+    )
+    # AI-GEN-END
+    # 子系统关闭回调地址（空 = 一键关账时生成管理员待办；有值 = 接口直关）
     sys_cols = [r[1] for r in conn.execute("PRAGMA table_info(systems)").fetchall()]
     if sys_cols and "close_api_url" not in sys_cols:
         conn.execute("ALTER TABLE systems ADD COLUMN close_api_url TEXT")
-    # 原型默认指向内置回调，便于子系统侧落库验示
+    # 原型：仅给来酷ERP / 北森预置内置回调，其余空着走管理员待办演示
     try:
         conn.execute(
             """UPDATE systems
             SET close_api_url = '/api/internal/subsystem-account-close'
-            WHERE COALESCE(is_builtin, 0) = 0
+            WHERE code IN ('laiku_erp', 'beisen')
               AND (close_api_url IS NULL OR close_api_url = '')"""
         )
     except Exception:
         pass
+    # AI-GEN-BEGIN
+    from leuc_bulk_close import ensure_bulk_close_tables
+
+    ensure_bulk_close_tables(conn)
+    # AI-GEN-END
     # AI-GEN-END
     dept_cols = [r[1] for r in conn.execute("PRAGMA table_info(departments)").fetchall()]
     if dept_cols and "is_builtin" not in dept_cols:
@@ -351,6 +389,112 @@ def write_audit_log(
         ),
     )
     return cur.lastrowid
+
+
+# AI-GEN-BEGIN
+def raise_system_alert(
+    db,
+    *,
+    code: str,
+    title: str,
+    detail: Any = None,
+    level: str = "error",
+    target_type: str | None = None,
+    target_id: str | None = None,
+) -> int | None:
+    """系统报警：写审计日志 + 落 system_alerts + 通知超管/人事；并打控制台日志。"""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    detail_obj = detail if isinstance(detail, dict) else {"message": detail}
+    print(
+        f"[LEUC-ALERT][{level}] {code}: {title} | {detail_obj}",
+        flush=True,
+    )
+    try:
+        db.execute(
+            """CREATE TABLE IF NOT EXISTS system_alerts (
+              id INTEGER PRIMARY KEY,
+              code TEXT NOT NULL,
+              level TEXT NOT NULL DEFAULT 'error',
+              title TEXT NOT NULL,
+              detail_json TEXT,
+              target_type TEXT,
+              target_id TEXT,
+              created_at TEXT NOT NULL,
+              is_read INTEGER NOT NULL DEFAULT 0
+            )"""
+        )
+    except Exception:
+        pass
+    detail_json = json.dumps(detail_obj, ensure_ascii=False, default=str)
+    cur = db.execute(
+        """INSERT INTO system_alerts
+        (code, level, title, detail_json, target_type, target_id, created_at, is_read)
+        VALUES (?,?,?,?,?,?,?,0)""",
+        (code, level, title, detail_json, target_type, str(target_id) if target_id is not None else None, now),
+    )
+    alert_id = cur.lastrowid
+    write_audit_log(
+        db,
+        action=f"alert:{code}",
+        actor_name="system",
+        target_type=target_type,
+        target_id=target_id,
+        detail={"title": title, "level": level, **detail_obj},
+    )
+    # 站内信通知超管 / 人事
+    try:
+        admins = db.execute(
+            """SELECT DISTINCT u.id FROM users u
+            LEFT JOIN user_roles ur ON ur.user_id = u.id
+            WHERE u.username = 'admin'
+               OR u.role IN ('super_admin', 'hr_specialist')
+               OR ur.role IN ('super_admin', 'hr_specialist')"""
+        ).fetchall()
+        body = f"{title}\n{detail_json}"
+        for a in admins:
+            db.execute(
+                """INSERT INTO messages
+                (from_user_id, to_user_id, title, body, created_at, is_read, msg_type)
+                VALUES (0, ?, ?, ?, ?, 0, 'system_alert')""",
+                (int(a["id"]), f"【系统报警】{title}", body, now),
+            )
+    except Exception:
+        pass
+    return alert_id
+
+
+def list_system_alerts(db, *, limit: int = 100, unread_only: bool = False) -> list[dict]:
+    try:
+        db.execute(
+            """CREATE TABLE IF NOT EXISTS system_alerts (
+              id INTEGER PRIMARY KEY,
+              code TEXT NOT NULL,
+              level TEXT NOT NULL DEFAULT 'error',
+              title TEXT NOT NULL,
+              detail_json TEXT,
+              target_type TEXT,
+              target_id TEXT,
+              created_at TEXT NOT NULL,
+              is_read INTEGER NOT NULL DEFAULT 0
+            )"""
+        )
+    except Exception:
+        pass
+    sql = "SELECT * FROM system_alerts"
+    if unread_only:
+        sql += " WHERE is_read = 0"
+    sql += " ORDER BY id DESC LIMIT ?"
+    rows = db.execute(sql, (int(limit),)).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["detail"] = json.loads(d.get("detail_json") or "null")
+        except Exception:
+            d["detail"] = d.get("detail_json")
+        out.append(d)
+    return out
+# AI-GEN-END
 
 
 def begin_task_run(

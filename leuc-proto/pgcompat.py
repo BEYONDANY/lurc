@@ -23,6 +23,7 @@ _NO_RETURNING_ID = {
     "oauth_codes",
     "oauth_tokens",
     "roles",
+    "system_settings",
 }
 
 _INSERT_RE = re.compile(

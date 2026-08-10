@@ -118,6 +118,16 @@ body{
 .pill{display:inline-block;font-size:11px;padding:3px 10px;border-radius:999px;font-weight:550}
 .p-green{background:#EDFCE9;color:#003C33}.p-blue{background:#F1F5FF;color:#1863DC}
 .p-orange{background:#FFF0EB;color:#C24A30}.p-red{background:#FCE9E9;color:#B30000}.p-gray{background:#F2F2F4;color:#75758A}
+/* AI-GEN-BEGIN */
+.home-nav-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:8px}
+.home-nav-item{border:1px solid var(--hairline);border-radius:12px;padding:12px 10px;background:linear-gradient(180deg,#fff,#F7FAFF);cursor:pointer;text-align:center;transition:.15s}
+.home-nav-item:hover{border-color:#2E9BFF;box-shadow:0 6px 16px rgba(46,155,255,.14);transform:translateY(-1px)}
+.home-nav-item.dim{opacity:.55}
+.home-nav-ico{width:40px;height:40px;border-radius:11px;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;overflow:hidden;background:#64748B}
+.home-nav-ico img{width:100%;height:100%;object-fit:cover}
+.home-nav-item b{display:block;font-size:13px;margin-bottom:4px}
+.home-nav-item .meta{font-size:11px;color:var(--muted);line-height:1.4}
+/* AI-GEN-END */
 table{width:100%;border-collapse:collapse;font-size:12.5px}
 th{color:var(--muted);text-align:left;font-weight:500;padding:9px 10px;border-bottom:1px solid var(--line);background:#FAFCFF}
 td{padding:10px;border-bottom:1px solid #EDF2FB}
@@ -353,8 +363,28 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
             </div>
             <div class="callout" id="source-tip"><strong>当前：直登 LEUC</strong></div>
             <div class="note" style="margin:0 0 14px">业务系统联合登录请打开：<a href="/demo/home">业务系统导航</a>（来酷ERP / OA / 北森等）</div>
-            <div class="field"><label>账号</label><input id="username" value="zhangsan" onchange="refreshRisk()"></div>
-            <div class="field"><label>密码</label><input id="password" type="password" value="123456"></div>
+            <!-- AI-GEN-BEGIN -->
+            <div class="stepup" id="login-mode-tabs" style="margin-bottom:12px">
+              <div class="on" data-m="password" onclick="pickLoginMode(this)"><b>手机+密码</b></div>
+              <div data-m="otp_phone" onclick="pickLoginMode(this)"><b>手机验证码</b></div>
+              <div data-m="otp_email" onclick="pickLoginMode(this)"><b>邮箱验证码</b></div>
+            </div>
+            <div id="login-password-fields">
+              <div class="field"><label>手机号</label>
+                <input id="username" value="admin" placeholder="手机号（超管可填 admin）" onchange="refreshRisk()"></div>
+              <div class="field"><label>密码</label><input id="password" type="password" value="123456"></div>
+            </div>
+            <div id="login-otp-fields" style="display:none">
+              <div class="field"><label id="login-otp-lab">手机号</label>
+                <input id="login-otp-contact" placeholder="绑定手机号或邮箱"></div>
+              <div class="field"><label>验证码</label>
+                <div style="display:flex;gap:8px">
+                  <input id="login-otp-code" placeholder="888888" style="flex:1">
+                  <button class="btn btn-sm btn-line" type="button" onclick="sendLoginOtp()">发送验证码</button>
+                </div>
+              </div>
+            </div>
+            <!-- AI-GEN-END -->
             <!-- AI-GEN-BEGIN -->
             <div id="captcha-block" style="display:none">
               <div class="callout"><strong>图片验证码</strong>：密码错误 ≥1 次后须填写（点击图片可刷新）</div>
@@ -369,7 +399,7 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
               </div>
             </div>
             <div id="verify-block" style="display:none">
-              <div class="callout"><strong>二次验证</strong>：密码错误 ≥10 次，须填写<strong>与账号绑定一致</strong>的手机或邮箱，并输入验证码（演示 <b>888888</b>）。张三手机 <b>13800000001</b> / 邮箱 <b>zhangsan@lecoo.com</b></div>
+              <div class="callout"><strong>二次验证</strong>：密码错误 ≥10 次，须填写<strong>与账号绑定一致</strong>的手机或邮箱，并输入验证码（演示 <b>888888</b>）。</div>
               <div class="stepup" id="vchan">
                 <div class="on" data-c="phone" onclick="pickChan(this)"><b>手机</b>验证</div>
                 <div data-c="email" onclick="pickChan(this)"><b>邮箱</b>验证</div>
@@ -389,7 +419,9 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#07C160"/><path d="M7.5 13.2c.2-2.2 2.2-3.8 4.5-3.8s4.3 1.6 4.5 3.8c.1.4-.2.8-.6.8H8.1c-.4 0-.7-.4-.6-.8z" fill="#fff"/></svg>
               </button>
             </div>
-            <div class="sso-tip">飞书 / 企业微信（仅 Icon）</div>
+            <!-- AI-GEN-BEGIN -->
+            <div class="sso-tip">飞书 / 企业微信</div>
+            <!-- AI-GEN-END -->
             <div class="demo-row">
               <button class="btn btn-sm btn-line" onclick="failToN(1)">模拟错误1次</button>
               <button class="btn btn-sm btn-line" onclick="failToN(10)">模拟错误10次</button>
@@ -462,11 +494,13 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   </div>
 </div>
 
+<!-- AI-GEN-BEGIN -->
 <div class="footer-tip">
-  账号：xuhaohao / maning / wujinzhi / gaojia / changmingming · 密码 123456<br>
-  超管：admin（全权限，不在「部门和人员」通讯录）· 密码 123456<br>
+  默认超管：账号 <b>admin</b> · 密码 123456（特殊通道；普通用户请用手机号+密码）<br>
+  其他：xuhaohao / maning / wujinzhi / gaojia / changmingming · 密码 123456<br>
   登录验证码 888888 · 找回密码 666666 · 启动 <code>cd leuc-proto && python3 app.py</code>
 </div>
+<!-- AI-GEN-END -->
 <div class="toast" id="toast"></div>
 
 <!-- AI-GEN-BEGIN -->
@@ -484,16 +518,19 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 <div class="mask" id="m-add"><div class="modal">
   <!-- AI-GEN-BEGIN -->
   <h3>新建外部人员</h3>
-  <div class="callout">外部人员统一归属内置部门「外部人员」（与公司平级、不可删除），并绑定<strong>外部人员</strong>角色。创建后账号密码写入发信记录（优先手机，不真实发送）。登录后仅可查看<strong>个人中心</strong>与<strong>安全管理</strong>。</div>
+  <div class="callout">外部人员统一归属内置部门「外部人员」。提交后走<strong>与敏感权限相同</strong>审批链（直属→一级→财务→申请人确认），通过后才创建账号；密码写入发信记录（优先手机）。登录凭证为<strong>手机号+密码</strong>；用户ID由系统自动生成且不可变。</div>
   <div class="field"><label>姓名</label><input id="add-name" oninput="previewUser()" placeholder="如：外包协作人"></div>
-  <div class="field"><label>登录用户名（可编辑确认）</label><input id="add-username" placeholder="默认姓名拼音，可改"></div>
-  <div class="note" id="add-user-hint" style="margin-top:-6px;margin-bottom:10px"></div>
-  <div class="field"><label>手机（优先接收账号密码）</label><input id="add-phone"></div>
-  <div class="field"><label>邮箱（无手机时）</label><input id="add-email"></div>
+  <!-- AI-GEN-BEGIN -->
+  <div class="field" style="display:none"><label>内部用户名</label>
+    <input id="add-username" placeholder="系统内部用" readonly style="background:#f1f5f9"></div>
+  <div class="note" id="add-user-hint" style="margin-top:-6px;margin-bottom:10px">创建后显示数字用户ID；登录请用手机号。</div>
+  <!-- AI-GEN-END -->
+  <div class="field"><label>手机（必填，登录凭证）</label><input id="add-phone" placeholder="唯一手机号"></div>
+  <div class="field"><label>邮箱（须为系统配置允许的后缀）</label><input id="add-email" placeholder="name@lecoo.com"></div>
   <input type="hidden" id="add-role" value="external">
   <div class="foot">
     <button class="btn btn-line" onclick="closeModal('m-add')">取消</button>
-    <button class="btn btn-pri" style="width:auto" onclick="submitAdd()">确认创建</button>
+    <button class="btn btn-pri" style="width:auto" onclick="submitAdd()">提交审批</button>
   </div>
   <!-- AI-GEN-END -->
 </div></div>
@@ -501,12 +538,12 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
 <!-- AI-GEN-BEGIN -->
 <div class="mask" id="m-edit-member"><div class="modal modal-md">
   <h3>编辑人员</h3>
-  <div class="callout" id="edit-member-hint">可改姓名、部门、手机、邮箱与状态；关闭后可再打开。</div>
+  <div class="callout" id="edit-member-hint">可改姓名、部门、手机、邮箱与状态；用户ID不可变；手机号必填且唯一（登录凭证）。</div>
   <input type="hidden" id="edit-member-id">
   <div class="field"><label>姓名</label><input id="edit-member-name"></div>
-  <div class="field"><label>登录账号</label><input id="edit-member-username" readonly style="background:#f1f5f9"></div>
+  <div class="field"><label>用户ID（不可变）</label><input id="edit-member-username" readonly style="background:#f1f5f9"></div>
   <div class="field"><label>部门</label><select id="edit-member-dept"></select></div>
-  <div class="field"><label>手机</label><input id="edit-member-phone"></div>
+  <div class="field"><label>手机（登录凭证，必填）</label><input id="edit-member-phone"></div>
   <div class="field"><label>邮箱</label><input id="edit-member-email"></div>
   <div class="field"><label>状态</label>
     <select id="edit-member-status">
@@ -585,6 +622,21 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
       <option value="itcode">工号/itcode</option>
     </select>
   </div>
+  <!-- AI-GEN-BEGIN -->
+  <div class="field"><label>导航图标</label>
+    <input id="sys-nav-icon" placeholder="如：OA / 北 / 或图片 URL" maxlength="200">
+    <div class="note">显示在个人中心与业务系统导航；可填 1～4 字或图片地址</div>
+  </div>
+  <div class="field"><label>首页链接（可选）</label>
+    <input id="sys-home-url" placeholder="留空则走 /demo/home 门户登录；可填 https://…">
+    <div class="note">有链接时点击直达；无链接则打开业务系统导航并进入该系统</div>
+  </div>
+  <div class="field"><label><input type="checkbox" id="sys-show-in-nav" checked> 显示在首页系统导航</label></div>
+  <div class="field"><label>一键关账接口 URL（可选）</label>
+    <input id="sys-close-api-url" placeholder="有值=接口直关；留空=生成管理员待办">
+    <div class="note">后期对接子系统关闭接口；空则关账时给系统管理员生成待办</div>
+  </div>
+  <!-- AI-GEN-END -->
   <div class="field" id="sys-owners-field"><label>系统管理员（可多选）</label>
     <div id="sys-owners-box" style="max-height:140px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
   </div>
@@ -848,11 +900,11 @@ td{padding:10px;border-bottom:1px solid #EDF2FB}
   </div>
   <!-- AI-GEN-BEGIN -->
   <div class="field" id="decide-reject-wrap" style="display:none">
-    <label>驳回到指定节点</label>
+    <label>驳回到指定节点（可选，不选则直接结束）</label>
     <select id="decide-reject-to" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
       <option value="">直接结束申请</option>
     </select>
-    <div class="note">选申请人或前置节点后，对方可改单重提并回到你这里。</div>
+    <div class="note">选申请人或前置节点后，对方可改单重提并回到你这里；不选则申请直接结束。</div>
   </div>
   <!-- AI-GEN-END -->
   <div class="foot">
@@ -902,6 +954,9 @@ const state = {
   risk: { fail_count: 0, need_verify: false },
   verifyChannel: 'phone',
   forgotChannel: 'phone',
+  // AI-GEN-BEGIN
+  loginMode: 'password',
+  // AI-GEN-END
   pendingAccounts: [],
   selectedAccountId: null,
   home: null,
@@ -909,6 +964,9 @@ const state = {
   user: null,
   view: 'home',
   selectedIds: new Set(),
+  // AI-GEN-BEGIN
+  todoSelectedIds: new Set(),
+  // AI-GEN-END
 };
 
 async function api(path, opts = {}) {
@@ -1024,15 +1082,32 @@ async function resetRisk() {
 }
 
 async function doLogin() {
-  const body = {
-    username: document.getElementById('username').value.trim(),
-    password: document.getElementById('password').value,
-    captcha: document.getElementById('captcha_code')?.value || '',
-    verify_channel: state.verifyChannel,
-    verify_contact: document.getElementById('verify_contact')?.value || '',
-    verify_code: document.getElementById('verify_code')?.value || '',
-    source: state.source,
-  };
+  // AI-GEN-BEGIN
+  const mode = state.loginMode || 'password';
+  let body;
+  if (mode === 'otp_phone' || mode === 'otp_email') {
+    body = {
+      login_mode: 'otp',
+      channel: mode === 'otp_email' ? 'email' : 'phone',
+      verify_channel: mode === 'otp_email' ? 'email' : 'phone',
+      verify_contact: document.getElementById('login-otp-contact')?.value || '',
+      verify_code: document.getElementById('login-otp-code')?.value || '',
+      source: state.source,
+    };
+  } else {
+    body = {
+      login_mode: 'password',
+      username: document.getElementById('username').value.trim(),
+      phone: document.getElementById('username').value.trim(),
+      password: document.getElementById('password').value,
+      captcha: document.getElementById('captcha_code')?.value || '',
+      verify_channel: state.verifyChannel,
+      verify_contact: document.getElementById('verify_contact')?.value || '',
+      verify_code: document.getElementById('verify_code')?.value || '',
+      source: state.source,
+    };
+  }
+  // AI-GEN-END
   const { data } = await api('/api/login', { method:'POST', body: JSON.stringify(body) });
   if (data.risk) { state.risk = data.risk; syncRiskUI(); }
   else if (data.refresh_captcha) refreshCaptcha();
@@ -1060,6 +1135,32 @@ async function doLogin() {
     showPanel('lp-erp-ok');
   }
 }
+// AI-GEN-BEGIN
+function pickLoginMode(el){
+  document.querySelectorAll('#login-mode-tabs > div').forEach(d => d.classList.remove('on'));
+  el.classList.add('on');
+  state.loginMode = el.dataset.m || 'password';
+  const pwd = document.getElementById('login-password-fields');
+  const otp = document.getElementById('login-otp-fields');
+  const lab = document.getElementById('login-otp-lab');
+  if (state.loginMode === 'password') {
+    if (pwd) pwd.style.display = '';
+    if (otp) otp.style.display = 'none';
+  } else {
+    if (pwd) pwd.style.display = 'none';
+    if (otp) otp.style.display = '';
+    if (lab) lab.textContent = state.loginMode === 'otp_email' ? '邮箱' : '手机号';
+  }
+}
+async function sendLoginOtp(){
+  const channel = state.loginMode === 'otp_email' ? 'email' : 'phone';
+  const contact = document.getElementById('login-otp-contact')?.value.trim() || '';
+  const { data } = await api('/api/login/otp/send', {
+    method:'POST', body: JSON.stringify({ channel, contact })
+  });
+  toast(data.ok ? (data.message || '已发送') : (data.error || '发送失败'));
+}
+// AI-GEN-END
 function goOidcRedirect(){
   if (state.oidcRedirect) location.href = state.oidcRedirect;
   else toast('无回调地址');
@@ -1112,11 +1213,11 @@ async function enterHome() {
   const qs = new URLSearchParams(location.search);
   const want = (qs.get('view') || '').trim();
   const menus = data.user.menus || [];
-  state.view = (want && menus.includes(want)) ? want : 'home';
+  setView((want && menus.includes(want)) ? want : 'home');
   // AI-GEN-END
   document.getElementById('me-av').textContent = (data.user.display_name||'?')[0];
   document.getElementById('me-name').textContent = data.user.display_name;
-  document.getElementById('me-role').textContent = `${data.user.role_label} · ${data.user.username}`;
+  document.getElementById('me-role').textContent = `${data.user.role_label} · ID #${data.user.id}`;
   document.getElementById('chat-fab-wrap').style.display = 'block';
   renderSide(); renderMain(); showScreen('home'); markRoleBtn(data.user.username);
   startChatPoll();
@@ -1161,6 +1262,8 @@ function renderSide() {
         { id: 'admin_tasks', label: '任务管理' },
         { id: 'admin_notify', label: '发信记录' },
         { id: 'admin_audit', label: '审计日志' },
+        { id: 'admin_alerts', label: '系统报警' },
+        { id: 'admin_settings', label: '系统配置' },
         { id: 'admin_leave_close', label: '离职关账记录' },
         { id: 'admin_sensitive', label: '敏感审批链' },
         { id: 'admin_roles', label: '角色与权限' },
@@ -1180,23 +1283,80 @@ function renderSide() {
   // AI-GEN-END
   document.getElementById('side-nav').innerHTML = html;
 }
-function nav(id){ state.view=id; renderSide(); renderMain(); }
+// AI-GEN-BEGIN
+function syncViewToUrl(viewId) {
+  const qs = new URLSearchParams(location.search);
+  if (viewId && viewId !== 'home') qs.set('view', viewId);
+  else qs.delete('view');
+  const q = qs.toString();
+  history.replaceState({}, '', (location.pathname || '/') + (q ? '?' + q : '') + (location.hash || ''));
+}
+function setView(id) {
+  state.view = id;
+  syncViewToUrl(id);
+}
+function nav(id) {
+  setView(id);
+  renderSide();
+  renderMain();
+}
+// AI-GEN-BEGIN
+function openHomeNavSystem(code) {
+  const list = (state.home && state.home.nav_systems) || [];
+  const s = list.find(x => String(x.code) === String(code));
+  if (!s) return toast('系统不存在');
+  const url = s.launch_url || s.home_url || (`/demo/home?open=${encodeURIComponent(s.code)}`);
+  const w = window.open(url, '_blank');
+  if (!w) toast('浏览器拦截了新标签，请允许弹窗后重试');
+}
+// AI-GEN-END
 
 async function renderMain() {
   const h = state.home, u = state.user, el = document.getElementById('main-views');
+  // AI-GEN-BEGIN
+  if (state.view !== 'admin_tasks' && typeof stopTaskRunPoll === 'function') stopTaskRunPoll();
+  // AI-GEN-END
   if (state.view === 'home') {
     // AI-GEN-BEGIN
     // 路径链默认全部展开
     state.homeOrgCollapsed = {};
+    const navSys = h.nav_systems || [];
+    const navColors = { oa:'#3B82F6', bip:'#8B5CF6', laiku_erp:'#1FA97A', keji_erp:'#0EA5E9', beisen:'#F59E0B', feishu:'#00B48A' };
+    const navHtml = navSys.length ? `<div class="home-nav-grid">${navSys.map(s => {
+      const color = navColors[s.code] || '#64748B';
+      const ico = s.nav_icon || (s.name||'?').slice(0,1);
+      const isImg = /^https?:\/\//i.test(ico) || /\.(png|jpe?g|gif|svg|webp)(\?|$)/i.test(ico);
+      const icoHtml = isImg
+        ? `<div class="home-nav-ico"><img src="${String(ico).replace(/"/g,'&quot;')}" alt=""></div>`
+        : `<div class="home-nav-ico" style="background:${color}">${String(ico).replace(/</g,'')}</div>`;
+      const codeEsc = String(s.code||'').replace(/'/g, "\\'");
+      return `<button type="button" class="home-nav-item ${s.can_enter?'':'dim'}"
+        onclick="openHomeNavSystem('${codeEsc}')"
+        title="${s.can_enter ? (s.home_url || '经业务系统导航进入') : '未开通，可先申请账号'}">
+        ${icoHtml}
+        <b>${s.name||s.code}</b>
+        <div class="meta">${s.mode_label||''}${s.can_enter?'':' · 未开通'}</div>
+      </button>`;
+    }).join('')}</div>` : '<div class="note">暂无系统，请到「业务系统管理」添加并配置图标/链接</div>';
     el.innerHTML = `
-      <div class="ptitle">个人中心 <span class="pill p-blue">${u.role_label}</span> <span class="pill p-gray">${u.username}</span></div>
+      <div class="ptitle">个人中心 <span class="pill p-blue">${u.role_label}</span> <span class="pill p-gray">ID #${u.id}</span></div>
+      <!-- AI-GEN-BEGIN -->
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+          <h4 style="margin:0">业务系统导航</h4>
+          <a class="btn btn-sm btn-line" href="/demo/home" target="_blank" rel="noopener" style="width:auto;text-decoration:none">打开完整导航</a>
+        </div>
+        <div class="note" style="margin:0 0 8px">图标与首页链接在「业务系统管理」配置；未配链接时经 <code>/demo/home</code> 登录进入。</div>
+        ${navHtml}
+      </div>
+      <!-- AI-GEN-END -->
       <div class="cards g3">
         <div class="card"><h4>我可登录的系统及账号</h4>
           ${h.systems.length? h.systems.map(s=>`
             <div class="sys-block"><div class="hd"><b>${s.name}</b>
               <span>${s.has_sensitive_any?'<span class="pill p-red">含敏感</span> ':''}<span class="pill p-blue">${s.account_count} 账号</span></span></div>
-              ${s.accounts.map(a=>`<div class="acct">· ${a.account_name} · ${a.perm_summary||''}
-                ${a.can_login?'':' · <span class="pill p-gray">不可登录</span>'}
+              ${s.accounts.map(a=>`<div class="acct">· ${(a.account_label?`<span class="note">${a.account_label}</span> · `:'')}<code>${a.account_name||''}</code>${a.perm_summary && a.perm_summary!==a.account_label?` · ${a.perm_summary}`:''}
+                ${a.can_login||a.identity_optional?'':' · <span class="pill p-gray">不可登录</span>'}
                 ${a.has_sensitive?' · <span class="pill p-red">敏感</span>':''}</div>`).join('')}
             </div>`).join('') : '<div class="note">暂无</div>'}
         </div>
@@ -1215,7 +1375,7 @@ async function renderMain() {
           <div class="kv"><span class="lab">所属路径</span>
             <b>${h.dept_path || '<span class="pill p-gray">未分配部门</span>'}</b></div>
           <div class="kv"><span class="lab">本人</span>
-            <b>${u.display_name||'-'}（${u.username||'-'}）</b></div>
+            <b>${u.display_name||'-'}（ID #${u.id||'-'}）</b></div>
           <!-- AI-GEN-BEGIN -->
           <div class="kv"><span class="lab">北森用户ID</span>
             <b>${u.beisen_user_id?`<code title="北森 userID，对应 SSO 唯一标识">${u.beisen_user_id}</code>`:'<span class="pill p-gray">未同步</span>'}</b></div>
@@ -1260,7 +1420,7 @@ async function renderMain() {
         </div>
         <div class="card sec-card">
           <h4>账号有效期</h4>
-          <div class="kv"><span class="lab">当前有效期</span><b>${u.account_expire||'<span class="pill p-blue">永不过期</span>'}</b></div>
+          <div class="kv"><span class="lab">当前有效期至</span><b>${u.account_expire||'<span class="pill p-blue">永不过期</span>'}</b></div>
           <div class="sec-status">不可自行修改；临近到期请走「自助申请 → 账号延期」（默认 +90 天；含敏感走直属→一级→财务）。</div>
           <div class="sec-actions">
             <button class="btn btn-sm btn-pri" style="width:auto" onclick="goApplyAccountExtend()">申请账号延期</button>
@@ -1335,6 +1495,18 @@ async function renderMain() {
       if (!typeFilter) return arr.length;
       return arr.filter(t => (t.todo_type || '') === typeFilter).length;
     };
+    // AI-GEN-BEGIN
+    if (!state.todoSelectedIds) state.todoSelectedIds = new Set();
+    if (cur !== 'pending') state.todoSelectedIds.clear();
+    const batchableIds = new Set(list.filter(canBatchApproveTodo).map(t => Number(t.id)));
+    [...state.todoSelectedIds].forEach(id => {
+      if (!batchableIds.has(Number(id))) state.todoSelectedIds.delete(id);
+    });
+    const selectedN = state.todoSelectedIds.size;
+    const allBatchChecked = batchableIds.size > 0
+      && [...batchableIds].every(id => state.todoSelectedIds.has(id));
+    const colSpan = cur === 'pending' ? 8 : 7;
+    // AI-GEN-END
     el.innerHTML = `<div class="ptitle">我的待办</div>
       <div class="callout">账号延期 / 账号权限关闭 / 账号权限申请均可点<strong>详情</strong>看时间线。含敏感的延期与关闭走直属→一级→财务；账号申请末步由<strong>系统负责人开通</strong>。</div>
       <div class="toolbar" style="margin-bottom:10px">
@@ -1347,10 +1519,19 @@ async function renderMain() {
           ).join('')}
         </select>
         <span class="note">当前 ${list.length} / ${rawList.length} 条${typeFilter?` · ${typeFilter}`:''}</span>
+        ${cur === 'pending' ? `
+        <!-- AI-GEN-BEGIN -->
+        <button class="btn btn-sm btn-pri" style="width:auto;margin-left:auto"
+          ${selectedN ? '' : 'disabled'}
+          onclick="batchApproveTodos()">批量通过${selectedN ? `（${selectedN}）` : ''}</button>
+        <!-- AI-GEN-END -->` : ''}
       </div>
-      <div class="tabs">${['pending','done','initiated'].map(t=>`<div class="${t===cur?'on':''}" onclick="state.todoTab='${t}';renderMain()">${labels[t]} (${tabCount(t)})</div>`).join('')}</div>
+      <div class="tabs">${['pending','done','initiated'].map(t=>`<div class="${t===cur?'on':''}" onclick="state.todoTab='${t}';state.todoSelectedIds&&state.todoSelectedIds.clear();renderMain()">${labels[t]} (${tabCount(t)})</div>`).join('')}</div>
       <div class="card" style="padding:0;overflow:hidden"><table>
-        <thead><tr><th>事项</th><th>类型</th><th>当前审核人</th><th>进度</th><th>状态</th><th>时间</th><th></th></tr></thead>
+        <thead><tr>
+          ${cur === 'pending' ? `<th style="width:36px"><input type="checkbox" title="全选可批量通过项" ${allBatchChecked?'checked':''} onchange="toggleAllBatchTodos(this.checked)"></th>` : ''}
+          <th>事项</th><th>类型</th><th>当前审核人</th><th>进度</th><th>状态</th><th>时间</th><th></th>
+        </tr></thead>
         <tbody>${list.length?list.map(t=>{
           const ids = [
             `todo#${t.id}`,
@@ -1363,19 +1544,31 @@ async function renderMain() {
             ? `${t.progress}${t.progress_label?` · ${t.progress_label}`:''}`
             : '—';
           const actBtns = [];
-          actBtns.push(`<button class="btn btn-sm btn-line" style="width:auto" onclick="openTodoFlow(${t.id})">详情</button>`);
+          // AI-GEN-BEGIN
           if (cur === 'pending') {
-            if (t.need_provision_form) {
-              actBtns.push(`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openProvision(${t.id})">开通</button>`);
-              actBtns.push(`<button class="btn btn-sm btn-line" onclick="decideTodo(${t.id},'rejected')">驳回</button>`);
-            } else {
-              actBtns.push(`<button class="btn btn-sm btn-pri" style="width:auto" onclick="decideTodo(${t.id},'approved')">通过</button>`);
-              actBtns.push(`<button class="btn btn-sm btn-line" onclick="decideTodo(${t.id},'rejected')">驳回</button>`);
-            }
+            actBtns.push(`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openTodoFlow(${t.id})">去处理</button>`);
+          } else {
+            actBtns.push(`<button class="btn btn-sm btn-line" style="width:auto" onclick="openTodoFlow(${t.id})">详情</button>`);
           }
+          if (canCancelTodo(t) && (cur === 'pending' || cur === 'initiated')) {
+            actBtns.push(`<button class="btn btn-sm btn-line" onclick="cancelApplication(${t.application_id},${t.id})">撤销</button>`);
+          }
+          // AI-GEN-END
+          const statusCell = t.is_cc
+            ? `<span class="pill ${t.cc_status==='read'?'p-green':'p-gray'}">${t.status_label||(t.cc_status==='read'?'已阅':'待阅')}</span>`
+            : `${t.status}`;
+          // AI-GEN-BEGIN
+          const batchCb = cur === 'pending'
+            ? (canBatchApproveTodo(t)
+              ? `<td><input type="checkbox" ${state.todoSelectedIds.has(Number(t.id))?'checked':''} onchange="togTodoSel(${t.id},this.checked)"></td>`
+              : `<td title="需开通录入或改单重提，不可批量通过"></td>`)
+            : '';
+          // AI-GEN-END
           return `<tr>
+            ${batchCb}
             <td>
               <div>${t.title}${t.step_order?` <span class="pill p-orange">第${t.step_order}步</span>`:''}
+                ${t.is_cc?' <span class="pill p-blue">知会</span>':''}
                 ${t.need_provision_form?' <span class="pill p-blue">待录入账号</span>':''}
                 ${t.with_sensitive?' <span class="pill p-red">敏感</span>':''}</div>
               <div class="note" style="font-family:ui-monospace,monospace;font-size:11px">${ids}</div>
@@ -1383,22 +1576,29 @@ async function renderMain() {
             <td>${t.todo_type}</td>
             <td>${approverName(t)}</td>
             <td>${prog}</td>
-            <td>${t.status}</td><td class="note" style="white-space:nowrap">${fmtDateTime(t.created_at)}</td>
+            <td>${statusCell}</td><td class="note" style="white-space:nowrap">${fmtDateTime(t.created_at)}</td>
             <td style="white-space:nowrap">${actBtns.join(' ')}</td>
           </tr>`;
-        }).join(''):`<tr><td colspan="7" class="note">${typeFilter?`当前类型「${typeFilter}」下暂无`:'暂无'}</td></tr>`}
+        }).join(''):`<tr><td colspan="${colSpan}" class="note">${typeFilter?`当前类型「${typeFilter}」下暂无`:'暂无'}</td></tr>`}
         </tbody></table></div>`;
     // AI-GEN-END
     return;
   }
   if (state.view === 'apply') {
     // AI-GEN-BEGIN
+    const showProxyApply = canApplyForOthers();
+    // AI-GEN-BEGIN
+    const showOrgAdd = !!(state.user && (state.user.can_add_external || hasBtn('org_add') || hasBtn('manage_all_org')));
+    // AI-GEN-END
     el.innerHTML = `<div class="ptitle">自助申请</div>
       <div class="callout">
-        本入口<strong>仅可申请本人</strong>。<br>
+        <strong>账号延期 / 账号、权限申请 / 账号、权限关闭</strong>：仅本人。<br>
         <strong>账号延期</strong>：同款大面板；无敏感→直属；任一业务账号含敏感→直属→一级→财务。<br>
         <strong>账号、权限申请</strong>：选业务系统与权限；含敏感项须勾选，审批走直属→一级→财务；账号绑定由系统负责人确认。<br>
         <strong>账号、权限关闭</strong>：同款大面板选本人系统账号，关登录或权限；审核详情与申请一致。
+        ${showProxyApply ? '<br><strong>代人申请账号、权限</strong>：为他人申请账号或权限（需按钮权限）。' : ''}
+        ${showProxyApply ? '<br><strong>一键关账 / 恢复</strong>：代关他人；有关闭接口则直关，无接口则管理员待办；可上传凭证附件。' : ''}
+        ${showOrgAdd ? '<br><strong>新建外部人员</strong>：提交后走敏感同款审批链（直属→一级→财务），通过后创建（需按钮权限）。' : ''}
       </div>
       <div class="cards g3">
         <div class="card"><h4>账号延期</h4><p class="note">默认 +90 天 · 含敏感走长链</p>
@@ -1407,7 +1607,19 @@ async function renderMain() {
           <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('apply')">去申请</button></div>
         <div class="card"><h4>账号、权限关闭</h4><p class="note">选系统账号；关登录/权限 · 审批同申请</p>
           <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountPermClose()">去关闭</button></div>
-      </div>`;
+        ${showProxyApply ? `<div class="card"><h4>代人申请账号、权限</h4><p class="note">为他人选系统与权限 · 需权限</p>
+          <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('apply_for')">去代申请</button></div>` : ''}
+        ${showProxyApply ? `<div class="card"><h4>一键关账 / 恢复</h4><p class="note">代关他人 · 凭证附件 · 接口/待办</p>
+          <button class="btn btn-sm btn-pri" style="width:auto" onclick="openBulkClose()">去关账</button></div>` : ''}
+        ${showOrgAdd ? `<div class="card"><h4>新建外部人员</h4><p class="note">敏感同款审批链 · 通过后落库</p>
+          <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAdd()">去新建</button></div>` : ''}
+      </div>
+      <!-- AI-GEN-BEGIN -->
+      <div class="mask" id="m-bulk-close"><div class="modal modal-md">
+        <div class="hd"><b>一键关账 / 恢复</b><button class="x" onclick="closeModal('m-bulk-close')">×</button></div>
+        <div class="bd" id="bulk-close-body"></div>
+      </div></div>
+      <!-- AI-GEN-END -->`;
     // AI-GEN-END
     return;
   }
@@ -1431,6 +1643,15 @@ async function renderMain() {
     await renderAdminAudit(el); return;
   }
   // AI-GEN-BEGIN
+  if (state.view === 'admin_alerts') {
+    await renderAdminAlerts(el); return;
+  }
+  // AI-GEN-BEGIN
+  if (state.view === 'admin_settings') {
+    await renderAdminSettings(el); return;
+  }
+  // AI-GEN-END
+  // AI-GEN-BEGIN
   if (state.view === 'admin_leave_close') {
     await renderAdminLeaveClose(el); return;
   }
@@ -1443,14 +1664,32 @@ async function renderMain() {
 
 
 // AI-GEN-BEGIN
-async function renderAdminTasks(el){
-  el.innerHTML = `<div class="ptitle">任务管理</div><div class="note">加载中…</div>`;
-  const { data } = await api('/api/admin/tasks');
-  if (!data.ok) { el.innerHTML = `<div class="ptitle">任务管理</div><div class="warn">${data.error||'无权'}</div>`; return; }
-  const code = (data.tasks||[])[0]?.code || 'leorg_sync';
-  const { data: runData } = await api('/api/admin/tasks/'+encodeURIComponent(code)+'/runs?limit=30');
-  const runs = (runData && runData.ok ? runData.runs : []) || [];
-  const rows = (data.tasks||[]).map(t => `
+const TASK_STATUS_LABEL = {
+  running: '执行中',
+  ok: '成功',
+  error: '失败',
+  skipped: '跳过',
+};
+let _taskRunPollTimer = null;
+let _taskRunPollCode = null;
+
+function stopTaskRunPoll(){
+  if (_taskRunPollTimer) {
+    clearTimeout(_taskRunPollTimer);
+    _taskRunPollTimer = null;
+  }
+  _taskRunPollCode = null;
+}
+
+function taskStatusPill(st){
+  const s = st || '';
+  const pill = s==='ok'?'p-green':(s==='error'?'p-red':(s==='running'?'p-orange':(s==='skipped'?'p-gray':'p-blue')));
+  const label = TASK_STATUS_LABEL[s] || s || '—';
+  return `<span class="pill ${pill}">${label}</span>`;
+}
+
+function buildAdminTaskRows(tasks, busy){
+  return (tasks||[]).map(t => `
     <tr>
       <td><b>${t.name}</b><div class="note">${t.code}</div></td>
       <td>${t.enabled? '<span class="pill p-green">启用</span>':'<span class="pill p-gray">停用</span>'}</td>
@@ -1458,58 +1697,157 @@ async function renderAdminTasks(el){
         <input id="task-iv-${t.code}" type="number" min="0.25" step="0.25" value="${t.interval_hours}"
           style="width:88px;padding:6px 8px;border:1px solid var(--line);border-radius:8px"> 小时
       </td>
-      <td class="note">${t.last_run_at||'—'}<br>${t.last_status||''} ${t.last_message?('· '+t.last_message):''}</td>
+      <td class="note">${t.last_run_at||'—'}<br>${taskStatusPill(t.last_status)} ${t.last_message?('· '+t.last_message):''}</td>
       <td class="note">${t.next_run_at||'—'}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm btn-line" onclick="saveTask('${t.code}')">保存</button>
         <button class="btn btn-sm btn-line" onclick="toggleTask('${t.code}', ${t.enabled?0:1})">${t.enabled?'停用':'启用'}</button>
-        <button class="btn btn-sm btn-pri" style="width:auto" onclick="runTask('${t.code}')">立即执行</button>
+        <button class="btn btn-sm btn-pri" style="width:auto" ${busy?'disabled':''}
+          onclick="runTask('${t.code}')">${busy?'执行中…':'立即执行'}</button>
       </td>
     </tr>`).join('');
-  const runRows = runs.map(r => {
+}
+
+function buildAdminRunRows(runs){
+  return (runs||[]).map(r => {
     const st = r.status || '';
-    const pill = st==='ok'?'p-green':(st==='error'?'p-red':(st==='skipped'?'p-gray':'p-blue'));
     const trig = r.trigger_type==='manual'?'手动':(r.trigger_type==='schedule'?'定时':r.trigger_type);
     const sum = r.summary || {};
     const cc = (sum.change_count!=null? sum.change_count : '—');
+    const detailBtn = st==='running'
+      ? '<span class="note">—</span>'
+      : `<button class="btn btn-sm btn-line" onclick="viewTaskRunChanges(${r.id})">变化明细</button>`;
     return `<tr>
       <td>#${r.id}</td>
       <td>${r.started_at||'—'}</td>
       <td>${r.finished_at||'—'}</td>
       <td>${trig}</td>
-      <td><span class="pill ${pill}">${st}</span></td>
+      <td>${taskStatusPill(st)}</td>
       <td class="note" style="max-width:280px">${(r.message||'').slice(0,120)}</td>
       <td>${cc}</td>
-      <td><button class="btn btn-sm btn-line" onclick="viewTaskRunChanges(${r.id})">变化明细</button></td>
+      <td>${detailBtn}</td>
     </tr>`;
   }).join('');
+}
+
+function adminTasksBusy(tasks, runs){
+  return (runs||[]).some(r => r.status==='running')
+    || (tasks||[]).some(t => t.last_status==='running');
+}
+
+function paintAdminTasks(el, tasks, runs){
+  const busy = adminTasksBusy(tasks, runs);
+  const rows = buildAdminTaskRows(tasks, busy);
+  const runRows = buildAdminRunRows(runs);
+  const code = (tasks||[])[0]?.code || 'leorg_sync';
   el.innerHTML = `
     <div class="ptitle">任务管理</div>
-    <div class="callout">统一管理后台定时任务。当前支持「同步部门和人员」：默认 6 小时自动拉取；点击「立即执行」会写入执行记录与人员/部门变化明细。</div>
-    <table class="tbl"><thead><tr>
-      <th>任务</th><th>状态</th><th>频次</th><th>上次执行</th><th>下次执行</th><th>操作</th>
-    </tr></thead><tbody>${rows||'<tr><td colspan="6">暂无任务</td></tr>'}</tbody></table>
-    <div class="ptitle" style="margin-top:22px">执行记录</div>
-    <table class="tbl"><thead><tr>
-      <th>ID</th><th>开始</th><th>结束</th><th>触发</th><th>状态</th><th>摘要</th><th>变化数</th><th>明细</th>
-    </tr></thead><tbody>${runRows||'<tr><td colspan="8">暂无执行记录</td></tr>'}</tbody></table>`;
+    <div class="callout">统一管理后台定时任务。当前支持「同步部门和人员」：默认 6 小时自动拉取；点击「立即执行」会写入执行记录与人员/部门变化明细。执行中状态会自动刷新至终态。</div>
+    <div id="admin-tasks-tables">
+      <table class="tbl" id="admin-tasks-tbl"><thead><tr>
+        <th>任务</th><th>状态</th><th>频次</th><th>上次执行</th><th>下次执行</th><th>操作</th>
+      </tr></thead><tbody>${rows||'<tr><td colspan="6">暂无任务</td></tr>'}</tbody></table>
+      <div class="ptitle" style="margin-top:22px">执行记录 ${busy?'<span class="pill p-orange">执行中</span>':''}</div>
+      <table class="tbl" id="admin-task-runs-tbl"><thead><tr>
+        <th>ID</th><th>开始</th><th>结束</th><th>触发</th><th>状态</th><th>摘要</th><th>变化数</th><th>明细</th>
+      </tr></thead><tbody>${runRows||'<tr><td colspan="8">暂无执行记录</td></tr>'}</tbody></table>
+    </div>`;
+  return { code, busy };
 }
+
+async function fetchAdminTasksBundle(preferredCode){
+  const { data } = await api('/api/admin/tasks');
+  if (!data.ok) return { ok: false, error: data.error||'无权' };
+  const tasks = data.tasks || [];
+  const code = preferredCode || tasks[0]?.code || 'leorg_sync';
+  const { data: runData } = await api('/api/admin/tasks/'+encodeURIComponent(code)+'/runs?limit=30');
+  const runs = (runData && runData.ok ? runData.runs : []) || [];
+  return { ok: true, tasks, runs, code };
+}
+
+function scheduleTaskRunPoll(code){
+  stopTaskRunPoll();
+  _taskRunPollCode = code;
+  const tick = async () => {
+    if (state.view !== 'admin_tasks' || _taskRunPollCode !== code) {
+      stopTaskRunPoll();
+      return;
+    }
+    const el = document.getElementById('main-views');
+    if (!el) { stopTaskRunPoll(); return; }
+    try {
+      const bundle = await fetchAdminTasksBundle(code);
+      if (!bundle.ok) {
+        _taskRunPollTimer = setTimeout(tick, 2000);
+        return;
+      }
+      const { busy } = paintAdminTasks(el, bundle.tasks, bundle.runs);
+      if (busy) {
+        _taskRunPollTimer = setTimeout(tick, 1500);
+      } else {
+        stopTaskRunPoll();
+        toast('任务已结束');
+      }
+    } catch (e) {
+      _taskRunPollTimer = setTimeout(tick, 2000);
+    }
+  };
+  _taskRunPollTimer = setTimeout(tick, 1200);
+}
+
+async function renderAdminTasks(el){
+  el.innerHTML = `<div class="ptitle">任务管理</div><div class="note">加载中…</div>`;
+  const bundle = await fetchAdminTasksBundle();
+  if (!bundle.ok) {
+    el.innerHTML = `<div class="ptitle">任务管理</div><div class="warn">${bundle.error||'无权'}</div>`;
+    return;
+  }
+  const { busy, code } = paintAdminTasks(el, bundle.tasks, bundle.runs);
+  if (busy) scheduleTaskRunPoll(code);
+}
+
+async function refreshAdminTasksPartial(code){
+  if (state.view !== 'admin_tasks') return;
+  const el = document.getElementById('main-views');
+  if (!el) return;
+  const bundle = await fetchAdminTasksBundle(code);
+  if (!bundle.ok) return;
+  const painted = paintAdminTasks(el, bundle.tasks, bundle.runs);
+  if (painted.busy) scheduleTaskRunPoll(painted.code);
+  else stopTaskRunPoll();
+}
+
 async function saveTask(code){
   const iv = Number(document.getElementById('task-iv-'+code)?.value || 6);
   const { data } = await api('/api/admin/tasks/'+code, { method:'PATCH', body: JSON.stringify({ interval_hours: iv }) });
   if (!data.ok) return toast(data.error);
-  toast('已保存频次'); renderMain();
+  toast('已保存频次');
+  await refreshAdminTasksPartial(code);
 }
 async function toggleTask(code, enabled){
   const { data } = await api('/api/admin/tasks/'+code, { method:'PATCH', body: JSON.stringify({ enabled: !!enabled }) });
   if (!data.ok) return toast(data.error);
-  toast(enabled?'已启用':'已停用'); renderMain();
+  toast(enabled?'已启用':'已停用');
+  await refreshAdminTasksPartial(code);
 }
 async function runTask(code){
-  toast('执行中…');
-  const { data } = await api('/api/admin/tasks/'+code+'/run', { method:'POST', body: '{}' });
-  const extra = data.change_count!=null ? `（变化 ${data.change_count}）` : '';
-  toast((data.message || (data.ok?'完成':'失败')) + extra); renderMain();
+  // AI-GEN-BEGIN
+  toast('已提交执行…');
+  const { data, res } = await api('/api/admin/tasks/'+code+'/run', { method:'POST', body: '{}' });
+  if (res && res.status === 409) {
+    toast(data.error || '任务正在执行中');
+    await refreshAdminTasksPartial(code);
+    scheduleTaskRunPoll(code);
+    return;
+  }
+  if (!data.ok) {
+    toast(data.error || data.message || '启动失败');
+    return;
+  }
+  toast(data.message || '执行中');
+  await refreshAdminTasksPartial(code);
+  scheduleTaskRunPoll(code);
+  // AI-GEN-END
 }
 async function viewTaskRunChanges(runId){
   const box = document.getElementById('task-run-changes-body');
@@ -1547,6 +1885,7 @@ async function viewTaskRunChanges(runId){
       <th>对象</th><th>类型</th><th>名称</th><th>变化详情</th>
     </tr></thead><tbody>${rows||'<tr><td colspan="4">本次无明细变化</td></tr>'}</tbody></table>`;
 }
+// AI-GEN-END
 async function renderAdminNotify(el){
   el.innerHTML = `<div class="ptitle">发信记录</div><div class="note">加载中…</div>`;
   const { data } = await api('/api/admin/notify-records');
@@ -1594,6 +1933,77 @@ async function renderAdminAudit(el){
       <th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>详情</th><th>IP</th>
     </tr></thead><tbody>${rows||'<tr><td colspan="6">暂无日志</td></tr>'}</tbody></table>`;
 }
+// AI-GEN-BEGIN
+async function renderAdminAlerts(el){
+  el.innerHTML = `<div class="ptitle">系统报警</div><div class="note">加载中…</div>`;
+  const { data } = await api('/api/admin/alerts?limit=150');
+  if (!data.ok) { el.innerHTML = `<div class="ptitle">系统报警</div><div class="warn">${data.error||'无权'}</div>`; return; }
+  const rows = (data.alerts||[]).map(r => {
+    let detail = '';
+    try {
+      detail = typeof r.detail === 'string' ? r.detail : JSON.stringify(r.detail||{}, null, 0);
+    } catch(e) { detail = r.detail_json||''; }
+    return `<tr>
+      <td class="note" style="white-space:nowrap">${fmtDateTime(r.created_at)}</td>
+      <td><span class="pill ${r.level==='error'?'p-red':'p-orange'}">${r.level||''}</span></td>
+      <td><code>${r.code||''}</code></td>
+      <td>${r.title||''}</td>
+      <td class="note">${r.target_type||''} ${r.target_id||''}</td>
+      <td class="note" style="max-width:420px;white-space:pre-wrap;word-break:break-all">${detail}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="ptitle">系统报警</div>
+    <div class="callout">通讯录建用户时手机号缺失/重复等会写入此列表，并通知超管/人事站内信；同时写入审计日志与服务端控制台。</div>
+    <table class="tbl"><thead><tr>
+      <th>时间</th><th>级别</th><th>代码</th><th>标题</th><th>对象</th><th>详情</th>
+    </tr></thead><tbody>${rows||'<tr><td colspan="6">暂无报警</td></tr>'}</tbody></table>`;
+}
+// AI-GEN-BEGIN
+async function renderAdminSettings(el){
+  el.innerHTML = `<div class="ptitle">系统配置</div><div class="note">加载中…</div>`;
+  const { data } = await api('/api/admin/settings');
+  if (!data.ok) {
+    el.innerHTML = `<div class="ptitle">系统配置</div><div class="warn">${data.error||'无权'}</div>`;
+    return;
+  }
+  state.adminSettings = data.settings || [];
+  const rows = state.adminSettings.map(s => `
+    <tr>
+      <td><b>${s.label||s.key}</b><div class="note"><code>${s.key}</code></div></td>
+      <td>
+        <input id="cfg-${s.key}" value="${(s.value||'').replace(/"/g,'&quot;')}"
+          style="width:100%;min-width:240px;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+        <div class="note" style="margin-top:6px">${s.hint||''}</div>
+      </td>
+      <td class="note">${s.updated_at?fmtDateTime(s.updated_at):'—'}</td>
+    </tr>`).join('');
+  el.innerHTML = `
+    <div class="ptitle">系统配置</div>
+    <div class="callout">配置直接保存在数据库 <code>system_settings</code>。邮箱后缀用于个人中心改绑、新建外部人员等；通讯录同步遇到不合规邮箱会忽略并报警。</div>
+    <table class="tbl"><thead><tr>
+      <th style="width:220px">项</th><th>值</th><th style="width:140px">更新时间</th>
+    </tr></thead><tbody>${rows||'<tr><td colspan="3">暂无配置</td></tr>'}</tbody></table>
+    <div style="margin-top:14px">
+      <button class="btn btn-pri" style="width:auto" onclick="saveAdminSettings()">保存配置</button>
+    </div>`;
+}
+async function saveAdminSettings(){
+  const settings = {};
+  (state.adminSettings||[]).forEach(s => {
+    const el = document.getElementById('cfg-' + s.key);
+    if (el) settings[s.key] = el.value;
+  });
+  const { data } = await api('/api/admin/settings', {
+    method: 'PUT',
+    body: JSON.stringify({ settings }),
+  });
+  if (!data.ok) return toast(data.error || '保存失败');
+  toast(data.message || '已保存');
+  renderAdminSettings(document.getElementById('main'));
+}
+// AI-GEN-END
+// AI-GEN-END
 
 async function renderAdminLeaveClose(el){
   // AI-GEN-BEGIN
@@ -1658,14 +2068,190 @@ async function openLeaveCloseDetail(id){
     </tr></thead><tbody>${items||'<tr><td colspan="5">无明细</td></tr>'}</tbody></table>`;
   // AI-GEN-END
 }
+// AI-GEN-BEGIN
+const BULK_EXEC_LABEL = {
+  local_ok: '本系统已关',
+  api_ok: '接口直关成功',
+  api_fail: '接口直关失败',
+  todo_pending: '管理员待办中',
+  todo_done: '管理员已确认',
+  todo_rejected: '管理员已驳回',
+};
+function bulkExecPill(st){
+  const s = st || '';
+  const pill = (s==='api_ok'||s==='local_ok'||s==='todo_done') ? 'p-green'
+    : (s==='todo_pending' ? 'p-orange' : (s==='api_fail'||s==='todo_rejected' ? 'p-red' : 'p-gray'));
+  return `<span class="pill ${pill}">${BULK_EXEC_LABEL[s]||s||'—'}</span>`;
+}
+async function openBulkClose(){
+  if (!canApplyForOthers()) return toast('当前账号未开通代关权限');
+  state.bulkClose = state.bulkClose || { target: null, lastResult: null };
+  paintBulkCloseForm();
+  openModal('m-bulk-close');
+  await loadBulkCloseRecords();
+}
+function paintBulkCloseForm(){
+  const box = document.getElementById('bulk-close-body');
+  if (!box) return;
+  const t = state.bulkClose?.target;
+  const tLab = t
+    ? `<b>${t.display_name}</b> <span class="note">${t.username||''}</span>`
+    : '<span class="note">尚未选择（不可选本人）</span>';
+  const result = state.bulkClose?.lastResult;
+  let resultHtml = '';
+  if (result) {
+    const items = (result.detail?.items || []).map((it,i) => `<tr>
+      <td>${i+1}</td>
+      <td><b>${it.system_name||'—'}</b><div class="note">${it.exec_mode||''}</div></td>
+      <td><code>${it.account_name||'—'}</code></td>
+      <td>${bulkExecPill(it.exec_status)}</td>
+      <td class="note">${it.remote_message||''}${it.todo_id?(' · 待办#'+it.todo_id):''}</td>
+    </tr>`).join('');
+    resultHtml = `<div class="callout" style="margin-top:12px">
+      <b>执行结果</b> · 批次 #${result.record_id||'—'} · ${result.summary||result.message||''}
+      <table class="tbl" style="margin-top:8px"><thead><tr>
+        <th>#</th><th>系统</th><th>账号</th><th>执行标识</th><th>说明</th>
+      </tr></thead><tbody>${items||'<tr><td colspan="5">无明细</td></tr>'}</tbody></table>
+    </div>`;
+  }
+  const recRows = (state.bulkClose?.records || []).map(r => `<tr>
+    <td>#${r.id}</td>
+    <td>${r.target_name||r.target_user_id}<div class="note">${r.target_username||''}</div></td>
+    <td><span class="pill ${r.status==='done'?'p-green':(r.status==='partial'||r.status==='scheduled'?'p-orange':'p-gray')}">${r.status||''}</span></td>
+    <td class="note">${r.summary||r.effective_at||''}</td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-sm btn-line" onclick="showBulkCloseDetail(${r.id})">详情</button>
+      ${r.status==='scheduled'?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="runBulkClose(${r.id})">执行到期</button>`:''}
+    </td>
+  </tr>`).join('');
+  box.innerHTML = `
+    <div class="callout">代关他人：有 <code>close_api_url</code> 的系统接口直关；未配置则生成系统管理员待办。全程留审批与执行记录。</div>
+    <div class="field"><label>代关对象</label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span id="bulk-close-target">${tLab}</span>
+        <button class="btn btn-sm btn-line" style="width:auto" onclick="openPickBulkCloseTarget()">选择人员</button>
+      </div>
+    </div>
+    <div class="field"><label>关闭生效时间</label>
+      <input id="bulk-effective-at" type="datetime-local" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+      <div class="note">留空=立即执行；未来时间则登记为 scheduled</div>
+    </div>
+    <div class="field"><label>凭证说明</label>
+      <textarea id="bulk-credential" rows="2" placeholder="关账依据/审批单号等" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px"></textarea>
+    </div>
+    <div class="field"><label>原因（可选）</label>
+      <input id="bulk-reason" placeholder="默认：一键关账">
+    </div>
+    <div class="field"><label>凭证 / 附件</label>
+      <input id="bulk-files" type="file" multiple>
+    </div>
+    <div class="foot" style="justify-content:flex-start;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-pri" style="width:auto" onclick="submitBulkClose()">提交关账</button>
+      <button class="btn btn-line" style="width:auto" onclick="submitBulkRestore('last')">恢复上次关闭</button>
+      <button class="btn btn-line" style="width:auto" onclick="submitBulkRestore('all')">恢复全部关联</button>
+    </div>
+    ${resultHtml}
+    <div style="margin-top:16px"><b>近期关账批次</b></div>
+    <table class="tbl" style="margin-top:8px"><thead><tr>
+      <th>批次</th><th>对象</th><th>状态</th><th>摘要</th><th></th>
+    </tr></thead><tbody>${recRows||'<tr><td colspan="5">暂无记录</td></tr>'}</tbody></table>`;
+}
+async function openPickBulkCloseTarget(){
+  state.pickMode = 'bulk_close';
+  state.pickSensStep = null;
+  state.pickForLineKey = null;
+  state.pickDept = state.pickDept || '';
+  state.pickQ = state.pickQ || '';
+  document.getElementById('pick-people-title').textContent = '一键关账 · 选择代关对象';
+  document.getElementById('pick-people-hint').textContent = '仅可代关他人；左侧部门筛选，右侧点选一人。';
+  document.getElementById('pick-q').value = state.pickQ;
+  await loadPickPeople();
+  openModal('m-pick-people');
+}
+function _bulkEffectiveAtValue(){
+  const raw = (document.getElementById('bulk-effective-at')?.value || '').trim();
+  if (!raw) return '';
+  // datetime-local → "YYYY-MM-DD HH:MM:SS"
+  return raw.replace('T', ' ') + (raw.length === 16 ? ':00' : '');
+}
+async function submitBulkClose(){
+  const t = state.bulkClose?.target;
+  if (!t?.id) return toast('请先选择代关对象');
+  if (t.id === state.user?.id) return toast('不可代关本人');
+  const fd = new FormData();
+  fd.append('target_user_id', String(t.id));
+  fd.append('credential_note', document.getElementById('bulk-credential')?.value || '');
+  fd.append('reason', document.getElementById('bulk-reason')?.value || '');
+  const eff = _bulkEffectiveAtValue();
+  if (eff) fd.append('effective_at', eff);
+  const files = document.getElementById('bulk-files')?.files || [];
+  for (const f of files) fd.append('files', f);
+  const res = await fetch('/api/apply/bulk-close', { method: 'POST', credentials: 'same-origin', body: fd });
+  const data = await res.json().catch(() => ({}));
+  if (!data.ok) return toast(data.error || '关账失败');
+  toast(data.message || '已提交');
+  state.bulkClose.lastResult = data;
+  await loadBulkCloseRecords();
+  paintBulkCloseForm();
+}
+async function submitBulkRestore(mode){
+  const t = state.bulkClose?.target;
+  if (!t?.id) return toast('请先选择人员');
+  if (!confirm(mode === 'all' ? '确认恢复该人员全部关联系统？' : '确认按上次关账批次恢复？')) return;
+  const { data } = await api('/api/apply/bulk-restore', {
+    method: 'POST',
+    body: JSON.stringify({ target_user_id: t.id, mode }),
+  });
+  if (!data.ok) return toast(data.error || '恢复失败');
+  toast(data.message || '已恢复');
+}
+async function loadBulkCloseRecords(){
+  const { data } = await api('/api/apply/bulk-close/records?limit=20');
+  if (!data.ok) return;
+  state.bulkClose = state.bulkClose || {};
+  state.bulkClose.records = data.records || [];
+}
+async function showBulkCloseDetail(id){
+  const { data } = await api('/api/apply/bulk-close/' + id);
+  if (!data.ok) return toast(data.error || '加载失败');
+  state.bulkClose = state.bulkClose || {};
+  state.bulkClose.lastResult = {
+    record_id: id,
+    summary: data.record?.summary,
+    message: data.record?.summary,
+    detail: data,
+  };
+  paintBulkCloseForm();
+}
+async function runBulkClose(id){
+  const { data } = await api('/api/apply/bulk-close/' + id + '/run', {
+    method: 'POST', body: '{}',
+  });
+  if (!data.ok) return toast(data.error || '执行失败');
+  toast(data.message || '已执行');
+  state.bulkClose.lastResult = data;
+  await loadBulkCloseRecords();
+  paintBulkCloseForm();
+}
+// AI-GEN-END
 // AI-GEN-END
 
 // AI-GEN-BEGIN
 function hasBtn(id){
   const u = state.user || {};
-  const btns = u.buttons || u.caps || [];
+  // 注意：[] 在 JS 中为 truthy，不能直接用 buttons || caps
+  const btns = (Array.isArray(u.buttons) && u.buttons.length)
+    ? u.buttons
+    : (Array.isArray(u.caps) ? u.caps : []);
   return btns.includes(id);
 }
+
+function canAddExternal(){
+  const u = state.user || {};
+  if (u.can_add_external) return true;
+  return hasBtn('org_add') || hasBtn('manage_all_org');
+}
+// AI-GEN-END
 
 async function renderAdminRoles(el){
   // AI-GEN-BEGIN
@@ -2056,9 +2642,11 @@ async function saveRoleConfig(role){
   if (!hasBtn('config_roles') && state.user?.role !== 'super_admin') return toast('无权配置');
   const menus = [...document.querySelectorAll('.role-menu:checked')].map(el => el.value);
   const caps = [...document.querySelectorAll('.role-btn:checked')].map(el => el.value);
-  const { data } = await api('/api/admin/roles/'+role+'/config', {
+  // AI-GEN-BEGIN
+  const { data } = await api('/api/admin/roles/'+encodeURIComponent(role)+'/config', {
     method:'POST', body: JSON.stringify({ menus, caps })
   });
+  // AI-GEN-END
   if (!data.ok) return toast(data.error);
   toast(data.message);
   const me = await api('/api/me');
@@ -2177,10 +2765,11 @@ function highlightOrgTreeSelection(){
 function orgMembersTableHtml(data){
   // AI-GEN-BEGIN
   const canExpire = canSetAccountExpire();
+  const canResetPwd = canResetOrgPassword();
   return `<table class="org-members-table">
     <thead><tr>
       ${data.can_manage?'<th><input type="checkbox" onchange="toggleAll(this.checked)"></th>':''}
-      <th>姓名</th><th>详情</th><th>账号</th><th>状态</th><th>部门</th><th>北森用户ID</th>
+      <th>姓名</th><th>详情</th><th>用户ID</th><th>手机</th><th>状态</th><th>部门</th><th>北森用户ID</th>
       <th style="min-width:220px">关联系统账号</th><th>敏感</th>
       ${canExpire?'<th class="col-expire">有效期</th>':''}
       <th class="col-actions">操作</th>
@@ -2205,7 +2794,7 @@ function orgMembersTableHtml(data){
         : '<span class="pill p-blue">永不过期</span>';
       const manageable = (data.manage_dept_ids||[]).includes(m.dept_id);
       const beisenCell = m.beisen_user_id
-        ? `<code title="通讯录/LeOrg 同步字段，仅展示；SSO 须用「系统账号管理」已绑定的北森账号唯一标识">${m.beisen_user_id}</code>`
+        ? `<code title="通讯录/LeOrg 同步的北森用户ID；非空即可自动绑定并 SSO">${m.beisen_user_id}</code>`
         : '<span class="note">—</span>';
       const st = m.status === 'closed'
         ? '<span class="pill p-orange">已关闭</span>'
@@ -2214,7 +2803,8 @@ function orgMembersTableHtml(data){
         ${data.can_manage?`<td>${manageable?`<input type="checkbox" ${state.selectedIds.has(m.id)?'checked':''} onchange="togSel(${m.id},this.checked)">`:''}</td>`:''}
         <td style="white-space:nowrap">${m.display_name}${m.person_type==='external'?' <span class="pill p-orange">外部</span>':''}</td>
         <td><button class="btn btn-sm btn-line" onclick="showPerm(${m.id})">详情</button></td>
-        <td style="white-space:nowrap"><code>${m.username}</code></td>
+        <td style="white-space:nowrap"><code title="系统唯一ID，不可变">#${m.id}</code></td>
+        <td style="white-space:nowrap">${m.phone||'<span class="note">—</span>'}</td>
         <td>${st}</td>
         <td>${dname}</td>
         <td style="white-space:nowrap">${beisenCell}</td>
@@ -2225,11 +2815,12 @@ function orgMembersTableHtml(data){
           ${manageable?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openEditMember(${m.id})">编辑</button>`:''}
           ${data.can_manage||m.id===state.user.id?`<button class="btn btn-sm btn-line" onclick="showPerm(${m.id})">权限</button>`:''}
           ${canExpire&&manageable?`<button class="btn btn-sm btn-line" onclick="openSetExpire([${m.id}])">设有效期</button>`:''}
+          ${canResetPwd&&manageable?`<button class="btn btn-sm btn-line" onclick="openOrgResetPassword(${m.id},'${(m.display_name||'').replace(/'/g,"\\'")}')">改密码</button>`:''}
           ${m.id!==state.user.id?`<button class="btn btn-sm btn-line" onclick="openMsg(${m.id},'${(m.display_name||'').replace(/'/g,"\\'")}')">消息</button>`:''}
         </div></td>
       </tr>`;
     }).join('') || (() => {
-      const colSpan = (data.can_manage?9:8) + (canExpire?1:0) + 1;
+      const colSpan = (data.can_manage?10:9) + (canExpire?1:0) + 1;
       return `<tr><td colspan="${colSpan}" class="note">无人员</td></tr>`;
     })()}
     </tbody>
@@ -2464,9 +3055,7 @@ async function renderOrg(el) {
   el.innerHTML = `<div class="ptitle">部门和人员</div><div class="note">加载中…</div>`;
   const canAllOrg = hasBtn('manage_all_org') || ['hr_specialist','super_admin'].includes(state.user.role);
   const showSync = hasBtn('org_sync') || canAllOrg;
-  const showAdd = hasBtn('org_add');
   const showImport = hasBtn('org_import');
-  const showDirect = hasBtn('direct_bind');
   const showDeptAdd = hasBtn('org_dept_add');
   const showDeptDelete = hasBtn('org_dept_delete');
 
@@ -2487,6 +3076,9 @@ async function renderOrg(el) {
   const syncData = showSync ? results[1].data : null;
   if (showSync && results[2] && results[2].data) {
     state.leorgSync = results[2].data.sync_state || null;
+    // AI-GEN-BEGIN
+    state.leorgStatus = results[2].data;
+    // AI-GEN-END
   }
   if (!data.ok) {
     el.innerHTML = `<div class="ptitle">部门和人员</div><div class="warn">${data.error||'加载失败'}</div>`;
@@ -2515,19 +3107,15 @@ async function renderOrg(el) {
       ${data.unread_messages?`<span class="pill p-red">未读 ${data.unread_messages}</span>`:''}</div>
     <div class="callout">${canManage
       ? (canAllOrg
-        ? '<strong>可管全部部门</strong>：按角色按钮权限显示添加/导入/同步/直接绑定/代人申请/有效期。全员均可查询通讯录。'
-        : '<strong>可管本级及下级</strong>：按角色按钮权限显示操作。全员均可查询通讯录。' +
+        ? '<strong>可管全部部门</strong>：按角色按钮权限显示导入/同步/有效期等。代人申请与新建外部人员在「自助申请」。全员均可查询通讯录。'
+        : '<strong>可管本级及下级</strong>：按角色按钮权限显示操作；代人申请与新建外部人员在「自助申请」。全员均可查询通讯录。' +
           (canSetAccountExpire() ? ' 已开通<strong>设置账号有效期</strong>。' : ''))
       : '<strong>全员可查询</strong>：可浏览全部部门与人员、即时消息；管理操作需相应权限。'}</div>
     <div class="org-actions">
       <button class="btn btn-sm btn-line" onclick="openInbox()">即时消息</button>
-      <button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('apply')">账号、权限申请</button>
-      ${canApplyForOthers()?`<button class="btn btn-sm btn-line" onclick="openAccountBind('apply_for')">代人申请账号/权限</button>`:''}
-      ${canManage && showAdd?`<button class="btn btn-sm btn-line" onclick="openAdd()">新建外部人员</button>`:''}
       ${canManage && showDeptAdd?`<button class="btn btn-sm btn-line" onclick="openAddDept()">添加部门</button>`:''}
       ${canManage && showImport?`<button class="btn btn-sm btn-line" onclick="openImport()">导入</button>`:''}
       ${canManage && canSetAccountExpire()?`<button class="btn btn-sm btn-line" onclick="openSetExpire()">设置有效期</button>`:''}
-      ${canManage && showDirect?`<button class="btn btn-sm btn-pri" style="width:auto" onclick="openAccountBind('direct')">直接绑定</button>`:''}
     </div>
     ${canManage && showSync?`
     <div class="card" style="margin-bottom:14px">
@@ -2538,6 +3126,11 @@ async function renderOrg(el) {
         <strong>增量/全量</strong>会先对比 LeOrg 与本地差异，确认后再写入。
         待初始化人员仍需「确认创建」。首次/清空后点增量也会自动先走全量拉取。
       </div>
+      ${state.leorgStatus && state.leorgStatus.phone_warning ? `
+      <div class="warn" style="margin-bottom:10px">
+        <b>手机号未同步</b>：${state.leorgStatus.phone_warning}
+        ${state.leorgStatus.token_scope ? `<div class="note" style="margin-top:4px">当前 token scope：<code>${state.leorgStatus.token_scope}</code></div>` : ''}
+      </div>` : ''}
       <div class="toolbar">
         <button class="btn btn-sm btn-pri" style="width:auto" onclick="hrPull()">增量同步</button>
         <button class="btn btn-sm btn-line" onclick="hrPullFull()">全量同步</button>
@@ -2723,15 +3316,24 @@ function openSecPwd(){
   openModal('m-sec');
 }
 
-function openSecContact(channel){
+async function openSecContact(channel){
+  // AI-GEN-BEGIN
   secModalMode = 'contact';
   secModalChannel = channel;
   const label = channel === 'phone' ? '手机' : '邮箱';
   const cur = channel === 'phone' ? (state.user.phone||'') : (state.user.email||'');
+  let suffixHint = '';
+  if (channel === 'email') {
+    const pub = await api('/api/settings/public');
+    const suf = (pub.data && pub.data.email_allowed_suffixes) || [];
+    state.emailAllowedSuffixes = suf;
+    if (suf.length) suffixHint = `须为指定后缀：${suf.join('、')}（可在系统配置修改）。`;
+  }
   document.getElementById('sec-modal-title').textContent = cur ? `改绑${label}` : `添加${label}`;
-  document.getElementById('sec-modal-hint').textContent = `向新${label}发送验证码，演示码 888888。当前：${cur||'未绑定'}`;
+  document.getElementById('sec-modal-hint').textContent =
+    `向新${label}发送验证码，演示码 888888。当前：${cur||'未绑定'}。${suffixHint}`;
   document.getElementById('sec-modal-body').innerHTML = `
-    <div class="field"><label>新${label}</label><input id="sec-contact-val" placeholder="${channel==='phone'?'13800000099':'new@lecoo.com'}" value=""></div>
+    <div class="field"><label>新${label}</label><input id="sec-contact-val" placeholder="${channel==='phone'?'13800000099':'name@lecoo.com'}" value=""></div>
     <div class="field"><label>验证码</label>
       <div style="display:flex;gap:8px">
         <input id="sec-contact-code" placeholder="888888" style="flex:1">
@@ -2739,12 +3341,16 @@ function openSecContact(channel){
       </div>
     </div>`;
   openModal('m-sec');
+  // AI-GEN-END
 }
 
 async function goApplyAccountExtend(){
-  state.view = 'apply';
+  // AI-GEN-BEGIN
+  setView('apply');
+  renderSide();
   await renderMain();
   openAccountExtend();
+  // AI-GEN-END
 }
 
 async function sendSecContactCode(){
@@ -2769,6 +3375,25 @@ async function submitSecModal(){
     applySecUser(data.user); closeModal('m-sec'); toast(data.message); renderMain();
     return;
   }
+  // AI-GEN-BEGIN
+  if (secModalMode === 'org_reset_password') {
+    const new_password = (document.getElementById('org-reset-pwd')?.value || '').trim();
+    const new2 = (document.getElementById('org-reset-pwd2')?.value || '').trim();
+    const uid = state._orgResetPwdUid;
+    if (!uid) return toast('未指定人员');
+    if (!new_password || new_password.length < 6) return toast('新密码至少 6 位');
+    if (new_password !== new2) return toast('两次新密码不一致');
+    const { data } = await api('/api/org/members/reset-password', {
+      method:'POST', body: JSON.stringify({ user_id: uid, new_password })
+    });
+    if (!data.ok) return toast(data.error||'失败');
+    closeModal('m-sec');
+    state._orgResetPwdUid = null;
+    const tip = data.password ? `新密码：${data.password}` : '';
+    toast((data.message || '已重置') + (tip ? ' · ' + tip : ''));
+    return;
+  }
+  // AI-GEN-END
   if (secModalMode === 'contact') {
     const value = (document.getElementById('sec-contact-val').value||'').trim();
     const code = (document.getElementById('sec-contact-code').value||'').trim();
@@ -2880,39 +3505,100 @@ async function submitApply(type, system_name){
   const extra = ap ? `｜当前审核人 ${ap.display_name||ap.username}` : '';
   toast((data.message || '已提交') + extra);
   await enterHome();
-  state.view = 'todo'; state.todoTab = 'initiated';
+  state.todoTab = 'initiated';
+  setView('todo');
   renderSide(); renderMain();
   // AI-GEN-END
 }
 
 // AI-GEN-BEGIN
 function flowPhaseClass(step){
+  if (step.is_cc || step.step_kind === 'cc') {
+    return step.cc_status === 'read' || step.status === 'read' || step.status === 'approved'
+      ? 'phase-done' : 'phase-current';
+  }
   if (step.status === 'rejected') return 'phase-rej';
   return 'phase-' + (step.phase || 'forecast');
 }
 function flowStatusLabel(step){
+  if (step.is_cc || step.step_kind === 'cc') {
+    const st = step.cc_status || step.status || '';
+    if (st === 'read' || st === 'approved') return '已阅';
+    return '待阅';
+  }
+  // AI-GEN-BEGIN
+  if (step.step_kind === 'initiate' || step.step_key === 'initiator' || step.status === 'submitted' || step.event_type === 'submitted') {
+    return '已发起';
+  }
+  if (step.event_type === 'resubmitted' || step.status === 'resubmitted' || step.step_kind === 'resubmit') {
+    return '再次提交';
+  }
+  if (step.event_type === 'cancelled' || step.status === 'cancelled' || step.step_kind === 'cancel') {
+    return '已撤销';
+  }
+  // AI-GEN-END
   const st = step.status || '';
   if (st === 'approved') return '已通过';
   if (st === 'rejected') return '已驳回';
   if (st === 'skipped') return '已跳过';
-  if (st === 'pending' || step.phase === 'current') return '审批中';
+  if (st === 'pending' || step.phase === 'current') {
+    return (step.step_kind === 'edit') ? '待提交' : '审批中';
+  }
   return '等待中';
+}
+function renderCcDimensionHtml(ccDim){
+  // AI-GEN-BEGIN
+  const dim = ccDim || {};
+  const items = dim.items || [];
+  if (!items.length) return '';
+  return `<div class="flow-preview" style="margin-top:14px">
+    <h5>知会确认 <span class="pill p-blue">${escapeHtml(dim.summary || '')}</span>
+      <span class="note" style="font-weight:400">（不阻塞主审批）</span></h5>
+    <ul class="flow-tl">${items.map(it => {
+      const a = it.assignee || {};
+      const name = a.display_name || a.username || '—';
+      const read = it.cc_status === 'read';
+      const when = read
+        ? `确认时间 ${fmtDateTime(it.read_at || '')}`
+        : '等待已阅确认';
+      const rem = (it.remark || '').trim();
+      return `<li class="${read ? 'phase-done' : 'phase-current'}">
+        <div class="ft-title">${escapeHtml(it.cc_label || '知会确认')}
+          <span class="pill ${read ? 'p-green' : 'p-gray'}">${read ? '已阅' : '待阅'}</span>
+        </div>
+        <div class="ft-meta">知会人：${escapeHtml(name)} · ${when}</div>
+        ${rem ? `<div class="ft-remark" style="margin-top:4px;padding:6px 8px;background:#F4F7FB;border-radius:6px;font-size:12.5px;color:var(--ink)">备注：${escapeHtml(rem)}</div>` : ''}
+      </li>`;
+    }).join('')}</ul>
+  </div>`;
+  // AI-GEN-END
 }
 function renderFlowTimelineHtml(timeline){
   const steps = timeline || [];
   if (!steps.length) return '<div class="note">暂无流程步骤</div>';
   return `<ul class="flow-tl">${steps.map(s => {
-    const a = s.assignee || {};
+    const a = s.assignee || s.actor || {};
     const name = a.display_name || a.username || '—';
-    const when = s.decided_at
-      ? `处理时间 ${fmtDateTime(s.decided_at)}`
-      : (s.phase === 'current' ? '等待审批' : '尚未到达');
+    const isInit = s.step_kind === 'initiate' || s.step_key === 'initiator' || s.event_type === 'submitted';
     const rem = (s.remark || '').trim();
+    const pillCls = (s.status==='rejected'||s.event_type==='rejected')?'p-red'
+      :((s.event_type==='cancelled'||s.status==='cancelled')?'p-gray'
+      :((s.event_type==='resubmitted'||s.status==='resubmitted')?'p-blue'
+      :(s.phase==='done'||isInit?'p-green':(s.phase==='current'?'p-orange':'p-gray'))));
+    const personLab = isInit ? '发起人'
+      : (s.step_kind === 'edit' ? '处理人'
+      : (s.event_type === 'resubmitted' ? '提交人'
+      : (s.event_type === 'cancelled' ? '撤销人'
+      : (s.event_type === 'rejected' ? '驳回人' : '审核人'))));
+    const when = s.decided_at
+      ? `${isInit ? '发起时间' : (s.event_type==='resubmitted'?'提交时间':(s.event_type==='cancelled'?'撤销时间':'处理时间'))} ${fmtDateTime(s.decided_at)}`
+      : (s.phase === 'current' ? (isInit || s.step_kind==='edit' ? '待提交' : '等待审批') : '尚未到达');
+    const orderText = isInit ? '发起' : (s.step_order!=null && s.step_order!=='' ? `${s.step_order}.` : '·');
     return `<li class="${flowPhaseClass(s)}">
-      <div class="ft-title">${s.step_order}. ${s.step_label||s.step_key}
-        <span class="pill ${s.status==='rejected'?'p-red':(s.phase==='done'?'p-green':(s.phase==='current'?'p-orange':'p-gray'))}">${flowStatusLabel(s)}</span>
+      <div class="ft-title">${orderText} ${s.step_label||s.step_key}
+        <span class="pill ${pillCls}">${flowStatusLabel(s)}</span>
       </div>
-      <div class="ft-meta">审核人：${name} · ${when}</div>
+      <div class="ft-meta">${personLab}：${name} · ${when}</div>
       ${rem ? `<div class="ft-remark" style="margin-top:4px;padding:6px 8px;background:#F4F7FB;border-radius:6px;font-size:12.5px;color:var(--ink)">备注：${escapeHtml(rem)}</div>` : ''}
     </li>`;
   }).join('')}</ul>`;
@@ -3033,19 +3719,33 @@ async function openTodoFlow(tid, opts){
   const sy = (app.system) || (todo.system) || {};
   document.getElementById('flow-title').textContent = todo.title || app.title || '流程详情';
   const cur = data.current_approver;
-  const statusMap = {pending:'审批中', returned:'已驳回待改单', rejected:'已驳回', approved:'已通过', done:'已关闭'};
+  const statusMap = {pending:'审批中', returned:'已驳回待改单', rejected:'已驳回', approved:'已通过', done:'已关闭', cancelled:'已撤销'};
+  const ccDim = data.cc_dimension || {};
   document.getElementById('flow-hint').innerHTML = [
     ap.display_name ? `申请人 <b>${ap.display_name}</b>` : '',
     sy.name ? `系统 <b>${sy.name}</b>` : '',
     todo.todo_type ? `类型 <b>${todo.todo_type}</b>` : '',
+    todo.is_cc ? `知会状态 <b>${todo.status_label || (todo.cc_status==='read'?'已阅':'待阅')}</b>` : '',
     data.progress ? `进度 <b>${data.progress}${data.progress_label?` · ${data.progress_label}`:''}</b>` : '',
-    cur ? `当前审核人 <b>${cur.display_name||cur.username}</b>` : '当前无待审步骤',
+    (!todo.is_cc && ccDim.total) ? `知会 <b>${ccDim.summary||''}</b>` : '',
+    cur ? `当前审核人 <b>${cur.display_name||cur.username}</b>` : (todo.is_cc ? '' : '当前无待审步骤'),
   ].filter(Boolean).join(' · ');
   const forecast = data.forecast || [];
-  const canHandle = (todo.bucket === 'pending' && todo.status === 'open'
+  const ccPending = todo.is_cc && (todo.cc_status === 'unread' || todo.status === 'unread' || todo.status === 'open');
+  const canHandle = (todo.bucket === 'pending'
+    && (todo.status === 'open' || todo.status === 'unread' || ccPending)
     && Number(todo.assignee_id) === Number(state.user && state.user.id));
   const showRemark = canHandle;
   const canResubmit = !!(todo.can_resubmit && canHandle);
+  // AI-GEN-BEGIN
+  const canCancel = canCancelTodo({
+    ...todo,
+    can_cancel: todo.can_cancel || ['pending', 'returned'].includes(app.status),
+    applicant_id: todo.applicant_id || (app.applicant && app.applicant.id),
+    initiator_id: todo.initiator_id || (app.initiator && app.initiator.id),
+    app_status: app.status || todo.app_status,
+  });
+  // AI-GEN-END
   const formView = todo.form_view || { section_title: '申请明细', rows: todo.form_fields || [] };
   // AI-GEN-BEGIN
   const snap = formView.user_permissions || todo.user_permissions || null;
@@ -3061,12 +3761,15 @@ async function openTodoFlow(tid, opts){
     <div style="margin-bottom:12px">
       <div class="kv"><span class="lab">创建时间</span><b>${fmtDateTime(app.created_at || todo.created_at)}</b></div>
       <div class="kv"><span class="lab">更新时间</span><b>${fmtDateTime(app.updated_at)}</b></div>
-      <div class="kv"><span class="lab">申请状态</span><b>${statusMap[app.status] || app.status || todo.status || '—'}</b></div>
+      <div class="kv"><span class="lab">申请状态</span><b>${todo.is_cc
+        ? (todo.status_label || (todo.cc_status==='read'?'已阅':'待阅'))
+        : (statusMap[app.status] || app.status || todo.status || '—')}</b></div>
     </div>
     ${renderApplyFormViewHtml(formView, { editable: canResubmit, editableKeys: todo.editable_keys || [] })}
     ${fullBtn}
     <h4 style="font-size:13px;margin:0 0 8px">流程时间线（各节点明细）</h4>
     ${renderFlowTimelineHtml(data.timeline)}
+    ${renderCcDimensionHtml(ccDim)}
     <div class="flow-preview" style="margin-top:14px">
       <h5>流程预测（尚未到达）</h5>
       ${forecast.length
@@ -3077,42 +3780,41 @@ async function openTodoFlow(tid, opts){
     <div class="field" style="margin-top:14px">
       <label>本次操作备注（可选）</label>
       <textarea id="flow-decide-remark" rows="2" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit"
-        placeholder="通过、驳回或重提时可填写"></textarea>
+        placeholder="通过或重提时可填写；驳回时在弹窗中填写"></textarea>
     </div>
-    ${(!todo.is_cc && !canResubmit && (todo.rejectable_steps||[]).length) ? `
-    <div class="field">
-      <label>驳回到指定节点（可选，不选则直接结束）</label>
-      <select id="flow-reject-to" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
-        <option value="">直接结束申请</option>
-        ${(todo.rejectable_steps||[]).map(s=>`<option value="${s.order}">${s.order===0?'申请人':(s.order+'.')} ${s.label}</option>`).join('')}
-      </select>
-      <div class="note">驳回后目标可修改并再次提交，将直接回到当前驳回人。</div>
-    </div>` : ''}
-    ${canResubmit ? `<div class="note" style="margin-top:8px;color:#b42318">本申请已被驳回，请修改上方表单后点击「修改并再次提交」。</div>` : ''}
+    ${canResubmit ? `<div class="note" style="margin-top:8px;color:#b42318">本申请已被驳回，请修改上方表单后点击「提交」。</div>` : ''}
     ` : ''}`;
   const foot = document.querySelector('#m-flow .foot');
   if (foot) {
+    const cancelBtn = canCancel
+      ? `<button class="btn btn-line" onclick="cancelApplication(${app.id||todo.application_id},${tid})">撤销申请</button>`
+      : '';
     if (showRemark) {
       if (canResubmit) {
         foot.innerHTML = `
           <button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>
-          <button class="btn btn-pri" style="width:auto" onclick="resubmitTodoFromFlow(${tid})">修改并再次提交</button>`;
+          ${cancelBtn}
+          <button class="btn btn-pri" style="width:auto" onclick="resubmitTodoFromFlow(${tid})">提交</button>`;
       } else {
         const passLabel = todo.is_cc ? '已阅' : (todo.is_confirm ? '确认关闭' : '通过');
         if (todo.need_provision_form) {
           foot.innerHTML = `
             <button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>
+            ${cancelBtn}
             <button class="btn btn-line" onclick="decideTodoFromFlow(${tid},'rejected')">驳回</button>
             <button class="btn btn-pri" style="width:auto" onclick="closeModal('m-flow');openProvision(${tid})">去开通</button>`;
         } else {
           foot.innerHTML = `
             <button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>
+            ${cancelBtn}
             ${todo.is_cc ? '' : `<button class="btn btn-line" onclick="decideTodoFromFlow(${tid},'rejected')">驳回</button>`}
             <button class="btn btn-pri" style="width:auto" onclick="decideTodoFromFlow(${tid},'approved')">${passLabel}</button>`;
         }
       }
     } else {
-      foot.innerHTML = `<button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>`;
+      foot.innerHTML = `
+        <button class="btn btn-line" onclick="closeModal('m-flow')">关闭</button>
+        ${cancelBtn}`;
     }
   }
   openModal('m-flow');
@@ -3121,16 +3823,12 @@ async function openTodoFlow(tid, opts){
 function decideTodoFromFlow(tid, decision){
   // AI-GEN-BEGIN
   const remark = (document.getElementById('flow-decide-remark')?.value || '').trim();
-  const rejectTo = document.getElementById('flow-reject-to')?.value;
   closeModal('m-flow');
-  const extra = { remark, skipRemarkPrompt: true };
+  // 驳回：弹窗选择节点（可选，不选则直接结束）
   if (decision === 'rejected') {
-    // 空字符串=直接结束；数字（含 0）=驳回到节点
-    if (rejectTo !== undefined && rejectTo !== null && rejectTo !== '') {
-      extra.reject_to_step = Number(rejectTo);
-    }
+    return decideTodo(tid, decision, { prefillRemark: remark });
   }
-  return decideTodo(tid, decision, extra);
+  return decideTodo(tid, decision, { remark, skipRemarkPrompt: true });
   // AI-GEN-END
 }
 async function resubmitTodoFromFlow(tid){
@@ -3140,14 +3838,40 @@ async function resubmitTodoFromFlow(tid){
   const { data } = await api('/api/todo/'+tid+'/resubmit', {
     method:'POST', body: JSON.stringify({ form, remark })
   });
-  if (!data.ok) return toast(data.error || '重提失败');
-  toast(data.message || '已重新提交');
+  if (!data.ok) return toast(data.error || '提交失败');
+  toast(data.message || '已提交');
   closeModal('m-flow');
   await enterHome();
-  state.view = 'todo'; state.todoTab = 'done';
+  state.todoTab = 'done';
+  setView('todo');
   renderSide(); renderMain();
   // AI-GEN-END
 }
+// AI-GEN-BEGIN
+function canCancelTodo(t){
+  if (!t || !t.can_cancel) return false;
+  const uid = Number(state.user && state.user.id);
+  if (!uid) return false;
+  return uid === Number(t.applicant_id)
+    || uid === Number(t.initiator_id)
+    || (state.user && (state.user.role === 'super_admin' || (state.user.roles||[]).includes('super_admin')));
+}
+async function cancelApplication(appId, todoId){
+  if (!appId) return toast('无申请单');
+  if (!confirm('确认撤销该申请？撤销后流程结束，不可恢复。')) return;
+  const remark = (document.getElementById('flow-decide-remark')?.value || '').trim();
+  const { data } = await api('/api/applications/'+appId+'/cancel', {
+    method:'POST', body: JSON.stringify({ remark: remark || '撤销申请' })
+  });
+  if (!data.ok) return toast(data.error || '撤销失败');
+  toast(data.message || '已撤销');
+  closeModal('m-flow');
+  await enterHome();
+  state.todoTab = 'initiated';
+  setView('todo');
+  renderSide(); renderMain();
+}
+// AI-GEN-END
 async function refreshBindFlowPreview(){
   const wrap = document.getElementById('bg-flow-preview');
   const body = document.getElementById('bg-flow-preview-body');
@@ -3222,7 +3946,8 @@ async function submitExternal(){
   const chain = (data.chain||[]).map(s => `${s.order}.${s.label}(${s.assignee})`).join(' → ');
   toast(data.message + (chain?`｜${chain}`:''));
   await enterHome();
-  state.view = 'todo'; state.todoTab = 'initiated';
+  state.todoTab = 'initiated';
+  setView('todo');
   renderSide(); renderMain();
 }
 // AI-GEN-END
@@ -3236,7 +3961,8 @@ async function submitSensitive(){
   const chain = (data.chain||[]).map(s => `${s.order}.${s.label}(${s.assignee})`).join(' → ');
   toast(data.message + (chain?`｜${chain}`:''));
   await enterHome();
-  state.view = 'todo'; state.todoTab = 'initiated';
+  state.todoTab = 'initiated';
+  setView('todo');
   renderSide(); renderMain();
 }
 async function renderSensitiveConfig(el, opts={}){
@@ -3393,14 +4119,26 @@ async function decideTodo(id, decision, extra){
       return submitDecideTodo(id, decision, { ...extra, remark: '', skipRemarkPrompt: true });
     }
     state._decidePending = { id, decision, extra };
-    titleEl.textContent = decision === 'approved' ? '通过' : '驳回';
-    hintEl.textContent =
-      decision === 'approved'
+    // AI-GEN-BEGIN
+    let isCc = !!extra.is_cc;
+    if (!isCc) {
+      try {
+        const bags = state.home?.todos || {};
+        const all = [].concat(bags.pending||[], bags.done||[], bags.initiated||[]);
+        const hit = all.find(t => Number(t.id) === Number(id));
+        isCc = !!(hit && hit.is_cc);
+      } catch (e) { isCc = false; }
+    }
+    titleEl.textContent = isCc ? '已阅确认' : (decision === 'approved' ? '通过' : '驳回');
+    hintEl.textContent = isCc
+      ? '确认已阅该知会。可填写备注，将显示在流程知会维度中。'
+      : (decision === 'approved'
         ? '确认通过该待办。可填写备注，将显示在流程详情中。'
-        : '确认驳回该待办。可选择驳回节点；目标可改单重提并回到你。';
-    remarkEl.value = '';
+        : '确认驳回该待办。可选择驳回节点；目标可改单重提并回到你。');
+    // AI-GEN-END
+    remarkEl.value = (extra.prefillRemark || '').trim();
     if (rejectWrap && rejectSel) {
-      if (decision === 'rejected') {
+      if (decision === 'rejected' && !isCc) {
         rejectWrap.style.display = '';
         rejectSel.innerHTML = '<option value="">直接结束申请</option>';
         // 从首页待办缓存取可驳回节点
@@ -3423,19 +4161,25 @@ async function decideTodo(id, decision, extra){
           opt.textContent = (s.order===0 ? '申请人 · ' : (s.order+'. ')) + (s.label||'');
           rejectSel.appendChild(opt);
         });
-        // 默认驳回到申请人
-        if (steps.some(s => Number(s.order) === 0)) rejectSel.value = '0';
+        // 默认不选节点 = 直接结束
+        rejectSel.value = '';
       } else {
         rejectWrap.style.display = 'none';
         rejectSel.value = '';
       }
     }
     if (okBtn) {
-      okBtn.textContent = decision === 'approved' ? '确认通过' : '确认驳回';
-      okBtn.className = decision === 'approved' ? 'btn btn-pri' : 'btn btn-line';
-      okBtn.style.cssText = decision === 'approved'
-        ? 'width:auto'
-        : 'width:auto;color:#b42318;border-color:#f3b4b0';
+      if (isCc) {
+        okBtn.textContent = '确认已阅';
+        okBtn.className = 'btn btn-pri';
+        okBtn.style.cssText = 'width:auto';
+      } else {
+        okBtn.textContent = decision === 'approved' ? '确认通过' : '确认驳回';
+        okBtn.className = decision === 'approved' ? 'btn btn-pri' : 'btn btn-line';
+        okBtn.style.cssText = decision === 'approved'
+          ? 'width:auto'
+          : 'width:auto;color:#b42318;border-color:#f3b4b0';
+      }
     }
     openModal('m-decide');
     setTimeout(() => remarkEl.focus(), 40);
@@ -3463,6 +4207,7 @@ async function submitDecideTodo(id, decision, extra){
   // AI-GEN-BEGIN
   const body = { decision, ...(extra || {}) };
   delete body.skipRemarkPrompt;
+  delete body.prefillRemark;
   const { data } = await api('/api/todo/'+id+'/decide', {
     method:'POST', body: JSON.stringify(body)
   });
@@ -3473,7 +4218,7 @@ async function submitDecideTodo(id, decision, extra){
     }
     if (data.need_manual) {
       toast(data.error);
-      state.view = 'sys_accounts';
+      setView('sys_accounts');
       renderSide(); renderMain();
       return;
     }
@@ -3485,11 +4230,61 @@ async function submitDecideTodo(id, decision, extra){
   await enterHome();
   // AI-GEN-BEGIN
   // 处理后仍留在「待处理」，不跳转到「已完成」
-  state.view = 'todo'; state.todoTab = 'pending';
+  state.todoTab = 'pending';
+  setView('todo');
   // AI-GEN-END
   renderSide(); renderMain();
   // AI-GEN-END
 }
+
+// AI-GEN-BEGIN
+function canBatchApproveTodo(t){
+  if (!t || t.can_resubmit || t.need_provision_form) return false;
+  return true;
+}
+function togTodoSel(id, on){
+  if (!state.todoSelectedIds) state.todoSelectedIds = new Set();
+  const n = Number(id);
+  if (on) state.todoSelectedIds.add(n); else state.todoSelectedIds.delete(n);
+  renderMain();
+}
+function toggleAllBatchTodos(on){
+  if (!state.todoSelectedIds) state.todoSelectedIds = new Set();
+  const list = ((state.home && state.home.todos && state.home.todos.pending) || [])
+    .filter(t => {
+      const tf = state.todoTypeFilter || '';
+      if (tf && (t.todo_type || '') !== tf) return false;
+      return canBatchApproveTodo(t);
+    });
+  list.forEach(t => {
+    const n = Number(t.id);
+    if (on) state.todoSelectedIds.add(n); else state.todoSelectedIds.delete(n);
+  });
+  renderMain();
+}
+async function batchApproveTodos(){
+  const ids = [...(state.todoSelectedIds || [])];
+  if (!ids.length) return toast('请先勾选待办');
+  if (!confirm(`确认批量通过选中的 ${ids.length} 条待办？`)) return;
+  let ok = 0;
+  const fails = [];
+  for (const id of ids) {
+    const body = { decision: 'approved', remark: '' };
+    const { data } = await api('/api/todo/'+id+'/decide', {
+      method: 'POST', body: JSON.stringify(body)
+    });
+    if (data && data.ok) ok += 1;
+    else fails.push(`#${id}:${(data && data.error) || '失败'}`);
+  }
+  state.todoSelectedIds.clear();
+  await enterHome();
+  state.todoTab = 'pending';
+  setView('todo');
+  renderSide(); renderMain();
+  if (fails.length) toast(`批量通过：成功 ${ok}，失败 ${fails.length}（${fails.slice(0,3).join('；')}${fails.length>3?'…':''}）`);
+  else toast(`已批量通过 ${ok} 条`);
+}
+// AI-GEN-END
 
 let provisionTodoId = null;
 let provisionSystemId = null;
@@ -3944,8 +4739,8 @@ async function openTodoFromMessage(tid){
   if (!document.getElementById('sc-home')?.classList.contains('show')) {
     await enterHome();
   }
-  state.view = 'todo';
   state.todoTab = 'pending';
+  setView('todo');
   renderSide();
   await renderMain();
   await openTodoFlow(tid, { handle: true });
@@ -4074,6 +4869,12 @@ function canSetAccountExpire(){
   return hasBtn('set_account_expire') || !!state.user?.can_set_account_expire
     || !!state.deptData?.can_set_account_expire;
 }
+
+// AI-GEN-BEGIN
+function canResetOrgPassword(){
+  return hasBtn('org_reset_password') || !!state.deptData?.can_reset_org_password;
+}
+// AI-GEN-END
 // AI-GEN-END
 
 let expireTargetIds = [];
@@ -4116,6 +4917,36 @@ function openSetExpire(ids){
   if (first) pickExpirePreset(first);
   openModal('m-set-expire');
 }
+
+// AI-GEN-BEGIN
+function openOrgResetPassword(uid, name){
+  if (!canResetOrgPassword()) return toast('未开通「修改人员密码」权限');
+  if (!uid) return toast('请指定人员');
+  secModalMode = 'org_reset_password';
+  state._orgResetPwdUid = uid;
+  document.getElementById('sec-modal-title').textContent = '修改人员密码';
+  document.getElementById('sec-modal-hint').textContent =
+    `为 ${name || ('用户#'+uid)} 直接设置新登录密码（至少 6 位）；也可随机生成。密码会写入发信记录。`;
+  document.getElementById('sec-modal-body').innerHTML = `
+    <div class="field"><label>新密码</label>
+      <div style="display:flex;gap:8px">
+        <input id="org-reset-pwd" type="text" autocomplete="new-password" style="flex:1" placeholder="至少 6 位">
+        <button type="button" class="btn btn-sm btn-line" onclick="fillOrgResetPwdRandom()">随机生成</button>
+      </div>
+    </div>
+    <div class="field"><label>确认新密码</label><input id="org-reset-pwd2" type="text" autocomplete="new-password"></div>`;
+  openModal('m-sec');
+}
+function fillOrgResetPwdRandom(){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+  let s = '';
+  for (let i = 0; i < 10; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  const a = document.getElementById('org-reset-pwd');
+  const b = document.getElementById('org-reset-pwd2');
+  if (a) a.value = s;
+  if (b) b.value = s;
+}
+// AI-GEN-END
 
 async function submitSetExpire(){
   const on = document.querySelector('#expire-presets .on');
@@ -4171,8 +5002,8 @@ async function openAccountBind(mode){
   document.getElementById('bg-hint').textContent = mode === 'direct'
     ? '点「新建一行」，在行内下拉选择人员与业务系统后直接绑定。同一人可多行、同一系统可重复。'
     : (forOthers
-      ? '代人申请：先选人员与业务系统，再单选已绑定账号申请权限；无账号或不选时可勾「新建账号」。'
-      : '本人申请：先选业务系统，再单选该系统已绑定账号；无账号或不选时可勾「新建账号」。不勾新建则必须选账号。');
+      ? '代人申请：先选人员与业务系统，再单选已绑定账号申请权限；无账号或不选时可勾「新建账号」。本系统（LEUC）账号与人员一致，申请角色，不可新建。'
+      : '本人申请：先选业务系统，再单选该系统已绑定账号；无账号或不选时可勾「新建账号」。本系统（LEUC）申请角色（与「角色与权限」同源），不可新建账号。');
   const { data } = await api('/api/bind/systems');
   if (!data.ok) return toast(data.error);
   state.bindDraft.systems = (data.systems || []).filter(s => s.access_mode !== 'open');
@@ -4190,6 +5021,7 @@ async function openAccountBind(mode){
         create_new: false,
         with_sensitive: false,
         perm_ids: [],
+        role_codes: [],
       });
     }
   }
@@ -4254,11 +5086,37 @@ function systemOptionsHtml(selectedSid, personType){
       const blocked = personType === 'external' && s.forbid_external;
       const sel = String(s.id) === String(selectedSid) ? 'selected' : '';
       const tag = s.forbid_external ? ' ·禁外部' : '';
-      return `<option value="${s.id}" ${sel} ${blocked?'disabled':''}>${s.name}${tag}${blocked?'（外部不可选）':''}</option>`;
+      // AI-GEN-BEGIN
+      const leucTag = isLeucSystem(s) ? ' ·本系统' : '';
+      // AI-GEN-END
+      return `<option value="${s.id}" ${sel} ${blocked?'disabled':''}>${s.name}${tag}${leucTag}${blocked?'（外部不可选）':''}</option>`;
     })
   );
   return opts.join('');
 }
+
+// AI-GEN-BEGIN
+function isLeucSystem(s){
+  if (!s) return false;
+  // 本系统 LEUC：账号与人员一致
+  return s.code === 'leuc' || Number(s.is_builtin) === 1;
+}
+/** 本系统：账号与人员一致，禁止新建；自动选中已绑定本系统账号 */
+function applyLeucLineRules(ln){
+  if (!ln || !ln.system_id) return;
+  const s = (state.bindDraft.systems || []).find(x => Number(x.id) === Number(ln.system_id));
+  if (!isLeucSystem(s)) return;
+  ln.create_new = false;
+  const list = boundAccountsForLine({ ...ln, create_new: false });
+  if (list.length) {
+    if (!ln.account_id || !list.some(a => Number(a.id) === Number(ln.account_id))) {
+      ln.account_id = list[0].id;
+    }
+  } else {
+    ln.account_id = '';
+  }
+}
+// AI-GEN-END
 
 function draftForLines(){
   // AI-GEN-BEGIN
@@ -4274,6 +5132,18 @@ function permSummaryHtml(ln, s){
     if (ln.close_type === 'account') return '<span class="note">关闭账号无需选权限</span>';
   }
   if (!s) return '<span class="note">先选系统</span>';
+  // 本系统：选角色
+  if (isLeucSystem(s) || s.apply_mode === 'roles') {
+    const roles = s.roles || [];
+    if (!roles.length) return '<span class="note">无可选角色</span>';
+    const selected = (ln.role_codes || []).map(c => roles.find(r => r.code === c)).filter(Boolean);
+    const label = selected.length
+      ? (selected.map(r => r.label).slice(0, 2).join('、') + (selected.length > 2 ? ` 等${selected.length}个` : ''))
+      : '点击选择角色';
+    return `<button type="button" class="btn btn-sm btn-line" style="width:100%;text-align:left;white-space:normal;height:auto;line-height:1.35;padding:8px 10px"
+      onclick="openPickPerms(${ln.key})">${label}</button>
+      <div class="note" style="margin-top:4px">${selected.length ? '已选 '+selected.length+' 个角色' : '与「角色与权限」同源'}</div>`;
+  }
   const perms = s.permissions || [];
   if (!perms.length) return '<span class="note">无可选权限</span>';
   const selected = (ln.perm_ids || []).map(id => perms.find(p => p.id === Number(id))).filter(Boolean);
@@ -4289,6 +5159,9 @@ function permSummaryHtml(ln, s){
 function sensCellHtml(ln, s){
   // AI-GEN-BEGIN
   if (!s) return '<span class="note">—</span>';
+  if (isLeucSystem(s) || s.apply_mode === 'roles') {
+    return '<span class="note" title="本系统按角色开通，无单独敏感勾选">选角色</span>';
+  }
   if (!s.has_sensitive) {
     return `<label class="note" style="opacity:.45;cursor:not-allowed" title="该业务系统未开启敏感权限">
       <input type="checkbox" disabled> 不可选
@@ -4340,11 +5213,11 @@ function boundAccountOptionsHtml(ln){
   // AI-GEN-END
 }
 
-async function ensureBoundAccounts(uid){
+async function ensureBoundAccounts(uid, force){
   // AI-GEN-BEGIN
   if (!uid) return [];
   if (!state.bindDraft.boundByUser) state.bindDraft.boundByUser = {};
-  if (state.bindDraft.boundByUser[uid]) return state.bindDraft.boundByUser[uid];
+  if (!force && state.bindDraft.boundByUser[uid]) return state.bindDraft.boundByUser[uid];
   const { data } = await api('/api/bind/user-bound-accounts?user_id=' + uid);
   if (!data.ok) { toast(data.error || '加载已绑定账号失败'); return []; }
   state.bindDraft.boundByUser[uid] = data.accounts || [];
@@ -4376,8 +5249,12 @@ function renderBindLines(){
     <tbody>${lines.map((ln, i) => {
       const p = poolMap[ln.uid];
       const s = sysMap[ln.system_id];
+      // AI-GEN-BEGIN
+      const leucSys = isLeucSystem(s);
+      if (leucSys) applyLeucLineRules(ln);
+      // AI-GEN-END
       const boundList = isApply ? boundAccountsForLine({ ...ln, create_new: false }) : [];
-      const acctDisabled = !ln.system_id || !!ln.create_new;
+      const acctDisabled = !ln.system_id || !!ln.create_new || leucSys;
       const noBound = !!ln.system_id && !boundList.length;
       return `<tr>
         <td>${i+1}</td>
@@ -4403,16 +5280,19 @@ function renderBindLines(){
           </select>
           <div class="note" style="margin-top:4px">${
             !ln.system_id ? '先选业务系统'
+            : (leucSys ? '本系统账号=人员登录名 · 申请角色'
             : (ln.create_new ? '已选新建'
-            : (noBound ? '无已绑定账号，可勾新建' : '仅已绑定 · 单选'))
+            : (noBound ? '无已绑定账号，可勾新建' : '仅已绑定 · 单选')))
           }</div>
         </td>
         <td>
-          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;${!ln.system_id?'opacity:.45':''}">
-            <input type="checkbox" ${ln.create_new?'checked':''} ${!ln.system_id?'disabled':''}
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;${!ln.system_id||leucSys?'opacity:.45':''}"
+            ${leucSys?'title="本系统账号与人员一致，不可新建"':''}>
+            <input type="checkbox" ${ln.create_new?'checked':''} ${!ln.system_id||leucSys?'disabled':''}
               onchange="toggleBindLineCreateNew(${ln.key}, this.checked)">
             新建
           </label>
+          ${leucSys?'<div class="note">不可新建</div>':''}
         </td>`:''}
         <td style="min-width:160px">${permSummaryHtml(ln, s)}</td>
         <td>${sensCellHtml(ln, s)}</td>
@@ -4437,6 +5317,7 @@ function addBindLine(rerender=true){
     account_id: '',
     create_new: false,
     perm_ids: [],
+    role_codes: [],
     with_sensitive: false,
   });
   if (defaultUid) ensureBoundAccounts(defaultUid).then(() => { if (rerender) renderBindLines(); });
@@ -4450,6 +5331,7 @@ async function changeBindLinePerson(key, uid){
   ln.account_id = '';
   ln.with_sensitive = false;
   ln.perm_ids = [];
+  ln.role_codes = [];
   // 若当前系统对外部禁用则清空
   const p = (state.bindDraft.peoplePool||[]).find(x => x.id === ln.uid);
   const s = (state.bindDraft.systems||[]).find(x => x.id === ln.system_id);
@@ -4457,6 +5339,9 @@ async function changeBindLinePerson(key, uid){
     ln.system_id = '';
   }
   if (ln.uid) await ensureBoundAccounts(ln.uid);
+  // AI-GEN-BEGIN
+  applyLeucLineRules(ln);
+  // AI-GEN-END
   renderBindLines();
 }
 
@@ -4465,6 +5350,12 @@ function changeBindLineAccount(key, aid){
   const ln = (state.bindDraft.lines||[]).find(x => x.key === key);
   if (!ln) return;
   if (!ln.system_id) return toast('请先选择业务系统');
+  const s = (state.bindDraft.systems||[]).find(x => Number(x.id) === Number(ln.system_id));
+  if (isLeucSystem(s)) {
+    applyLeucLineRules(ln);
+    renderBindLines();
+    return toast('本系统账号与人员一致，无需改选');
+  }
   ln.account_id = aid ? Number(aid) : '';
   if (ln.account_id) ln.create_new = false;
   // 账号已有敏感则不可再勾选申请
@@ -4480,25 +5371,40 @@ function toggleBindLineCreateNew(key, on){
   const ln = (state.bindDraft.lines||[]).find(x => x.key === key);
   if (!ln) return;
   if (!ln.system_id) return toast('请先选择业务系统');
+  const s = (state.bindDraft.systems||[]).find(x => Number(x.id) === Number(ln.system_id));
+  if (isLeucSystem(s)) {
+    ln.create_new = false;
+    applyLeucLineRules(ln);
+    renderBindLines();
+    return toast('本系统账号与人员一致，只能申请权限，不可新建账号');
+  }
   ln.create_new = !!on;
   if (ln.create_new) ln.account_id = '';
   renderBindLines();
   // AI-GEN-END
 }
 
-function changeBindLineSystem(key, sid){
+async function changeBindLineSystem(key, sid){
   const ln = (state.bindDraft.lines||[]).find(x => x.key === key);
   if (!ln) return;
   ln.system_id = sid ? Number(sid) : '';
   ln.account_id = '';
   ln.create_new = false;
   ln.perm_ids = [];
+  ln.role_codes = [];
   ln.with_sensitive = false;
-  // 该系统无已绑定账号时，默认勾选新建，便于继续申请
+  // AI-GEN-BEGIN
+  const s = (state.bindDraft.systems||[]).find(x => Number(x.id) === Number(ln.system_id));
   if (ln.system_id && ln.uid) {
-    const list = boundAccountsForLine(ln);
-    if (!list.length) ln.create_new = true;
+    await ensureBoundAccounts(ln.uid, isLeucSystem(s));
+    if (isLeucSystem(s)) {
+      applyLeucLineRules(ln);
+    } else {
+      const list = boundAccountsForLine(ln);
+      if (!list.length) ln.create_new = true;
+    }
   }
+  // AI-GEN-END
   renderBindLines();
 }
 
@@ -4523,9 +5429,24 @@ function openPickPerms(key){
   }
   const s = (draft.systems||[]).find(x => x.id === ln.system_id);
   if (!s) return toast('业务系统不存在');
+  const roleMode = isLeucSystem(s) || s.apply_mode === 'roles';
+  if (roleMode) {
+    if (!(s.roles||[]).length) return toast('暂无可申请角色');
+    state.pickPermMode = 'roles';
+    state.pickPermLineKey = key;
+    state.pickPermRoleCodes = new Set(ln.role_codes || []);
+    state.pickPermIds = new Set();
+    state.pickPermCollapsed = {};
+    document.getElementById('pick-perm-title').textContent = '选择本系统角色 · ' + s.name;
+    renderPickPermTree();
+    openModal('m-pick-perms');
+    return;
+  }
   if (!(s.permissions||[]).length) return toast('该系统暂无权限目录');
+  state.pickPermMode = 'perms';
   state.pickPermLineKey = key;
   state.pickPermIds = new Set((ln.perm_ids || []).map(Number));
+  state.pickPermRoleCodes = new Set();
   state.pickPermCollapsed = {};
   document.getElementById('pick-perm-title').textContent =
     (state._bindMode === 'close' ? '选择要关闭的权限 · ' : '选择权限 · ') + s.name;
@@ -4536,6 +5457,7 @@ function openPickPerms(key){
 
 function pickPermExpandAll(expand){
   // AI-GEN-BEGIN
+  if (state.pickPermMode === 'roles') return;
   const draft = draftForLines();
   const ln = (draft?.lines||[]).find(x => x.key === state.pickPermLineKey);
   const s = ln && (draft.systems||[]).find(x => x.id === ln.system_id);
@@ -4570,6 +5492,16 @@ function togglePickPermCheck(id, on){
   // AI-GEN-END
 }
 
+function togglePickRoleCheck(code, on){
+  // AI-GEN-BEGIN
+  if (!state.pickPermRoleCodes) state.pickPermRoleCodes = new Set();
+  if (on) state.pickPermRoleCodes.add(code);
+  else state.pickPermRoleCodes.delete(code);
+  const el = document.getElementById('pick-perm-count');
+  if (el) el.textContent = `已选 ${state.pickPermRoleCodes.size}`;
+  // AI-GEN-END
+}
+
 function renderPickPermTree(){
   // AI-GEN-BEGIN
   const box = document.getElementById('pick-perm-tree');
@@ -4577,6 +5509,26 @@ function renderPickPermTree(){
   const draft = draftForLines();
   const ln = (draft?.lines||[]).find(x => x.key === state.pickPermLineKey);
   const s = ln && (draft.systems||[]).find(x => x.id === ln.system_id);
+  if (state.pickPermMode === 'roles') {
+    const roles = (s && s.roles) || [];
+    const selected = state.pickPermRoleCodes || new Set();
+    if (countEl) countEl.textContent = `已选 ${selected.size}`;
+    if (!roles.length) {
+      box.innerHTML = '<div class="note" style="padding:8px">暂无可申请角色</div>';
+      return;
+    }
+    box.innerHTML = roles.map(r => `
+      <div class="node leaf" style="padding-left:6px;display:flex;align-items:center;gap:6px">
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;flex:1;margin:0">
+          <input type="checkbox" ${selected.has(r.code)?'checked':''}
+            onchange="togglePickRoleCheck('${String(r.code).replace(/'/g,"\\'")}', this.checked)">
+          <b>${r.label}</b>
+          <code class="note">${r.code}</code>
+          ${r.is_builtin?'<span class="pill p-gray">内置</span>':'<span class="pill p-orange">自定义</span>'}
+        </label>
+      </div>`).join('');
+    return;
+  }
   const perms = (s && s.permissions) || [];
   if (countEl) countEl.textContent = `已选 ${(state.pickPermIds||new Set()).size}`;
   if (!perms.length) {
@@ -4622,7 +5574,12 @@ function confirmPickPerms(){
   const draft = draftForLines();
   const ln = (draft?.lines||[]).find(x => x.key === state.pickPermLineKey);
   if (!ln) return closeModal('m-pick-perms');
-  ln.perm_ids = [...(state.pickPermIds || [])];
+  if (state.pickPermMode === 'roles') {
+    ln.role_codes = [...(state.pickPermRoleCodes || [])];
+    ln.perm_ids = [];
+  } else {
+    ln.perm_ids = [...(state.pickPermIds || [])];
+  }
   closeModal('m-pick-perms');
   if (state._bindMode === 'close') renderCloseLines();
   else renderBindLines();
@@ -4660,30 +5617,111 @@ async function openPickPeopleForLine(key){
   // AI-GEN-END
 }
 
+// AI-GEN-BEGIN
+function ensurePickOrgCollapsedInit(tree){
+  if (state.pickOrgCollapsed) return;
+  const map = {};
+  const walk = (nodes, depth) => {
+    (nodes || []).forEach(n => {
+      if ((n.children || []).length && depth >= 1) map[n.id] = true;
+      walk(n.children || [], depth + 1);
+    });
+  };
+  walk(tree, 0);
+  state.pickOrgCollapsed = map;
+}
+function expandPickOrgAncestors(tree, focusId){
+  if (!focusId || !state.pickOrgCollapsed) return;
+  const byId = {};
+  const walk = (nodes, parentId) => {
+    (nodes || []).forEach(n => {
+      byId[n.id] = parentId;
+      walk(n.children || [], n.id);
+    });
+  };
+  walk(tree, null);
+  let cur = byId[focusId];
+  while (cur != null) {
+    delete state.pickOrgCollapsed[cur];
+    cur = byId[cur];
+  }
+}
+function togglePickOrgNode(id, ev){
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (!state.pickOrgCollapsed) state.pickOrgCollapsed = {};
+  state.pickOrgCollapsed[id] = !state.pickOrgCollapsed[id];
+  paintPickTree();
+}
+function expandAllPickOrg(expand){
+  const tree = (state.pickData && state.pickData.tree) || [];
+  const map = {};
+  if (!expand) {
+    const walk = (nodes) => {
+      (nodes || []).forEach(n => {
+        if ((n.children || []).length) map[n.id] = true;
+        walk(n.children || []);
+      });
+    };
+    walk(tree);
+  }
+  state.pickOrgCollapsed = map;
+  paintPickTree();
+}
+function selectPickDept(deptId){
+  state.pickDept = deptId == null ? '' : String(deptId);
+  const tree = (state.pickData && state.pickData.tree) || [];
+  expandPickOrgAncestors(tree, state.pickDept);
+  loadPickPeople();
+}
 function renderPickTree(nodes, depth=0){
-  return (nodes||[]).map(n => `
-    <div class="node ${String(state.pickDept)===String(n.id)?'on':''}" style="padding-left:${8+depth*10}px"
-      onclick="state.pickDept='${n.id}';loadPickPeople()">
-      ${n.name}${n.can_manage?'<span class="mgmt">管</span>':''}
+  if (!nodes || !nodes.length) return '';
+  const collapsed = state.pickOrgCollapsed || {};
+  return nodes.map(n => {
+    const kids = n.children || [];
+    const hasKids = kids.length > 0;
+    const isCollapsed = hasKids && !!collapsed[n.id];
+    const on = String(state.pickDept||'') === String(n.id);
+    return `<div>
+      <div class="node ${on?'on':''}" data-dept-id="${n.id}" onclick="selectPickDept('${n.id}')">
+        ${hasKids
+          ? `<span class="org-caret" onclick="togglePickOrgNode('${n.id}',event)">${isCollapsed?'▸':'▾'}</span>`
+          : `<span class="org-caret empty"></span>`}
+        <span>${n.name}</span>
+        ${n.can_manage?'<span class="mgmt">管</span>':''}
+      </div>
+      ${hasKids && !isCollapsed ? `<div class="kids">${renderPickTree(kids, depth+1)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+function paintPickTree(){
+  const box = document.getElementById('pick-tree');
+  if (!box) return;
+  const top = box.scrollTop;
+  const tree = (state.pickData && state.pickData.tree) || [];
+  ensurePickOrgCollapsedInit(tree);
+  box.innerHTML = `
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+      <span class="note" style="margin:0;flex:1">部门树</span>
+      <button type="button" class="btn btn-sm btn-line" onclick="expandAllPickOrg(true)">全部展开</button>
+      <button type="button" class="btn btn-sm btn-line" onclick="expandAllPickOrg(false)">全部收起</button>
     </div>
-    ${n.children && n.children.length ? `<div class="kids">${renderPickTree(n.children, depth+1)}</div>` : ''}
-  `).join('');
+    <div class="node ${!state.pickDept?'on':''}" data-dept-id="" onclick="selectPickDept('')"><b>全部部门</b></div>
+    ${renderPickTree(tree)}`;
+  box.scrollTop = top;
 }
 
 async function loadPickPeople(){
   state.pickQ = (document.getElementById('pick-q')?.value || '').trim();
-  // AI-GEN-BEGIN
   const isDemo = state.pickMode === 'demo_switch';
   let url = (isDemo ? '/api/demo/org-pick' : '/api/org/overview')
     + (isDemo ? '?q=' : '?scope=manage&nopage=1&q=') + encodeURIComponent(state.pickQ || '');
   if (state.pickDept) url += '&dept_id=' + state.pickDept;
-  // AI-GEN-END
   const { data } = await api(url);
   if (!data.ok) return toast(data.error);
   state.pickData = data;
-  document.getElementById('pick-tree').innerHTML = `
-    <div class="node ${!state.pickDept?'on':''}" onclick="state.pickDept='';loadPickPeople()"><b>全部部门</b></div>
-    ${renderPickTree(data.tree||[])}`;
+  ensurePickOrgCollapsedInit(data.tree || []);
+  expandPickOrgAncestors(data.tree || [], state.pickDept);
+  paintPickTree();
   const members = data.members || [];
   const tip = data.truncated
     ? `<div class="note" style="padding:8px 12px;border-bottom:1px solid #EDF2FB">${data.hint||'请用部门或搜索缩小范围'}</div>`
@@ -4704,6 +5742,7 @@ async function loadPickPeople(){
       </tr>`;
     }).join('')}</tbody></table>` : '<div class="note" style="padding:12px">当前部门下无匹配人员</div>');
 }
+// AI-GEN-END
 
 async function pickPersonIntoLine(uid){
   // AI-GEN-BEGIN
@@ -4719,6 +5758,24 @@ async function pickPersonIntoLine(uid){
     await quickRole(m.username);
     return;
   }
+
+  // AI-GEN-BEGIN
+  if (state.pickMode === 'bulk_close') {
+    if (m.id === state.user?.id) return toast('不可代关本人，请选择他人');
+    state.bulkClose = state.bulkClose || {};
+    state.bulkClose.target = {
+      id: m.id,
+      display_name: m.display_name,
+      username: m.username,
+      person_type: m.person_type || 'internal',
+    };
+    closeModal('m-pick-people');
+    state.pickMode = null;
+    paintBulkCloseForm();
+    toast(`已选代关对象：${m.display_name}`);
+    return;
+  }
+  // AI-GEN-END
 
   // AI-GEN-BEGIN
   if (state.pickMode === 'role_user_bind') {
@@ -4821,12 +5878,26 @@ async function submitAccountBind(mode){
   const isApply = mode !== 'direct';
   for (const ln of lines) {
     if (!ln.uid) return toast('请为每一行选择人员');
-    if (isApply) {
+    if (!ln.system_id) return toast('请为每一行选择业务系统');
+    // AI-GEN-BEGIN
+    const sCheck = (state.bindDraft.systems||[]).find(x => Number(x.id) === Number(ln.system_id));
+    if (isApply && isLeucSystem(sCheck)) {
+      applyLeucLineRules(ln);
+      if (ln.create_new) {
+        return toast('本系统账号与人员一致，只能申请角色，不可新建账号');
+      }
+      if (!ln.account_id) {
+        return toast('本系统账号未就绪，请稍后重试或联系管理员');
+      }
+      if (!(ln.role_codes||[]).length) {
+        return toast('本系统请选择要申请的角色');
+      }
+    } else if (isApply) {
       if (!ln.create_new && !ln.account_id) {
         return toast('请选择业务系统账号，或勾选「新建账号」');
       }
     }
-    if (!ln.system_id) return toast('请为每一行选择业务系统');
+    // AI-GEN-END
   }
   const msgs = [];
   if (mode === 'direct') {
@@ -4873,6 +5944,23 @@ async function submitAccountBind(mode){
     // 新建账号已带敏感时，不再重复提交敏感申请
     if (ln.create_new && mode !== 'direct') continue;
     const s = (state.bindDraft.systems||[]).find(x => x.id === ln.system_id);
+    // AI-GEN-BEGIN
+    if (isLeucSystem(s) || s?.apply_mode === 'roles') {
+      if (!(ln.role_codes||[]).length) continue;
+      const r = await api('/api/apply/submit', {
+        method:'POST',
+        body: JSON.stringify({
+          type: 'leuc_roles',
+          roles: ln.role_codes,
+          system_id: Number(ln.system_id),
+          for_user_id: ln.uid,
+        })
+      });
+      if (r.data?.ok) msgs.push(r.data.message);
+      else if (r.data?.error) msgs.push(r.data.error);
+      continue;
+    }
+    // AI-GEN-END
     const perms = (s && s.permissions) || [];
     for (const pid of (ln.perm_ids || [])) {
       const p = perms.find(x => x.id === Number(pid));
@@ -4907,7 +5995,7 @@ async function submitAccountBind(mode){
       else if (r.data?.error) msgs.push(r.data.error);
     }
   }
-  if (!msgs.length) return toast('请至少勾选「新建账号」，或选择权限/敏感权限');
+  if (!msgs.length) return toast('请至少勾选「新建账号」，或选择权限/角色');
   toast(msgs[0] + (msgs.length > 1 ? '｜' + msgs[1] : ''));
   closeModal('m-batch-grant');
   state.selectedIds.clear();
@@ -4990,7 +6078,7 @@ function renderAccountExtendBody(){
     <div style="padding:14px 16px">
       <div class="kv"><span class="lab">申请人</span>
         <b>${state.user.display_name}（${state.user.username}）</b></div>
-      <div class="kv"><span class="lab">当前有效期</span><b>${expire}</b></div>
+      <div class="kv"><span class="lab">当前有效期至</span><b>${expire}</b></div>
       <div class="field" style="margin-top:12px"><label>延期天数</label>
         <input id="extend-days" type="number" min="1" max="3650" value="${d.days||90}"
           style="width:140px;padding:8px 10px;border:1px solid var(--line);border-radius:8px"
@@ -5040,7 +6128,8 @@ async function submitAccountExtend(){
   toast((data.message || '已提交') + (ap.display_name ? '' : ''));
   state.extendDraft = null;
   state._bindMode = null;
-  state.view = 'todo'; state.todoTab = 'initiated';
+  state.todoTab = 'initiated';
+  setView('todo');
   renderSide(); renderMain();
   // AI-GEN-END
 }
@@ -5355,7 +6444,8 @@ async function submitPermClose(){
   toast(data.message || '已提交');
   state.closeDraft = null;
   state._bindMode = null;
-  state.view = 'todo'; state.todoTab = 'initiated';
+  state.todoTab = 'initiated';
+  setView('todo');
   renderSide(); renderMain();
   // AI-GEN-END
 }
@@ -5496,13 +6586,85 @@ async function showPerm(uid) {
 
 async function openAdd(){
   // AI-GEN-BEGIN
+  if (!canAddExternal()) {
+    return toast('无「新建外部人员」权限');
+  }
   state.addPersonType = 'external';
   document.getElementById('add-name').value='';
   document.getElementById('add-username').value='';
-  document.getElementById('add-user-hint').textContent='';
+  document.getElementById('add-user-hint').textContent='输入姓名后自动生成登录名，不可编辑';
   document.getElementById('add-phone').value='';
   document.getElementById('add-email').value='';
   openModal('m-add');
+  // AI-GEN-END
+}
+// AI-GEN-BEGIN
+let _previewUserTimer = null;
+async function previewUser(){
+  const name = document.getElementById('add-name').value.trim();
+  const hint = document.getElementById('add-user-hint');
+  if (!name) {
+    document.getElementById('add-username').value='';
+    if (hint) hint.textContent='输入姓名后自动生成登录名，不可编辑';
+    return;
+  }
+  if (_previewUserTimer) clearTimeout(_previewUserTimer);
+  _previewUserTimer = setTimeout(async () => {
+    const { data } = await api('/api/username/preview', {
+      method:'POST', body: JSON.stringify({ display_name: name })
+    });
+    if (!data.ok) {
+      if (hint) hint.textContent = data.error || '预览登录名失败';
+      return;
+    }
+    document.getElementById('add-username').value = data.username || '';
+    if (hint) {
+      hint.textContent = (!data.username)
+        ? '未能根据姓名生成登录名，请检查姓名'
+        : (data.username !== data.pinyin_base
+          ? `拼音 ${data.pinyin_base} 已占用，已自动分配 ${data.username}`
+          : `已生成登录名：${data.username}`);
+    }
+  }, 180);
+}
+async function submitAdd(){
+  const display_name = document.getElementById('add-name').value.trim();
+  if (!display_name) return toast('请填写姓名');
+  // 提交时由服务端按姓名直接生成，前端仅展示预览
+  let username = document.getElementById('add-username').value.trim();
+  if (!username) {
+    const { data: pre } = await api('/api/username/preview', {
+      method:'POST', body: JSON.stringify({ display_name })
+    });
+    if (pre.ok && pre.username) {
+      username = pre.username;
+      document.getElementById('add-username').value = username;
+    }
+  }
+  if (!username) return toast('无法生成登录名，请检查姓名');
+  const body = {
+    display_name,
+    phone: document.getElementById('add-phone').value.trim(),
+    email: document.getElementById('add-email').value.trim(),
+    role: 'external',
+    person_type: 'external',
+  };
+  const { data } = await api('/api/dept/members', { method:'POST', body: JSON.stringify(body) });
+  if (!data.ok) return toast(data.error);
+  // AI-GEN-BEGIN
+  const chain = (data.chain||[]).map(s => `${s.order}.${s.label}(${s.assignee})`).join(' → ');
+  toast((data.message || '已提交') + (chain ? `｜${chain}` : ''));
+  closeModal('m-add');
+  await enterHome();
+  state.todoTab = data.auto_approved ? 'done' : 'initiated';
+  setView('todo');
+  renderSide(); renderMain();
+  // AI-GEN-END
+}
+// AI-GEN-END
+function pickPersonType(el){
+  // AI-GEN-BEGIN
+  state.addPersonType = 'external';
   // AI-GEN-END
 }
 // AI-GEN-BEGIN
@@ -5513,7 +6675,7 @@ async function openEditMember(uid){
   if (!manageIds.includes(m.dept_id)) return toast('无权编辑该人员');
   document.getElementById('edit-member-id').value = m.id;
   document.getElementById('edit-member-name').value = m.display_name || '';
-  document.getElementById('edit-member-username').value = m.username || '';
+  document.getElementById('edit-member-username').value = '#' + m.id;
   document.getElementById('edit-member-phone').value = m.phone || '';
   document.getElementById('edit-member-email').value = m.email || '';
   document.getElementById('edit-member-status').value = m.status === 'closed' ? 'closed' : 'active';
@@ -5527,9 +6689,10 @@ async function openEditMember(uid){
     `<option value="${d.id}" ${d.id===m.dept_id?'selected':''}>${d.name}</option>`
   ).join('');
   document.getElementById('edit-member-hint').innerHTML =
-    `编辑 <strong>${m.display_name}</strong>（${m.username}）。关闭后不可登录，可再打开。`;
+    `编辑 <strong>${m.display_name}</strong>（用户ID #${m.id} · 手机 ${m.phone||'未填'}）。关闭后不可登录，可再打开。`;
   openModal('m-edit-member');
 }
+// AI-GEN-END
 async function submitEditMember(){
   const uid = document.getElementById('edit-member-id').value;
   const body = {
@@ -5700,37 +6863,6 @@ async function submitSyncDiff(){
   await renderMain();
   // AI-GEN-END
 }
-// AI-GEN-END
-function pickPersonType(el){
-  // AI-GEN-BEGIN
-  state.addPersonType = 'external';
-  // AI-GEN-END
-}
-async function previewUser(){
-  const name = document.getElementById('add-name').value.trim();
-  if (!name) { document.getElementById('add-username').value=''; document.getElementById('add-user-hint').textContent=''; return; }
-  const { data } = await api('/api/username/preview', { method:'POST', body: JSON.stringify({ display_name:name }) });
-  if (data.ok) {
-    document.getElementById('add-username').value = data.username;
-    document.getElementById('add-user-hint').textContent =
-      data.username!==data.pinyin_base ? `拼音 ${data.pinyin_base} 已占用，已建议 ${data.username}，仍可改` : '可编辑确认后创建';
-  }
-}
-async function submitAdd(){
-  // AI-GEN-BEGIN
-  const body = {
-    display_name: document.getElementById('add-name').value.trim(),
-    username: document.getElementById('add-username').value.trim(),
-    phone: document.getElementById('add-phone').value.trim(),
-    email: document.getElementById('add-email').value.trim(),
-    role: 'external',
-    person_type: 'external',
-  };
-  const { data } = await api('/api/dept/members', { method:'POST', body: JSON.stringify(body) });
-  if (!data.ok) return toast(data.error);
-  toast(data.message); closeModal('m-add'); renderMain();
-  // AI-GEN-END
-}
 function openImport(){
   document.getElementById('import-csv').value = '周九,13900000009,zhoujiu@lecoo.com\n吴十,13900000010,wushi@lecoo.com';
   openModal('m-import');
@@ -5767,12 +6899,18 @@ async function loadAdminSystems(el, title){
   const permQ = (state.sysPermQ || '').trim().toLowerCase();
   const focusId = state.sysFocusId || (state.adminSystems[0] && state.adminSystems[0].id);
   const focus = state.adminSystems.find(s => String(s.id)===String(focusId)) || state.adminSystems[0];
-  const allPerms = (focus && focus.permissions) || [];
+  const leucFocus = !!(focus && (focus.apply_mode === 'roles' || focus.is_builtin || focus.code === 'leuc'));
+  const allRoles = (focus && focus.roles) || [];
+  const allPerms = leucFocus ? [] : ((focus && focus.permissions) || []);
   const filterPerm = (p) => {
     if (!permQ) return true;
     const hay = `${p.perm_code||''} ${p.perm_name||''} ${p.description||''}`.toLowerCase();
     return hay.includes(permQ);
   };
+  const filteredRoles = allRoles.filter(r => {
+    if (!permQ) return true;
+    return `${r.code||''} ${r.label||''}`.toLowerCase().includes(permQ);
+  });
   const filtered = allPerms.filter(filterPerm);
   const parentName = (pid) => {
     const p = allPerms.find(x => x.id === pid);
@@ -5886,7 +7024,7 @@ async function loadAdminSystems(el, title){
             · 已绑定 <b>${focus.account_bound_count||0}</b>
             · 无归属 <b>${focus.account_unbound_count||0}</b>
             · LEUC 开通 <b>${loginAccts.length}</b>
-            · 权限 <b>${allPerms.length}</b>
+            · ${leucFocus?`角色 <b>${allRoles.length}</b>`:`权限 <b>${allPerms.length}</b>`}
           </div>
         </div>` : '';
   const uidCol = (focus.code==='beisen' && (focus.sso_login_field||'account_uid')==='account_uid')
@@ -5943,7 +7081,30 @@ async function loadAdminSystems(el, title){
             </table>
           </div>
         </div>` : '';
-  const permsCard = focus ? `
+  const permsCard = focus ? (leucFocus ? `
+        <div class="card">
+          <h4 style="margin:0 0 10px">本系统角色 <span class="note">与「角色与权限」同源 · 申请时勾选角色</span>
+            <span class="pill p-blue">${allRoles.length}</span></h4>
+          <div class="toolbar" style="margin-bottom:10px">
+            <input id="sys-perm-q" type="search" placeholder="按编码 / 名称查询…"
+              value="${(state.sysPermQ||'').replace(/"/g,'&quot;')}"
+              style="flex:1;min-width:180px;padding:8px 10px;border:1px solid var(--line);border-radius:8px"
+              onkeydown="if(event.key==='Enter'){state.sysPermQ=this.value;renderMain()}">
+            <button class="btn btn-sm btn-line" onclick="state.sysPermQ=document.getElementById('sys-perm-q').value;renderMain()">查询</button>
+            ${permQ?`<button class="btn btn-sm btn-line" onclick="state.sysPermQ='';renderMain()">清空</button>`:''}
+            <button class="btn btn-sm btn-line" onclick="nav('admin_roles')">去角色与权限</button>
+          </div>
+          <table>
+            <thead><tr><th>编码</th><th>名称</th><th>类型</th></tr></thead>
+            <tbody>${filteredRoles.length?filteredRoles.map(r=>`<tr>
+                <td><code>${r.code}</code></td>
+                <td>${r.label}</td>
+                <td>${r.is_builtin?'<span class="pill p-gray">内置</span>':'<span class="pill p-orange">自定义</span>'}</td>
+              </tr>`).join(''):`<tr><td colspan="3" class="note">${allRoles.length?'无匹配角色':'暂无角色'}</td></tr>`}
+            </tbody>
+          </table>
+          <div class="note" style="margin-top:10px">菜单/按钮请在「角色与权限 · 按角色」配置；此处仅展示可申请角色目录。</div>
+        </div>` : `
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
             <h4 style="margin:0">全部权限 <span class="note">可申请权限目录</span>
@@ -5986,11 +7147,11 @@ async function loadAdminSystems(el, title){
             <button class="btn btn-sm btn-line" onclick="openAddSysPerm(${focus.id})">添加权限项</button>`:''}
             <span class="note">${viewMode==='list'?`列表 ${filtered.length}/${allPerms.length}`:`树状 · 共 ${allPerms.length} 项`} · 与敏感复选框无关</span>
           </div>
-        </div>` : '';
+        </div>`) : '';
   el.innerHTML = `
     <div class="ptitle">${title} <span class="pill p-blue">OIDC</span>
       <span class="pill p-gray">${(data.systems||[]).length} 个系统</span></div>
-    <div class="callout"><strong>可登录系统目录</strong>：查看每个系统的<strong>当前状态</strong>、<strong>全部账户</strong>、<strong>全部权限</strong>。
+    <div class="callout"><strong>可登录系统目录</strong>：查看每个系统的<strong>当前状态</strong>、<strong>全部账户</strong>、<strong>${leucFocus?'本系统角色':'全部权限'}</strong>。
       账号申请读取启用系统列表。仅系统管理员 / 超管可见。
       Issuer：<code>${data.issuer}</code></div>
     <div class="toolbar">
@@ -6007,7 +7168,7 @@ async function loadAdminSystems(el, title){
             ${s.is_builtin?'<span class="pill p-blue">内置</span>':''}
             ${s.status!=='enabled'?'<span class="pill p-orange">禁用</span>':''}
             ${s.can_manage?'<span class="mgmt">我管</span>':''}
-            <span class="note" style="margin-left:auto">${s.is_builtin?'本系统':`${s.account_pool_count||0}账 · ${(s.permissions||[]).length}权`}</span>
+            <span class="note" style="margin-left:auto">${s.is_builtin||s.apply_mode==='roles'?`${(s.roles||[]).length}角色`:`${s.account_pool_count||0}账 · ${(s.permissions||[]).length}权`}</span>
           </div>`).join('')||'<div class="note">暂无系统</div>'}
       </div>
       <div>
@@ -6015,7 +7176,7 @@ async function loadAdminSystems(el, title){
         <div class="toolbar" style="margin-bottom:12px">
           ${tabBtn('status','当前状态')}
           ${tabBtn('accounts','全部账户', accounts.length)}
-          ${tabBtn('perms','全部权限', allPerms.length)}
+          ${tabBtn('perms', leucFocus?'本系统角色':'全部权限', leucFocus?allRoles.length:allPerms.length)}
         </div>
         ${detailTab==='accounts' ? accountsCard : (detailTab==='perms' ? permsCard : statusCard)}
         ` : '<div class="note">请选择左侧系统</div>'}
@@ -6153,7 +7314,7 @@ async function renderSysAccounts(el){
     </div>
     <div class="callout">统一管理子系统账号池：同步/导入/添加、确认绑定。账号须含<strong>唯一标识</strong>（各系统 SSO 登录字段；北森为北森用户ID）。
       <strong>北森</strong>点「同步」将从 <a href="https://leorg-ai.lecoosys.com/api/docs/" target="_blank" rel="noopener">LeOrg</a> 拉取组织人员的 <code>beisen_id</code> 写入账号池（失败则用本系统已有北森ID的组织人员）。
-      <strong>北森 SSO 只认此处已绑定且可登录的账号</strong>，通讯录里的北森ID不能直接登录。
+      <strong>北森 SSO</strong>：通讯录北森用户ID 非空即可自动绑定登录；账号池绑定仍可用于多账号选择。
       匹配字段：${(ov.match_fields||[]).join(' / ')}。</div>
     <div class="toolbar">
       <select id="sa-sys" onchange="state.acctOv.system_id=this.value;state.sysAcctFilter=this.value;state.acctOv.page=1;renderMain()">
@@ -6189,16 +7350,23 @@ async function renderSysAccounts(el){
             <span class="pill p-orange">待确认</span>
           </div>
           <div class="note">LEUC：手机 ${g.leuc_phone||'-'} · 邮箱 ${g.leuc_email||'-'} · itcode ${g.leuc_itcode||'-'}</div>
-          <div style="margin-top:8px;font-size:13px">
-            ${(g.matches||[]).length ? g.matches.map((m,i)=>`
-              <label style="display:flex;gap:8px;align-items:center;padding:4px 0;cursor:pointer">
-                <input type="radio" name="g${g.id}" value="${m.account_id}" ${i===0?'checked':''}>
-                <code>${m.account_uid||'-'}</code>
-                <code>${m.account_name}</code> ${m.display_name||''}
-                <span class="pill p-blue">${(m.hits||[]).join('+')||'候选'}</span>
-                <span class="note">分 ${m.score}</span>
-              </label>`).join('') : '<div class="warn">无匹配账号 — 可新建绑定</div>'}
-          </div>
+          <!-- AI-GEN-BEGIN -->
+          ${(() => {
+            const top = (g.matches && g.matches[0]) || null;
+            const rec = top ? (top.account_name || top.account_uid || '') : '';
+            const hitTxt = top
+              ? `推荐：按${(top.hits||[]).join('+')||'匹配'}（分 ${top.score}）`
+              : '无手机/邮箱/姓名等匹配，可留空后「新建并绑定」，或手工填写账号名/唯一标识';
+            return `<div class="field" style="margin-top:8px">
+              <label>绑定账号（可输入）</label>
+              <input id="sa-bind-acct-${g.id}" value="${String(rec).replace(/"/g,'&quot;')}"
+                placeholder="账号名或唯一标识，无匹配可留空"
+                style="width:100%;max-width:420px;padding:8px 10px;border:1px solid var(--line);border-radius:8px"
+                data-rec-id="${top && top.account_id != null ? top.account_id : ''}">
+              <div class="note">${hitTxt}</div>
+            </div>`;
+          })()}
+          <!-- AI-GEN-END -->
           <div class="toolbar" style="margin-top:8px">
             <button class="btn btn-sm btn-pri" style="width:auto" onclick="saConfirm(${g.id},false)">确认绑定</button>
             <button class="btn btn-sm btn-line" onclick="saConfirm(${g.id},true)">新建并绑定</button>
@@ -6369,25 +7537,32 @@ async function oaSimLeave(who){
 
 async function saConfirm(grantId, createNew){
   // AI-GEN-BEGIN
-  const sel = document.querySelector(`input[name="g${grantId}"]:checked`);
+  const inp = document.getElementById('sa-bind-acct-' + grantId);
+  const typed = ((inp && inp.value) || '').trim();
+  const recId = inp ? (inp.getAttribute('data-rec-id') || '') : '';
+  const g = ((state.sysAcctData && state.sysAcctData.grants) || []).find(x => String(x.id)===String(grantId));
   if (!createNew) {
-    const body = { grant_id: grantId, create_new: false };
-    if (sel) body.account_id = Number(sel.value);
+    if (!typed) return toast('请填写要绑定的账号，或点「新建并绑定」');
+    const body = { grant_id: grantId, create_new: false, account_key: typed };
+    const top = (g && g.matches && g.matches[0]) || null;
+    if (recId && top && (typed === (top.account_name || '') || typed === (top.account_uid || ''))) {
+      body.account_id = Number(recId);
+    }
     const { data } = await api('/api/sys-accounts/confirm-bind', { method:'POST', body: JSON.stringify(body) });
     if (!data.ok) return toast(data.error);
     toast(data.message); renderMain();
     return;
   }
   state._newBindGrantId = grantId;
-  const g = ((state.sysAcctData && state.sysAcctData.grants) || []).find(x => String(x.id)===String(grantId));
   const sys = ((state.sysAcctData && state.sysAcctData.systems) || []).find(s => String(s.id)===String(g && g.system_id));
   const uidLab = (sys && sys.code==='beisen') ? '北森用户ID' : ((sys && sys.sso_login_field_label) || '唯一标识');
   document.getElementById('sa-newbind-hint').textContent =
     `为 ${g?g.leuc_name:''} 在「${g?g.system_name:''}」新建账号并绑定；${uidLab} 为 SSO 关键字段。`;
   document.getElementById('sa-newbind-uid-lab').innerHTML =
     `${uidLab} <span class="pill p-orange">必填</span>`;
-  document.getElementById('sa-newbind-uid').value = '';
-  document.getElementById('sa-newbind-name').value = (g && g.leuc_username) ? `${g.leuc_username}_auto` : '';
+  document.getElementById('sa-newbind-uid').value = typed || '';
+  document.getElementById('sa-newbind-name').value = typed
+    || ((g && g.leuc_username) ? `${g.leuc_username}_auto` : '');
   openModal('m-sa-newbind');
   // AI-GEN-END
 }
@@ -6584,6 +7759,14 @@ function openAddSys(){
   document.getElementById('sys-cb').value = `${location.origin}/oidc/callback?app=`;
   // AI-GEN-END
   document.getElementById('sys-sso-field').value = 'account_name';
+  // AI-GEN-BEGIN
+  document.getElementById('sys-nav-icon').value = '';
+  document.getElementById('sys-home-url').value = '';
+  const showNav = document.getElementById('sys-show-in-nav');
+  if (showNav) showNav.checked = true;
+  const closeApi = document.getElementById('sys-close-api-url');
+  if (closeApi) closeApi.value = '';
+  // AI-GEN-END
   document.getElementById('sys-owners-field').style.display = '';
   renderOwnerChecks([], 'sys-owners-box');
   document.getElementById('sys-form-ok').textContent = '保存';
@@ -6598,7 +7781,7 @@ function openEditSys(sid){
   state._editSysId = sid;
   document.getElementById('sys-form-title').textContent = '编辑登录系统';
   document.getElementById('sys-form-hint').innerHTML =
-    '可改名称、回调、准入方式、外部登录、SSO 登录字段'
+    '可改名称、回调、准入方式、外部登录、SSO 登录字段、导航图标/首页链接、关账接口'
     + (state.isSysSuper ? '与系统管理员' : '')
     + '。<strong>code</strong> 与 <strong>client_id</strong> 不可修改。';
   document.getElementById('sys-code-lock').style.display = '';
@@ -6626,6 +7809,14 @@ function openEditSys(sid){
     if (opt) opt.textContent = '北森用户ID';
   }
   ssoSel.value = s.sso_login_field || (s.code==='beisen'?'account_uid':'account_name');
+  // AI-GEN-BEGIN
+  document.getElementById('sys-nav-icon').value = s.nav_icon || '';
+  document.getElementById('sys-home-url').value = s.home_url || '';
+  const showNav = document.getElementById('sys-show-in-nav');
+  if (showNav) showNav.checked = s.show_in_nav !== 0 && s.show_in_nav !== false;
+  const closeApi = document.getElementById('sys-close-api-url');
+  if (closeApi) closeApi.value = s.close_api_url || '';
+  // AI-GEN-END
   if (state.isSysSuper) {
     document.getElementById('sys-owners-field').style.display = '';
     renderOwnerChecks(s.owner_user_ids || (s.owners||[]).map(o=>o.id), 'sys-owners-box');
@@ -6651,6 +7842,12 @@ async function submitAddSys(){
     access_mode: state.sysAccessMode || 'apply',
     forbid_external: !!document.getElementById('sys-forbid-ext')?.checked,
     sso_login_field: document.getElementById('sys-sso-field').value,
+    // AI-GEN-BEGIN
+    nav_icon: (document.getElementById('sys-nav-icon')?.value || '').trim(),
+    home_url: (document.getElementById('sys-home-url')?.value || '').trim(),
+    show_in_nav: !!document.getElementById('sys-show-in-nav')?.checked,
+    close_api_url: (document.getElementById('sys-close-api-url')?.value || '').trim(),
+    // AI-GEN-END
   };
   if (!editId) {
     body.code = document.getElementById('sys-code').value.trim();
@@ -6890,7 +8087,14 @@ async function maybeOpenBeisenChoose(){
   if (qs.get('beisen_sso_choose') !== '1') return;
   state._beisenChooseReturn = qs.get('return_url') || 'https://www.italent.cn/';
   state._beisenChooseUty = qs.get('uty') || 'id';
-  history.replaceState({}, '', location.pathname || '/');
+  // AI-GEN-BEGIN
+  // 只清一次性 SSO 参数，保留 ?view= 以便刷新仍在当前页
+  qs.delete('beisen_sso_choose');
+  qs.delete('return_url');
+  qs.delete('uty');
+  const q = qs.toString();
+  history.replaceState({}, '', (location.pathname || '/') + (q ? '?' + q : '') + (location.hash || ''));
+  // AI-GEN-END
   await openBeisenChooseModal();
 }
 // AI-GEN-END

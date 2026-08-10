@@ -75,15 +75,26 @@ from db import (
     SYSTEM_ROLE_EXCLUDE,
     alloc_username,
     connect,
+    ensure_contact_available,
+    ensure_email_suffix_allowed,
     ensure_roles_seeded,
+    ensure_system_settings_table,
     ensure_user_roles_migrated,
     ensure_username_available,
+    get_setting,
     init_db,
+    list_system_settings,
     migrate_schema,
     name_to_pinyin,
+    normalize_email,
+    normalize_phone,
     normalize_username,
+    parse_email_allowed_suffixes,
     preview_unique_usernames,
+    resolve_contacts_for_create,
+    resolve_contacts_for_update,
     role_label_of,
+    set_setting,
     sync_primary_role,
     user_roles_of,
 )
@@ -91,14 +102,21 @@ from db import (
 # AI-GEN-BEGIN
 from leuc_approval_ext import (
     append_applicant_confirm,
+    append_flow_event,
     build_apply_form_fields,
     build_apply_form_view,
+    build_cc_dimension,
+    cancel_application_flow,
+    cc_status_label,
     collect_cc_for_system_owners,
     editable_form_keys,
+    ensure_flow_events_table,
     expand_account_permissions,
     group_bind_items_by_owner,
     jump_to_reject_from_step,
+    list_flow_events,
     merge_todo_meta_updates,
+    normalize_cc_status,
     reject_to_specified_step,
     spawn_cc_todos,
     user_permission_snapshot,
@@ -115,11 +133,22 @@ from leuc_ops import (
     list_leave_close_records,
     list_scheduled_tasks,
     list_sync_changes,
+    list_system_alerts,
     list_task_runs,
+    raise_system_alert,
     record_credential_notify,
     start_task_scheduler,
     update_scheduled_task,
     write_audit_log,
+    ensure_ops_tables,
+)
+from leuc_bulk_close import (
+    append_bulk_event,
+    ensure_bulk_close_tables,
+    get_bulk_close_detail,
+    list_bulk_close_records,
+    save_bulk_files,
+    system_has_close_api,
 )
 # AI-GEN-END
 
@@ -610,6 +639,7 @@ def row_user(row):
     role = row["role"]
     menus, caps = [], []
     role_codes = []
+    loaded_role_cfg = False
     if db is not None:
         try:
             ensure_user_roles_migrated(db)
@@ -631,18 +661,22 @@ def row_user(row):
                     cap_set.add(r["cap_id"])
             menus = sorted(menu_set)
             caps = sorted(cap_set)
+            loaded_role_cfg = True
         except Exception:
             menus, caps = [], []
     else:
         role_codes = [role] if role else ["employee"]
-    if not menus:
-        for rc in role_codes:
-            menus.extend(DEFAULT_ROLE_MENUS.get(rc, ROLE_MENUS.get(rc, [])))
-        menus = list(dict.fromkeys(menus))
-    if not caps:
-        for rc in role_codes:
-            caps.extend(DEFAULT_ROLE_CAPS.get(rc, []))
-        caps = list(dict.fromkeys(caps))
+    # 仅 DB 不可用时回退代码默认；库内空配置表示管理员已保存清空，不得再灌回默认
+    if not loaded_role_cfg:
+        if not menus:
+            for rc in role_codes:
+                menus.extend(DEFAULT_ROLE_MENUS.get(rc, ROLE_MENUS.get(rc, [])))
+            menus = list(dict.fromkeys(menus))
+        if not caps:
+            for rc in role_codes:
+                caps.extend(DEFAULT_ROLE_CAPS.get(rc, []))
+            caps = list(dict.fromkeys(caps))
+    # AI-GEN-END
     # 系统超管：始终全菜单 + 全按钮
     if (row["username"] or "") == SYSTEM_ADMIN_USERNAME or "super_admin" in role_codes:
         menus = [m["id"] for m in ALL_MENUS]
@@ -685,6 +719,9 @@ def row_user(row):
             (row["beisen_user_id"] or None) if "beisen_user_id" in keys else None
         ),
         # AI-GEN-BEGIN
+        "feishu_user_id": (
+            (row["feishu_user_id"] or None) if "feishu_user_id" in keys else None
+        ),
         "leorg_emp_id": (
             (row["leorg_emp_id"] if "leorg_emp_id" in keys else None)
         ),
@@ -706,6 +743,15 @@ def row_user(row):
         "menus": menus,
         "caps": caps,
         "buttons": caps,  # 按钮权限 = role_caps
+        # AI-GEN-BEGIN
+        # 与 can_add_external_member 对齐：有 org_add / 全员组织权 / 超管·人事
+        "can_add_external": bool(
+            "org_add" in caps
+            or "manage_all_org" in caps
+            or "super_admin" in role_codes
+            or "hr_specialist" in role_codes
+        ),
+        # AI-GEN-END
         "can_proxy_apply": "proxy_apply" in caps,
         "can_set_account_expire": "set_account_expire" in caps,
         "status": (row["status"] if "status" in keys else "active") or "active",
@@ -717,7 +763,12 @@ def user_has_cap(user, cap_id: str) -> bool:
     # AI-GEN-BEGIN
     if not user:
         return False
-    return cap_id in (user.get("caps") or [])
+    caps = user.get("caps") or []
+    if cap_id in caps:
+        return True
+    # 兼容仅带 buttons 的调用方
+    buttons = user.get("buttons") or []
+    return cap_id in buttons
     # AI-GEN-END
 
 
@@ -760,6 +811,17 @@ def require_dept_manage(user):
         return True
     db = get_db()
     return bool(managed_dept_ids(db, user))
+
+
+# AI-GEN-BEGIN
+def can_add_external_member(user) -> bool:
+    """新建外部人员：有 org_add 按钮，或具备部门管理权。"""
+    if not user:
+        return False
+    if user_has_cap(user, "org_add"):
+        return True
+    return require_dept_manage(user)
+# AI-GEN-END
 
 
 def require_hr_manage(user):
@@ -913,6 +975,15 @@ def user_can_set_account_expire(user):
         return True
     return bool(user.get("can_set_account_expire"))
     # AI-GEN-END
+
+
+# AI-GEN-BEGIN
+def user_can_reset_org_password(user):
+    """部门和人员：直接修改他人登录密码（角色按钮 org_reset_password）。"""
+    if not user:
+        return False
+    return user_has_cap(user, "org_reset_password")
+# AI-GEN-END
 
 
 # AI-GEN-BEGIN
@@ -1077,6 +1148,38 @@ def user_may_access_system(db, user_row, system_row):
     if ptype == "external" and forbid:
         return False, f"{system_row['name']} 禁止外部人员登录"
     return True, ""
+# AI-GEN-END
+
+
+# AI-GEN-BEGIN
+def profile_sso_id(user_row, system_code: str) -> str | None:
+    """通讯录同步得到的系统身份 ID：非空即视为自动绑定可登录。
+
+    beisen -> users.beisen_user_id；feishu -> users.feishu_user_id。
+    """
+    if not user_row or not system_code:
+        return None
+    code = str(system_code).strip().lower()
+    keys = user_row.keys() if hasattr(user_row, "keys") else []
+    col = None
+    if code == "beisen":
+        col = "beisen_user_id"
+    elif code == "feishu":
+        col = "feishu_user_id"
+    else:
+        return None
+    if col not in keys:
+        # dict / Row 兼容：也可能是普通 dict
+        if isinstance(user_row, dict):
+            raw = user_row.get(col)
+        else:
+            return None
+    else:
+        raw = user_row[col]
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    return s or None
 # AI-GEN-END
 
 
@@ -1613,6 +1716,18 @@ def serialize_todo(db, row):
     # AI-GEN-BEGIN
     d["is_cc"] = bool(meta.get("cc") or d.get("todo_type") == "知会确认")
     d["is_confirm"] = step_key == "applicant_confirm"
+    if d["is_cc"]:
+        cc_st = normalize_cc_status(d.get("status"), d.get("bucket"))
+        d["cc_status"] = cc_st
+        d["status_label"] = cc_status_label(cc_st)
+        d["read_at"] = meta.get("read_at")
+        # 列表进度：知会独立维度，不显示主链审批进度语义
+        d["progress"] = "知会"
+        d["progress_label"] = d["status_label"]
+        if cc_st == "read":
+            d["current_approver"] = None
+        else:
+            d["current_approver"] = _user_brief(db, d.get("assignee_id"))
     d["rejectable_steps"] = []
     if app_id and d.get("bucket") == "pending" and not d["is_cc"] and not d["is_confirm"]:
         # 0 = 申请人修改重提
@@ -1654,6 +1769,12 @@ def serialize_todo(db, row):
         )
     )
     d["reject_from_step"] = reject_from
+    # AI-GEN-BEGIN
+    # 未结束可撤销（接口再校验是否申请人/发起人）
+    d["can_cancel"] = bool(
+        app_id and app_status in ("pending", "returned") and not d.get("is_cc")
+    )
+    # AI-GEN-END
     form_view = build_apply_form_view(db, meta, app_row if app_id else None)
     form_fields = form_view.get("rows") or build_apply_form_fields(
         db, meta, app_row if app_id else None
@@ -1708,7 +1829,11 @@ def _persist_decide_remark(db, tid, remark, *, app_id=None, step_order=None):
 
 
 def build_application_flow(db, app_id):
-    """拼装申请单流程：时间线 / 当前审核人 / 预测步骤。"""
+    """拼装申请单流程：时间线 / 当前审核人 / 预测步骤。
+
+    有 application_flow_events 时按事件拼完整链路（含驳回、再提交）；
+    否则回退到 application_steps 快照。
+    """
     # AI-GEN-BEGIN
     app = db.execute("SELECT * FROM applications WHERE id = ?", (app_id,)).fetchone()
     if not app:
@@ -1719,78 +1844,278 @@ def build_application_flow(db, app_id):
             "current_approver": None,
             "progress": "",
             "progress_label": "",
+            "cc_dimension": {"items": [], "summary": "无知会", "read_count": 0, "total": 0},
         }
     steps = db.execute(
         """SELECT * FROM application_steps
         WHERE application_id = ? ORDER BY step_order""",
         (app_id,),
     ).fetchall()
+    events = list_flow_events(db, app_id)
     timeline = []
     current_approver = None
     current_label = None
     current_order = None
-    for s in steps:
-        st = (s["status"] or "").strip()
-        assignee = _user_brief(db, s["assignee_id"])
-        if st in ("approved", "rejected", "skipped"):
-            phase = "done"
-        elif st == "pending":
-            phase = "current"
-            current_approver = assignee
-            current_label = s["step_label"]
-            current_order = s["step_order"]
-        else:
-            phase = "forecast"
-        timeline.append(
-            {
-                "step_order": s["step_order"],
-                "step_key": s["step_key"],
-                "step_label": s["step_label"],
-                "status": st,
-                "phase": phase,
-                "assignee": assignee,
-                "assignee_id": s["assignee_id"],
-                "todo_id": s["todo_id"],
-                "decided_at": s["decided_at"],
-                "remark": (s["remark"] if "remark" in s.keys() else None) or None,
-                "step_kind": (s["step_kind"] if "step_kind" in s.keys() else "approve"),
-            }
-        )
-    forecast = [t for t in timeline if t["phase"] == "forecast"]
-    total = int(app["total_steps"] or len(timeline) or 1)
-    cur = int(current_order or app["current_step"] or 1)
-    if app["status"] in ("approved", "rejected", "done"):
-        progress = f"{total}/{total}"
-        progress_label = "已结束"
-        current_approver = None
-    else:
-        progress = f"{cur}/{total}"
-        progress_label = current_label or f"第{cur}步"
     applicant = _user_brief(db, app["applicant_id"])
-    # AI-GEN-BEGIN
-    # 驳回到申请人（current_step=0）：时间线插入虚拟当前节点
-    if app["status"] == "returned" and int(app["current_step"] or -1) == 0:
-        current_approver = applicant
-        progress = f"0/{total}"
-        progress_label = "申请人修改重提"
+
+    def _event_item(ev):
+        et = ev.get("event_type") or ""
+        actor = _user_brief(db, ev.get("actor_user_id"))
+        assignee = _user_brief(db, ev.get("assignee_id")) or actor
+        detail = ev.get("detail") if isinstance(ev.get("detail"), dict) else {}
+        label = ev.get("step_label") or et
+        status_map = {
+            "submitted": "submitted",
+            "approved": "approved",
+            "rejected": "rejected",
+            "resubmitted": "resubmitted",
+            "cancelled": "cancelled",
+        }
+        kind_map = {
+            "submitted": "initiate",
+            "resubmitted": "resubmit",
+            "cancelled": "cancel",
+            "rejected": "reject",
+        }
+        rem = (ev.get("remark") or "").strip()
+        extra = ""
+        if et == "rejected" and detail.get("reject_to_label"):
+            extra = f" → {detail.get('reject_to_label')}"
+        if et == "resubmitted" and detail.get("jump_to_label"):
+            extra = f" → {detail.get('jump_to_label')}"
+        return {
+            "event_type": et,
+            "step_order": ev.get("step_order"),
+            "step_key": ev.get("step_key") or et,
+            "step_label": f"{label}{extra}" if extra else label,
+            "status": status_map.get(et, et),
+            "phase": "done",
+            "assignee": assignee,
+            "actor": actor,
+            "assignee_id": ev.get("assignee_id") or ev.get("actor_user_id"),
+            "todo_id": None,
+            "decided_at": ev.get("created_at"),
+            "remark": rem or None,
+            "step_kind": kind_map.get(et, "approve"),
+            "detail": detail or None,
+        }
+
+    if events:
+        for ev in events:
+            timeline.append(_event_item(ev))
+        # 当前待审节点（未结束时）
+        if app["status"] in ("pending", "returned"):
+            if app["status"] == "returned" and int(
+                app["current_step"] if app["current_step"] is not None else -1
+            ) == 0:
+                current_approver = applicant
+                current_label = "申请人修改重提"
+                current_order = 0
+                timeline.append(
+                    {
+                        "event_type": "waiting_edit",
+                        "step_order": 0,
+                        "step_key": "applicant_edit",
+                        "step_label": "申请人修改重提",
+                        "status": "pending",
+                        "phase": "current",
+                        "assignee": applicant,
+                        "assignee_id": app["applicant_id"],
+                        "todo_id": None,
+                        "decided_at": None,
+                        "remark": None,
+                        "step_kind": "edit",
+                    }
+                )
+            else:
+                for s in steps:
+                    st = (s["status"] or "").strip()
+                    if st != "pending":
+                        continue
+                    assignee = _user_brief(db, s["assignee_id"])
+                    current_approver = assignee
+                    current_label = s["step_label"]
+                    current_order = s["step_order"]
+                    timeline.append(
+                        {
+                            "event_type": "pending",
+                            "step_order": s["step_order"],
+                            "step_key": s["step_key"],
+                            "step_label": s["step_label"],
+                            "status": "pending",
+                            "phase": "current",
+                            "assignee": assignee,
+                            "assignee_id": s["assignee_id"],
+                            "todo_id": s["todo_id"],
+                            "decided_at": None,
+                            "remark": None,
+                            "step_kind": (
+                                s["step_kind"] if "step_kind" in s.keys() else "approve"
+                            ),
+                        }
+                    )
+        forecast = []
+        if app["status"] in ("pending", "returned"):
+            for s in steps:
+                st = (s["status"] or "").strip()
+                if st != "waiting":
+                    continue
+                forecast.append(
+                    {
+                        "event_type": "forecast",
+                        "step_order": s["step_order"],
+                        "step_key": s["step_key"],
+                        "step_label": s["step_label"],
+                        "status": "waiting",
+                        "phase": "forecast",
+                        "assignee": _user_brief(db, s["assignee_id"]),
+                        "assignee_id": s["assignee_id"],
+                        "todo_id": None,
+                        "decided_at": None,
+                        "remark": None,
+                        "step_kind": (
+                            s["step_kind"] if "step_kind" in s.keys() else "approve"
+                        ),
+                    }
+                )
+    else:
+        # 无事件：兼容旧数据，按步骤快照
+        for s in steps:
+            st = (s["status"] or "").strip()
+            assignee = _user_brief(db, s["assignee_id"])
+            if st in ("approved", "rejected", "skipped", "cancelled"):
+                phase = "done"
+            elif st == "pending":
+                phase = "current"
+                current_approver = assignee
+                current_label = s["step_label"]
+                current_order = s["step_order"]
+            else:
+                phase = "forecast"
+            timeline.append(
+                {
+                    "step_order": s["step_order"],
+                    "step_key": s["step_key"],
+                    "step_label": s["step_label"],
+                    "status": st,
+                    "phase": phase,
+                    "assignee": assignee,
+                    "assignee_id": s["assignee_id"],
+                    "todo_id": s["todo_id"],
+                    "decided_at": s["decided_at"],
+                    "remark": (s["remark"] if "remark" in s.keys() else None) or None,
+                    "step_kind": (
+                        s["step_kind"] if "step_kind" in s.keys() else "approve"
+                    ),
+                }
+            )
+        forecast = [t for t in timeline if t["phase"] == "forecast"]
+        if app["status"] == "returned" and int(
+            app["current_step"] if app["current_step"] is not None else -1
+        ) == 0:
+            current_approver = applicant
+            current_label = "申请人修改重提"
+            current_order = 0
+            timeline.insert(
+                0,
+                {
+                    "step_order": 0,
+                    "step_key": "applicant_edit",
+                    "step_label": "申请人修改重提",
+                    "status": "pending",
+                    "phase": "current",
+                    "assignee": applicant,
+                    "assignee_id": app["applicant_id"],
+                    "todo_id": None,
+                    "decided_at": None,
+                    "remark": None,
+                    "step_kind": "edit",
+                },
+            )
+            forecast = [t for t in timeline if t["phase"] == "forecast"]
+        # 首节点：发起人
+        init_row = db.execute(
+            """SELECT initiator_id FROM todos
+            WHERE application_id = ?
+            ORDER BY CASE WHEN bucket = 'initiated' THEN 0 ELSE 1 END, id
+            LIMIT 1""",
+            (app_id,),
+        ).fetchone()
+        initiator_id = (
+            int(init_row["initiator_id"])
+            if init_row and init_row["initiator_id"]
+            else int(app["applicant_id"])
+        )
+        initiator = _user_brief(db, initiator_id)
         timeline.insert(
             0,
             {
                 "step_order": 0,
-                "step_key": "applicant_edit",
-                "step_label": "申请人修改重提",
-                "status": "pending",
-                "phase": "current",
-                "assignee": applicant,
-                "assignee_id": app["applicant_id"],
+                "step_key": "initiator",
+                "step_label": "发起人",
+                "status": "submitted",
+                "phase": "done",
+                "assignee": initiator,
+                "assignee_id": initiator_id,
                 "todo_id": None,
-                "decided_at": None,
+                "decided_at": app["created_at"],
                 "remark": None,
-                "step_kind": "edit",
+                "step_kind": "initiate",
             },
         )
-        forecast = [t for t in timeline if t["phase"] == "forecast"]
-    # AI-GEN-END
+
+    total = int(app["total_steps"] or len(steps) or 1)
+    if current_order is not None:
+        cur = int(current_order)
+    elif app["current_step"] is not None:
+        cur = int(app["current_step"])
+    else:
+        cur = 1
+    if app["status"] in ("approved", "rejected", "done", "cancelled"):
+        progress = f"{total}/{total}"
+        progress_label = (
+            "已撤销" if app["status"] == "cancelled" else "已结束"
+        )
+        current_approver = None
+    else:
+        progress = f"{cur}/{total}"
+        progress_label = current_label or (f"第{cur}步" if cur > 0 else "申请人修改重提")
+
+    init_row = db.execute(
+        """SELECT initiator_id FROM todos
+        WHERE application_id = ?
+        ORDER BY CASE WHEN bucket = 'initiated' THEN 0 ELSE 1 END, id
+        LIMIT 1""",
+        (app_id,),
+    ).fetchone()
+    initiator_id = (
+        int(init_row["initiator_id"])
+        if init_row and init_row["initiator_id"]
+        else int(app["applicant_id"])
+    )
+    initiator = _user_brief(db, initiator_id)
+    # 事件模式下若缺发起节点，补一条（兼容仅有后续事件的脏数据）
+    if events and not any(
+        (t.get("event_type") == "submitted" or t.get("step_kind") == "initiate")
+        for t in timeline
+    ):
+        timeline.insert(
+            0,
+            {
+                "event_type": "submitted",
+                "step_order": 0,
+                "step_key": "initiator",
+                "step_label": "发起人",
+                "status": "submitted",
+                "phase": "done",
+                "assignee": initiator,
+                "assignee_id": initiator_id,
+                "todo_id": None,
+                "decided_at": app["created_at"],
+                "remark": None,
+                "step_kind": "initiate",
+            },
+        )
     system = None
     if app["system_id"]:
         sy = db.execute(
@@ -1815,6 +2140,7 @@ def build_application_flow(db, app_id):
                 app["reject_from_step"] if "reject_from_step" in app.keys() else None
             ),
             "applicant": applicant,
+            "initiator": initiator,
             "system": system,
         },
         "timeline": timeline,
@@ -1822,6 +2148,8 @@ def build_application_flow(db, app_id):
         "current_approver": current_approver,
         "progress": progress,
         "progress_label": progress_label,
+        "cc_dimension": build_cc_dimension(db, app_id, user_brief_fn=_user_brief),
+        "events": events,
     }
     # AI-GEN-END
 
@@ -1840,8 +2168,62 @@ def build_todo_flow(db, todo_row):
         meta = json.loads(todo_row["meta"] or "{}")
     except Exception:
         meta = {}
+    is_cc = bool(meta.get("cc") or todo_row["todo_type"] == "知会确认")
     assignee = _user_brief(db, todo_row["assignee_id"])
     st = (todo_row["status"] or "").strip()
+    if is_cc:
+        cc_st = normalize_cc_status(st, todo_row["bucket"])
+        done = cc_st == "read"
+        phase = "done" if done else "current"
+        step_label = meta.get("cc_label") or "知会确认"
+        timeline = [
+            {
+                "step_order": 1,
+                "step_key": "cc",
+                "step_label": step_label,
+                "status": cc_st,
+                "phase": phase,
+                "assignee": assignee,
+                "assignee_id": todo_row["assignee_id"],
+                "todo_id": todo_row["id"],
+                "decided_at": meta.get("read_at") if done else None,
+                "remark": (
+                    (todo_row["remark"] if "remark" in todo_row.keys() else None)
+                    or meta.get("decide_remark")
+                    or None
+                ),
+                "step_kind": "cc",
+                "is_cc": True,
+            }
+        ]
+        cc_dim = {
+            "items": [
+                {
+                    "todo_id": todo_row["id"],
+                    "assignee": assignee,
+                    "assignee_id": todo_row["assignee_id"],
+                    "cc_label": step_label,
+                    "cc_status": cc_st,
+                    "status_label": cc_status_label(cc_st),
+                    "read_at": meta.get("read_at"),
+                    "remark": timeline[0]["remark"],
+                    "created_at": todo_row["created_at"],
+                }
+            ],
+            "summary": f"已阅 {1 if done else 0}/1",
+            "read_count": 1 if done else 0,
+            "total": 1,
+        }
+        return {
+            "application": None,
+            "todo": todo_ser,
+            "timeline": timeline,
+            "forecast": [],
+            "current_approver": None if done else assignee,
+            "progress": "知会",
+            "progress_label": cc_status_label(cc_st),
+            "cc_dimension": cc_dim,
+        }
     done = todo_row["bucket"] == "done" or st in ("approved", "rejected")
     phase = "done" if done else "current"
     step_label = meta.get("step_label") or todo_row["todo_type"] or "审批"
@@ -1871,6 +2253,7 @@ def build_todo_flow(db, todo_row):
         "current_approver": None if done else assignee,
         "progress": "1/1",
         "progress_label": step_label,
+        "cc_dimension": {"items": [], "summary": "无知会", "read_count": 0, "total": 0},
     }
     # AI-GEN-END
 
@@ -1914,7 +2297,8 @@ def apply_account_expire_extend(db, user_id, days=90):
 
 
 def preview_apply_flow(
-    db, *, apply_type, subject_id, system_id=None, with_sensitive=False, days=90
+    db, *, apply_type, subject_id, system_id=None, with_sensitive=False, days=90,
+    initiator_id=None,
 ):
     """提交前流程预测（不落库）。"""
     # AI-GEN-BEGIN
@@ -1997,8 +2381,24 @@ def preview_apply_flow(
 
     if not steps:
         return {"ok": False, "error": "审批链为空"}
-    preview = []
-    for i, (key, label, aid) in enumerate(steps, start=1):
+    # AI-GEN-BEGIN
+    init_uid = int(initiator_id or subject_id)
+    initiator = _user_brief(db, init_uid)
+    preview = [
+        {
+            "step_order": 0,
+            "step_key": "initiator",
+            "step_label": "发起人",
+            "phase": "done",
+            "status": "submitted",
+            "assignee": initiator,
+            "assignee_id": init_uid,
+            "step_kind": "initiate",
+            "decided_at": None,
+        }
+    ]
+    for i, step in enumerate(steps, start=1):
+        key, label, aid = step[0], step[1], step[2]
         preview.append(
             {
                 "step_order": i,
@@ -2007,18 +2407,22 @@ def preview_apply_flow(
                 "phase": "forecast" if i > 1 else "current",
                 "status": "waiting" if i > 1 else "pending",
                 "assignee": _user_brief(db, aid),
+                "assignee_id": aid,
+                "step_kind": step[3] if len(step) >= 4 else "approve",
             }
         )
+    approve_steps = [p for p in preview if p.get("step_kind") != "initiate"]
     return {
         "ok": True,
         "flow_code": flow_code,
         "title": title,
         "subject": _user_brief(db, subject_id),
+        "initiator": initiator,
         "timeline": preview,
         "forecast": [p for p in preview if p["phase"] == "forecast"],
-        "current_approver": preview[0]["assignee"] if preview else None,
-        "progress": f"1/{len(preview)}",
-        "progress_label": preview[0]["step_label"] if preview else "",
+        "current_approver": approve_steps[0]["assignee"] if approve_steps else None,
+        "progress": f"1/{len(approve_steps) or 1}",
+        "progress_label": approve_steps[0]["step_label"] if approve_steps else "",
         "chain_text": " → ".join(
             f"{p['step_label']}({(p['assignee'] or {}).get('display_name') or '?'})"
             for p in preview
@@ -2143,6 +2547,21 @@ def start_multi_step_apply(
             json.dumps({"steps": step_preview, **meta_extra}, ensure_ascii=False),
         ),
     )
+    # AI-GEN-BEGIN
+    append_flow_event(
+        db,
+        app_id,
+        "submitted",
+        step_order=0,
+        step_key="initiator",
+        step_label="发起申请",
+        actor_user_id=initiator_id,
+        assignee_id=initiator_id,
+        remark=None,
+        detail={"todo_type": todo_type, "first_step": step_preview[0] if step_preview else None},
+        now=now,
+    )
+    # AI-GEN-END
     return app_id, first_todo, first_assignee, step_preview
     # AI-GEN-END
 
@@ -2516,6 +2935,454 @@ def reopen_leuc_user(db, user_id):
             (int(user_id), sys["id"]),
         )
     return {"ok": True, "reopened_leuc": True}
+    # AI-GEN-END
+
+
+def can_proxy_bulk_close(user, target_row) -> bool:
+    """一键关账：仅代关他人（需代人/人事/超管/可管部门）。"""
+    # AI-GEN-BEGIN
+    if not user or not target_row:
+        return False
+    if int(user["id"]) == int(target_row["id"]):
+        return False
+    if user_has_cap(user, "proxy_apply") or user_has_role(user, "hr_specialist", "super_admin"):
+        return True
+    if user.get("can_proxy_apply"):
+        return True
+    if user_has_role(user, "dept_owner"):
+        return can_manage_member(user, target_row)
+    return False
+    # AI-GEN-END
+
+
+def execute_proxy_bulk_close(
+    db,
+    *,
+    operator,
+    target_user_id: int,
+    reason: str = "",
+    credential_note: str = "",
+    effective_at: str | None = None,
+    files=None,
+    base_dir=None,
+) -> dict:
+    """代关：关本系统+关联业务账号；有 close_api_url 则接口直关，否则系统管理员待办。"""
+    # AI-GEN-BEGIN
+    ensure_ops_tables(db)
+    ensure_bulk_close_tables(db)
+    target = db.execute("SELECT * FROM users WHERE id = ?", (int(target_user_id),)).fetchone()
+    if not target:
+        return {"ok": False, "error": "目标人员不存在"}
+    if not can_proxy_bulk_close(operator, target):
+        return {"ok": False, "error": "无权代关该人员（仅可代关他人）"}
+    now = now_ts()
+    eff = (effective_at or "").strip() or now
+    scheduled = False
+    try:
+        if eff > now:
+            scheduled = True
+    except Exception:
+        scheduled = False
+
+    cur = db.execute(
+        """INSERT INTO bulk_close_records
+        (target_user_id, operator_id, status, source, reason, credential_note,
+         effective_at, created_at, summary)
+        VALUES (?,?,?,?,?,?,?,?,?)""",
+        (
+            int(target_user_id),
+            int(operator["id"]),
+            "scheduled" if scheduled else "processing",
+            "proxy_bulk",
+            (reason or "").strip() or "一键关账",
+            (credential_note or "").strip() or None,
+            eff,
+            now,
+            None,
+        ),
+    )
+    rid = int(cur.lastrowid)
+    app_cur = db.execute(
+        """INSERT INTO applications
+        (flow_code, applicant_id, perm_def_id, system_id, title, status,
+         current_step, total_steps, created_at, updated_at, provisioned)
+        VALUES (?, ?, NULL, NULL, ?, ?, 0, 0, ?, ?, 0)""",
+        (
+            "bulk_close",
+            int(target_user_id),
+            f"一键关账 · {target['display_name']}（{target['username']}）",
+            "scheduled" if scheduled else "approved",
+            now,
+            now,
+        ),
+    )
+    app_id = int(app_cur.lastrowid)
+    db.execute(
+        "UPDATE bulk_close_records SET application_id = ? WHERE id = ?",
+        (app_id, rid),
+    )
+    append_flow_event(
+        db,
+        app_id,
+        "submitted",
+        step_order=0,
+        step_key="initiator",
+        step_label="发起一键关账",
+        actor_user_id=int(operator["id"]),
+        assignee_id=int(operator["id"]),
+        remark=(reason or "").strip() or None,
+        detail={"bulk_close_id": rid, "effective_at": eff, "credential": bool(credential_note)},
+        now=now,
+    )
+    append_bulk_event(
+        db,
+        rid,
+        "created",
+        actor_user_id=int(operator["id"]),
+        message="创建一键关账批次",
+        detail={"effective_at": eff, "scheduled": scheduled},
+    )
+    root = base_dir or Path(__file__).resolve().parent
+    saved_files = save_bulk_files(
+        db, rid, files or [], base_dir=root, kind_default="attachment"
+    )
+    if saved_files:
+        append_bulk_event(
+            db,
+            rid,
+            "files",
+            actor_user_id=int(operator["id"]),
+            message=f"上传凭证/附件 {len(saved_files)} 个",
+            detail={"files": saved_files},
+        )
+
+    if scheduled:
+        db.commit()
+        return {
+            "ok": True,
+            "record_id": rid,
+            "application_id": app_id,
+            "scheduled": True,
+            "effective_at": eff,
+            "message": f"已登记，将于 {eff} 生效（到期后点「执行到期」）",
+            "files": saved_files,
+        }
+
+    result = _run_bulk_close_record(db, rid, operator_id=int(operator["id"]))
+    result["files"] = saved_files
+    result["application_id"] = app_id
+    return result
+    # AI-GEN-END
+
+
+def _run_bulk_close_record(db, record_id: int, *, operator_id: int | None = None) -> dict:
+    """执行一键关账批次：本地关闭 + 接口/待办。"""
+    # AI-GEN-BEGIN
+    rec = db.execute(
+        "SELECT * FROM bulk_close_records WHERE id = ?", (int(record_id),)
+    ).fetchone()
+    if not rec:
+        return {"ok": False, "error": "关账批次不存在"}
+    if rec["status"] in ("done", "partial"):
+        return {"ok": True, "record_id": int(record_id), "already": True, "message": "该批次已执行"}
+    uid = int(rec["target_user_id"])
+    reason = rec["reason"] or "一键关账"
+    now = now_ts()
+    db.execute(
+        "UPDATE bulk_close_records SET status = 'processing' WHERE id = ?",
+        (int(record_id),),
+    )
+    leuc_r = close_leuc_user(db, uid)
+    if not leuc_r.get("ok"):
+        return leuc_r
+    leuc_sys = db.execute(
+        "SELECT id, code, name, close_api_url, client_id FROM systems WHERE code = ?",
+        (LEUC_SYSTEM_CODE,),
+    ).fetchone()
+    db.execute(
+        """INSERT INTO bulk_close_items
+        (record_id, system_id, system_code, system_name, account_id, pool_account_id,
+         account_name, exec_mode, exec_status, todo_id, local_status, remote_message, closed_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            int(record_id),
+            int(leuc_sys["id"]) if leuc_sys else None,
+            LEUC_SYSTEM_CODE,
+            leuc_r.get("system") or "本系统（LEUC）",
+            None,
+            None,
+            leuc_r.get("account"),
+            "local",
+            "local_ok",
+            None,
+            "closed",
+            "本系统本地关闭",
+            now,
+        ),
+    )
+    append_bulk_event(
+        db, record_id, "local_close", actor_user_id=operator_id, message="本系统账号已关闭"
+    )
+    if rec["application_id"]:
+        append_flow_event(
+            db,
+            int(rec["application_id"]),
+            "approved",
+            step_order=1,
+            step_key="leuc_close",
+            step_label="本系统关闭",
+            actor_user_id=operator_id,
+            remark="本地关闭 LEUC",
+            now=now,
+        )
+
+    accts = db.execute(
+        """SELECT a.*, s.code AS system_code, s.name AS system_name,
+                  s.client_id, s.close_api_url, s.is_builtin
+        FROM user_system_accounts a
+        JOIN systems s ON s.id = a.system_id
+        WHERE a.user_id = ? AND s.code != ?
+        ORDER BY a.id""",
+        (uid, LEUC_SYSTEM_CODE),
+    ).fetchall()
+
+    api_n = todo_n = fail_n = 0
+    for a in accts:
+        sid = int(a["system_id"])
+        aname = a["account_name"]
+        db.execute(
+            "UPDATE user_system_accounts SET can_login = 0 WHERE id = ?",
+            (int(a["id"]),),
+        )
+        db.execute(
+            """UPDATE system_accounts SET status = 'closed'
+            WHERE leuc_user_id = ? AND system_id = ? AND account_name = ?""",
+            (uid, sid, aname),
+        )
+        pool = db.execute(
+            """SELECT id, account_uid FROM system_accounts
+            WHERE system_id = ? AND account_name = ? LIMIT 1""",
+            (sid, aname),
+        ).fetchone()
+        pool_id = int(pool["id"]) if pool else None
+        account_uid = (pool["account_uid"] if pool and "account_uid" in pool.keys() else None)
+        if system_has_close_api(a):
+            remote = _notify_subsystem_account_close(
+                db,
+                system_row=a,
+                user_id=uid,
+                account_name=aname,
+                pool_account_id=pool_id,
+                account_uid=account_uid,
+                reason=reason,
+                closed_at=now,
+            )
+            st = remote.get("remote_status") or "failed"
+            exec_status = "api_ok" if st in ("success", "local_only", "simulated") else "api_fail"
+            if exec_status == "api_ok":
+                api_n += 1
+            else:
+                fail_n += 1
+            db.execute(
+                """INSERT INTO bulk_close_items
+                (record_id, system_id, system_code, system_name, account_id, pool_account_id,
+                 account_name, exec_mode, exec_status, todo_id, local_status,
+                 remote_http_status, remote_message, closed_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    int(record_id), sid, a["system_code"], a["system_name"],
+                    int(a["id"]), pool_id, aname, "api", exec_status, None, "closed",
+                    remote.get("remote_http_status"), remote.get("remote_message"), now,
+                ),
+            )
+            append_bulk_event(
+                db, record_id, "api_close", actor_user_id=operator_id,
+                message=f"{a['system_name']}/{aname} · {exec_status}", detail=remote,
+            )
+        else:
+            owners = list_system_owner_ids(db, sid)
+            assignee = owners[0] if owners else None
+            if not assignee:
+                row_o = db.execute(
+                    "SELECT owner_user_id FROM systems WHERE id = ?", (sid,)
+                ).fetchone()
+                assignee = row_o["owner_user_id"] if row_o and row_o["owner_user_id"] else None
+            if not assignee:
+                sa = db.execute(
+                    "SELECT id FROM users WHERE username = ? LIMIT 1", ("admin",)
+                ).fetchone()
+                assignee = sa["id"] if sa else (operator_id or rec["operator_id"])
+            meta = {
+                "bulk_close_record_id": int(record_id),
+                "system_id": sid,
+                "system_name": a["system_name"],
+                "account_name": aname,
+                "target_user_id": uid,
+                "exec_mode": "manual_todo",
+            }
+            tcur = db.execute(
+                """INSERT INTO todos
+                (assignee_id, initiator_id, title, todo_type, bucket, status, created_at, meta)
+                VALUES (?,?,?,?, 'pending', 'open', ?, ?)""",
+                (
+                    int(assignee),
+                    int(operator_id or rec["operator_id"]),
+                    f"一键关账待办 · {a['system_name']} / {aname}（无关闭接口）",
+                    "一键关账",
+                    now,
+                    json.dumps(meta, ensure_ascii=False),
+                ),
+            )
+            todo_id = int(tcur.lastrowid)
+            item_cur = db.execute(
+                """INSERT INTO bulk_close_items
+                (record_id, system_id, system_code, system_name, account_id, pool_account_id,
+                 account_name, exec_mode, exec_status, todo_id, local_status,
+                 remote_message, closed_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    int(record_id), sid, a["system_code"], a["system_name"],
+                    int(a["id"]), pool_id, aname, "manual_todo", "todo_pending",
+                    todo_id, "closed", "无 close_api_url，已生成系统管理员待办", now,
+                ),
+            )
+            meta["bulk_close_item_id"] = int(item_cur.lastrowid)
+            db.execute(
+                "UPDATE todos SET meta = ? WHERE id = ?",
+                (json.dumps(meta, ensure_ascii=False), todo_id),
+            )
+            todo_n += 1
+            append_bulk_event(
+                db, record_id, "todo_spawn", actor_user_id=operator_id,
+                message=f"{a['system_name']}/{aname} · 管理员待办#{todo_id}",
+            )
+
+    status = "done"
+    if fail_n or todo_n:
+        status = "partial"
+    summary = f"接口直关 {api_n} · 管理员待办 {todo_n} · 失败 {fail_n}"
+    db.execute(
+        """UPDATE bulk_close_records
+        SET status = ?, finished_at = ?, summary = ? WHERE id = ?""",
+        (status, now, summary, int(record_id)),
+    )
+    if rec["application_id"]:
+        db.execute(
+            "UPDATE applications SET status = ?, updated_at = ? WHERE id = ?",
+            ("done" if status == "done" else "approved", now, int(rec["application_id"])),
+        )
+        append_flow_event(
+            db, int(rec["application_id"]), "approved",
+            step_order=2, step_key="exec", step_label="关账执行完成",
+            actor_user_id=operator_id, remark=summary, now=now,
+        )
+    append_bulk_event(db, record_id, "finished", actor_user_id=operator_id, message=summary)
+    write_audit_log(
+        db, action="bulk_close.run", actor_user_id=operator_id,
+        target_type="user", target_id=str(uid),
+        detail={"record_id": int(record_id), "summary": summary},
+    )
+    db.commit()
+    return {
+        "ok": True, "record_id": int(record_id), "status": status, "summary": summary,
+        "api_count": api_n, "todo_count": todo_n, "fail_count": fail_n,
+        "message": f"一键关账已执行：{summary}",
+    }
+    # AI-GEN-END
+
+
+def execute_proxy_bulk_restore(
+    db, *, operator, target_user_id: int, mode: str = "last", record_id: int | None = None
+) -> dict:
+    """恢复：last=上次关闭批次；all=全部关联业务系统+本系统。"""
+    # AI-GEN-BEGIN
+    ensure_ops_tables(db)
+    ensure_bulk_close_tables(db)
+    target = db.execute("SELECT * FROM users WHERE id = ?", (int(target_user_id),)).fetchone()
+    if not target:
+        return {"ok": False, "error": "目标人员不存在"}
+    if not can_proxy_bulk_close(operator, target):
+        return {"ok": False, "error": "无权代恢复该人员"}
+    mode = (mode or "last").strip()
+    now = now_ts()
+    restored = []
+    if mode == "last":
+        if record_id:
+            rec = db.execute(
+                "SELECT * FROM bulk_close_records WHERE id = ? AND target_user_id = ?",
+                (int(record_id), int(target_user_id)),
+            ).fetchone()
+        else:
+            rec = db.execute(
+                """SELECT * FROM bulk_close_records
+                WHERE target_user_id = ? AND status IN ('done','partial','processing')
+                ORDER BY id DESC LIMIT 1""",
+                (int(target_user_id),),
+            ).fetchone()
+        if not rec:
+            return {"ok": False, "error": "无上次关账批次"}
+        items = db.execute(
+            "SELECT * FROM bulk_close_items WHERE record_id = ? ORDER BY id",
+            (int(rec["id"]),),
+        ).fetchall()
+        for it in items:
+            if (it["system_code"] or "") == LEUC_SYSTEM_CODE:
+                reopen_leuc_user(db, int(target_user_id))
+                restored.append("本系统（LEUC）")
+                continue
+            if it["account_id"]:
+                db.execute(
+                    "UPDATE user_system_accounts SET can_login = 1 WHERE id = ?",
+                    (int(it["account_id"]),),
+                )
+            if it["system_id"] and it["account_name"]:
+                db.execute(
+                    """UPDATE system_accounts SET status = 'bound'
+                    WHERE leuc_user_id = ? AND system_id = ? AND account_name = ?""",
+                    (int(target_user_id), int(it["system_id"]), it["account_name"]),
+                )
+            restored.append(f"{it['system_name']}/{it['account_name']}")
+        append_bulk_event(
+            db, int(rec["id"]), "restore_last", actor_user_id=int(operator["id"]),
+            message=f"恢复上次关闭 {len(restored)} 项", detail={"items": restored},
+        )
+        write_audit_log(
+            db, action="bulk_close.restore_last", actor_user_id=int(operator["id"]),
+            target_type="user", target_id=str(target_user_id),
+            detail={"record_id": int(rec["id"]), "restored": restored},
+        )
+        db.commit()
+        return {
+            "ok": True, "mode": "last", "record_id": int(rec["id"]),
+            "restored": restored, "message": f"已按上次关账批次恢复 {len(restored)} 项",
+        }
+
+    reopen_leuc_user(db, int(target_user_id))
+    restored.append("本系统（LEUC）")
+    rows = db.execute(
+        """SELECT a.id, a.account_name, a.system_id, s.name AS system_name
+        FROM user_system_accounts a JOIN systems s ON s.id = a.system_id
+        WHERE a.user_id = ? AND s.code != ?""",
+        (int(target_user_id), LEUC_SYSTEM_CODE),
+    ).fetchall()
+    for a in rows:
+        db.execute("UPDATE user_system_accounts SET can_login = 1 WHERE id = ?", (int(a["id"]),))
+        db.execute(
+            """UPDATE system_accounts SET status = 'bound'
+            WHERE leuc_user_id = ? AND system_id = ? AND account_name = ?""",
+            (int(target_user_id), int(a["system_id"]), a["account_name"]),
+        )
+        restored.append(f"{a['system_name']}/{a['account_name']}")
+    write_audit_log(
+        db, action="bulk_close.restore_all", actor_user_id=int(operator["id"]),
+        target_type="user", target_id=str(target_user_id),
+        detail={"restored": restored, "at": now},
+    )
+    db.commit()
+    return {
+        "ok": True, "mode": "all", "restored": restored,
+        "message": f"已恢复全部关联系统 {len(restored)} 项",
+    }
     # AI-GEN-END
 
 
@@ -2983,6 +3850,17 @@ def user_accounts_for_system(user_id: int, system_code: str, only_loginable: boo
 def my_systems(user_id: int):
     # AI-GEN-BEGIN
     db = get_db()
+    migrate_schema(db)
+    urow = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not urow:
+        return []
+    ensure_user_leuc_account(db, urow)
+    try:
+        db.commit()
+    except Exception:
+        pass
+    urow = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
     systems = db.execute(
         """SELECT DISTINCT s.*
         FROM systems s
@@ -2991,7 +3869,7 @@ def my_systems(user_id: int):
         ORDER BY s.id""",
         (user_id,),
     ).fetchall()
-    out = []
+    by_code = {}
     for s in systems:
         accts = db.execute(
             """SELECT id, account_name, account_label, is_default, can_login, has_sensitive, perm_summary
@@ -3007,15 +3885,165 @@ def my_systems(user_id: int):
                 db, s["id"], a["perm_summary"], bool(a["has_sensitive"])
             )
             acct_list.append(item)
+        by_code[s["code"]] = {
+            "id": s["id"],
+            "code": s["code"],
+            "name": s["name"],
+            "client_id": s["client_id"],
+            "account_count": len(acct_list),
+            "can_login_any": any(a["can_login"] for a in acct_list),
+            "has_sensitive_any": any(a["has_sensitive"] for a in acct_list),
+            "accounts": acct_list,
+            "nav_icon": (s["nav_icon"] if "nav_icon" in s.keys() else None) or None,
+            "home_url": (s["home_url"] if "home_url" in s.keys() else None) or None,
+            "show_in_nav": int(s["show_in_nav"] if "show_in_nav" in s.keys() else 1),
+            "access_mode": s["access_mode"] if "access_mode" in s.keys() else "apply",
+        }
+
+    # 个人中心默认展示：本系统 / 北森(ID) / 飞书(ID)
+    ukeys = urow.keys()
+    status = (urow["status"] if "status" in ukeys else "active") or "active"
+    leuc_login = 0 if status == "closed" else 1
+    beisen_id = ""
+    if "beisen_user_id" in ukeys and urow["beisen_user_id"]:
+        beisen_id = str(urow["beisen_user_id"]).strip()
+    feishu_id = ""
+    if "feishu_user_id" in ukeys and urow["feishu_user_id"]:
+        feishu_id = str(urow["feishu_user_id"]).strip()
+    identity_specs = (
+        (
+            LEUC_SYSTEM_CODE,
+            {
+                "account_name": urow["username"],
+                "account_label": "本系统登录",
+                "can_login": leuc_login,
+                "perm_summary": "LEUC 本系统登录",
+                "identity_optional": False,
+            },
+        ),
+        (
+            "beisen",
+            {
+                # 北森用户ID 通讯录同步后必然有；空则标异常
+                "account_name": beisen_id or "未同步",
+                "account_label": "北森用户ID",
+                "can_login": 1 if beisen_id else 0,
+                "perm_summary": "同步自动绑定" if beisen_id else "应有值，请检查同步",
+                "identity_optional": False,
+            },
+        ),
+        (
+            "feishu",
+            {
+                # 飞书用户ID 可为空；有则自动绑定可登录
+                "account_name": feishu_id or "—",
+                "account_label": "飞书用户ID",
+                "can_login": 1 if feishu_id else 0,
+                "perm_summary": "同步自动绑定" if feishu_id else "可为空",
+                "identity_optional": True,
+            },
+        ),
+    )
+    for code, acct_tpl in identity_specs:
+        if code in by_code:
+            continue
+        s = db.execute(
+            "SELECT * FROM systems WHERE code = ? AND status = 'enabled'", (code,)
+        ).fetchone()
+        if not s:
+            continue
+        acct = {
+            "id": None,
+            "account_name": acct_tpl["account_name"],
+            "account_label": acct_tpl["account_label"],
+            "is_default": 1,
+            "can_login": acct_tpl["can_login"],
+            "has_sensitive": 0,
+            "perm_summary": acct_tpl["perm_summary"],
+            "permissions": [],
+            "identity_optional": bool(acct_tpl.get("identity_optional")),
+        }
+        by_code[code] = {
+            "id": s["id"],
+            "code": s["code"],
+            "name": s["name"],
+            "client_id": s["client_id"],
+            "account_count": 1,
+            "can_login_any": bool(acct["can_login"]),
+            "has_sensitive_any": False,
+            "accounts": [acct],
+            "nav_icon": (s["nav_icon"] if "nav_icon" in s.keys() else None) or None,
+            "home_url": (s["home_url"] if "home_url" in s.keys() else None) or None,
+            "show_in_nav": int(s["show_in_nav"] if "show_in_nav" in s.keys() else 1),
+            "access_mode": s["access_mode"] if "access_mode" in s.keys() else "apply",
+            "identity_from_profile": True,
+        }
+
+    ordered = []
+    for code in (LEUC_SYSTEM_CODE, "beisen", "feishu"):
+        if code in by_code:
+            ordered.append(by_code.pop(code))
+    ordered.extend(sorted(by_code.values(), key=lambda x: x["id"]))
+    return ordered
+    # AI-GEN-END
+
+
+def home_nav_systems(user_id: int):
+    """个人中心「业务系统导航」：启用且 show_in_nav 的系统（含链接/图标）。"""
+    # AI-GEN-BEGIN
+    db = get_db()
+    migrate_schema(db)
+    urow = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    rows = db.execute(
+        """SELECT id, code, name, access_mode, nav_icon, home_url, show_in_nav
+        FROM systems
+        WHERE status = 'enabled' AND code != ?
+          AND IFNULL(show_in_nav, 1) = 1
+        ORDER BY id""",
+        (LEUC_SYSTEM_CODE,),
+    ).fetchall()
+    bound_ids = {
+        r["system_id"]
+        for r in db.execute(
+            """SELECT DISTINCT system_id FROM user_system_accounts
+            WHERE user_id = ? AND can_login = 1""",
+            (user_id,),
+        ).fetchall()
+    }
+    out = []
+    for s in rows:
+        d = dict(s)
+        code = d.get("code") or ""
+        open_mode = (d.get("access_mode") or "") == "open"
+        profile_id = profile_sso_id(urow, code) if urow else None
+        auto_open = bool(profile_id)
+        can_enter = open_mode or (d["id"] in bound_ids) or auto_open
+        icon = (d.get("nav_icon") or "").strip() or (d.get("name") or code or "?")[:1]
+        home_url = (d.get("home_url") or "").strip()
+        launch_url = home_url or f"/demo/home?open={quote(code, safe='')}"
+        if auto_open:
+            mode_label = "同步自动开通"
+        elif open_mode:
+            mode_label = "全员登录"
+        else:
+            mode_label = "需账号绑定"
+        # 北森无自定义首页时：有资料 ID 直接走真实 SSO
+        if code == "beisen" and can_enter and not home_url:
+            launch_url = "/beisen/sso/go?return_url=" + quote(
+                "https://www.italent.cn/", safe=""
+            )
         out.append(
             {
-                "code": s["code"],
-                "name": s["name"],
-                "client_id": s["client_id"],
-                "account_count": len(acct_list),
-                "can_login_any": any(a["can_login"] for a in acct_list),
-                "has_sensitive_any": any(a["has_sensitive"] for a in acct_list),
-                "accounts": acct_list,
+                "id": d["id"],
+                "code": code,
+                "name": d.get("name"),
+                "nav_icon": icon,
+                "home_url": home_url or None,
+                "launch_url": launch_url,
+                "access_mode": d.get("access_mode"),
+                "mode_label": mode_label,
+                "can_enter": can_enter,
+                "external": bool(home_url and home_url.startswith(("http://", "https://"))),
             }
         )
     return out
@@ -3202,10 +4230,9 @@ def admin_roles_get(user):
         caps = [r["cap_id"] for r in db.execute(
             "SELECT cap_id FROM role_caps WHERE role=? ORDER BY cap_id", (role,)
         ).fetchall()]
-        if not menus:
-            menus = list(DEFAULT_ROLE_MENUS.get(role, DEFAULT_ROLE_MENUS.get("employee", [])))
-        if not caps and role in DEFAULT_ROLE_CAPS:
-            caps = list(DEFAULT_ROLE_CAPS.get(role, []))
+        # AI-GEN-BEGIN
+        # 以库内配置为准；空配置表示管理员已清空，不再回退默认以免「保存无效」假象
+        # AI-GEN-END
         n = db.execute(
             "SELECT COUNT(*) AS c FROM user_roles WHERE role=?", (role,)
         ).fetchone()["c"]
@@ -3392,6 +4419,20 @@ def _set_user_roles(db, uid, roles, *, allow_empty_to_employee=True):
         )
     sync_primary_role(db, uid)
     return user_roles_of(db, uid)
+
+
+# AI-GEN-BEGIN
+def add_user_roles(db, uid, roles_to_add) -> list:
+    """合并追加角色（本系统角色申请审批通过后用）；不删除已有角色。"""
+    cur = list(user_roles_of(db, uid) or [])
+    for r in roles_to_add or []:
+        r = (r or "").strip()
+        if not r or r in ("employee_a", "employee_b"):
+            continue
+        if r not in cur:
+            cur.append(r)
+    return _set_user_roles(db, uid, cur)
+# AI-GEN-END
 
 
 @app.get("/api/admin/users/<int:uid>/roles")
@@ -3704,134 +4745,192 @@ def admin_unbind_role(user, uid):
 
 @app.post("/api/login")
 def api_login():
+    # AI-GEN-BEGIN
     data = request.get_json(force=True) or {}
-    username = (data.get("username") or "").strip()
+    login_mode = (data.get("login_mode") or "password").strip().lower()
+    # 兼容旧字段 username：密码登录视为手机号；admin 保留用户名通道
+    account = (
+        data.get("phone")
+        or data.get("account")
+        or data.get("username")
+        or ""
+    ).strip()
     password = data.get("password") or ""
-    verify_channel = data.get("verify_channel") or "phone"
-    verify_code = (data.get("verify_code") or "").strip()
+    verify_channel = data.get("verify_channel") or data.get("channel") or "phone"
+    verify_code = (data.get("verify_code") or data.get("code") or "").strip()
     verify_contact = (
-        data.get("verify_contact") or data.get("phone") or data.get("email") or ""
+        data.get("verify_contact") or data.get("phone") or data.get("email") or account or ""
     ).strip()
     captcha = (data.get("captcha") or data.get("captcha_code") or "").strip()
     source = data.get("source") or "leuc"
     account_id = data.get("account_id")
 
     db = get_db()
-    row = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-    risk = get_risk(username)
+    row = None
+    risk_key = account or "_"
 
-    # AI-GEN-BEGIN
-    # 失败 ≥1：图片验证码
-    if risk["need_captcha"]:
-        ok_cap, err_cap = check_login_captcha(username, captcha)
-        if not ok_cap:
+    if login_mode in ("otp", "otp_phone", "otp_email"):
+        # 手机/邮箱验证码登录（无密码）
+        if verify_channel not in ("phone", "email"):
+            verify_channel = "phone" if login_mode != "otp_email" else "email"
+        contact = normalize_phone(verify_contact) if verify_channel == "phone" else normalize_email(verify_contact)
+        if not contact:
+            return jsonify({"ok": False, "error": "请输入手机号或邮箱"}), 400
+        if verify_channel == "phone":
+            row = db.execute(
+                """SELECT * FROM users
+                WHERE replace(coalesce(phone,''),' ','') = ? LIMIT 1""",
+                (contact,),
+            ).fetchone()
+        else:
+            row = db.execute(
+                """SELECT * FROM users
+                WHERE lower(coalesce(email,'')) = ? LIMIT 1""",
+                (contact,),
+            ).fetchone()
+        risk_key = f"otp:{verify_channel}:{contact}"
+        risk = get_risk(risk_key)
+        if not row:
+            set_risk(risk_key, risk["fail_count"] + 1)
+            return jsonify({"ok": False, "error": "未找到绑定该联系方式的账号"}), 404
+        acct_key = f"login_otp:{row['id']}:{verify_channel}"
+        rc = db.execute("SELECT * FROM reset_codes WHERE account = ?", (acct_key,)).fetchone()
+        if not rc or rc["code"] != verify_code:
+            set_risk(risk_key, risk["fail_count"] + 1)
+            return jsonify(
+                {"ok": False, "error": f"验证码错误（演示码 {DEMO_OTP}）"}
+            ), 400
+        if (rc["channel"] or "") != contact:
+            return jsonify({"ok": False, "error": "联系方式与发码时不一致"}), 400
+        db.execute("DELETE FROM reset_codes WHERE account = ?", (acct_key,))
+    else:
+        # 默认：手机号 + 密码；超管可用 admin 用户名
+        if account == SYSTEM_ADMIN_USERNAME:
+            row = db.execute(
+                "SELECT * FROM users WHERE username = ?", (SYSTEM_ADMIN_USERNAME,)
+            ).fetchone()
+            risk_key = SYSTEM_ADMIN_USERNAME
+        else:
+            phone = normalize_phone(account)
+            if not phone:
+                return jsonify({"ok": False, "error": "请输入手机号"}), 400
+            row = db.execute(
+                """SELECT * FROM users
+                WHERE replace(coalesce(phone,''),' ','') = ? LIMIT 1""",
+                (phone,),
+            ).fetchone()
+            risk_key = phone
+        risk = get_risk(risk_key)
+
+        # 失败 ≥1：图片验证码
+        if risk["need_captcha"]:
+            ok_cap, err_cap = check_login_captcha(risk_key, captcha)
+            if not ok_cap:
+                return jsonify(
+                    {
+                        "ok": False,
+                        "error": err_cap,
+                        "risk": risk,
+                        "need_captcha": True,
+                        "need_verify": risk["need_verify"],
+                        "refresh_captcha": True,
+                    }
+                ), 400
+
+        # 失败 ≥10：绑定手机/邮箱二次验证
+        if risk["need_verify"]:
+            if verify_channel not in ("phone", "email"):
+                verify_channel = "phone"
+            if not verify_contact:
+                return jsonify(
+                    {
+                        "ok": False,
+                        "error": "密码错误已达风控阈值，请输入绑定的手机号或邮箱并完成验证",
+                        "risk": risk,
+                        "need_verify": True,
+                        "need_captcha": True,
+                    }
+                ), 400
+            if not row:
+                return jsonify(
+                    {
+                        "ok": False,
+                        "error": "手机号/邮箱与账号绑定不一致，或账号不存在",
+                        "risk": risk,
+                        "need_verify": True,
+                        "need_captcha": True,
+                    }
+                ), 400
+            if verify_channel == "phone":
+                bound = normalize_phone(row["phone"])
+                if not bound:
+                    return jsonify(
+                        {
+                            "ok": False,
+                            "error": "该账号未绑定手机，请改用邮箱验证或联系管理员",
+                            "risk": risk,
+                            "need_verify": True,
+                            "need_captcha": True,
+                        }
+                    ), 400
+                if normalize_phone(verify_contact) != bound:
+                    return jsonify(
+                        {
+                            "ok": False,
+                            "error": "手机号与账号绑定不一致",
+                            "risk": risk,
+                            "need_verify": True,
+                            "need_captcha": True,
+                        }
+                    ), 400
+            else:
+                bound = normalize_email(row["email"])
+                if not bound:
+                    return jsonify(
+                        {
+                            "ok": False,
+                            "error": "该账号未绑定邮箱，请改用手机验证或联系管理员",
+                            "risk": risk,
+                            "need_verify": True,
+                            "need_captcha": True,
+                        }
+                    ), 400
+                if normalize_email(verify_contact) != bound:
+                    return jsonify(
+                        {
+                            "ok": False,
+                            "error": "邮箱与账号绑定不一致",
+                            "risk": risk,
+                            "need_verify": True,
+                            "need_captcha": True,
+                        }
+                    ), 400
+            if verify_code != DEMO_OTP:
+                return jsonify(
+                    {
+                        "ok": False,
+                        "error": f"验证码错误（演示码 {DEMO_OTP}）",
+                        "risk": risk,
+                        "need_verify": True,
+                        "need_captcha": True,
+                    }
+                ), 400
+
+        if not row or row["password"] != password:
+            fc = risk["fail_count"] + 1
+            set_risk(risk_key or "_", fc)
+            risk = get_risk(risk_key or "_")
             return jsonify(
                 {
                     "ok": False,
-                    "error": err_cap,
+                    "error": "手机号或密码错误",
                     "risk": risk,
-                    "need_captcha": True,
                     "need_verify": risk["need_verify"],
+                    "need_captcha": risk["need_captcha"],
                     "refresh_captcha": True,
                 }
-            ), 400
+            ), 401
 
-    # 失败 ≥10：绑定手机/邮箱 + 短信/邮箱验证码
-    if risk["need_verify"]:
-        if verify_channel not in ("phone", "email"):
-            verify_channel = "phone"
-        if not verify_contact:
-            return jsonify(
-                {
-                    "ok": False,
-                    "error": "密码错误已达风控阈值，请输入绑定的手机号或邮箱并完成验证",
-                    "risk": risk,
-                    "need_verify": True,
-                    "need_captcha": True,
-                }
-            ), 400
-        if not row:
-            return jsonify(
-                {
-                    "ok": False,
-                    "error": "手机号/邮箱与账号绑定不一致，或账号不存在",
-                    "risk": risk,
-                    "need_verify": True,
-                    "need_captcha": True,
-                }
-            ), 400
-        if verify_channel == "phone":
-            bound = (row["phone"] or "").strip()
-            if not bound:
-                return jsonify(
-                    {
-                        "ok": False,
-                        "error": "该账号未绑定手机，请改用邮箱验证或联系管理员",
-                        "risk": risk,
-                        "need_verify": True,
-                        "need_captcha": True,
-                    }
-                ), 400
-            if verify_contact.replace(" ", "") != bound.replace(" ", ""):
-                return jsonify(
-                    {
-                        "ok": False,
-                        "error": "手机号与账号绑定不一致",
-                        "risk": risk,
-                        "need_verify": True,
-                        "need_captcha": True,
-                    }
-                ), 400
-        else:
-            bound = (row["email"] or "").strip().lower()
-            if not bound:
-                return jsonify(
-                    {
-                        "ok": False,
-                        "error": "该账号未绑定邮箱，请改用手机验证或联系管理员",
-                        "risk": risk,
-                        "need_verify": True,
-                        "need_captcha": True,
-                    }
-                ), 400
-            if verify_contact.strip().lower() != bound:
-                return jsonify(
-                    {
-                        "ok": False,
-                        "error": "邮箱与账号绑定不一致",
-                        "risk": risk,
-                        "need_verify": True,
-                        "need_captcha": True,
-                    }
-                ), 400
-        if verify_code != DEMO_OTP:
-            return jsonify(
-                {
-                    "ok": False,
-                    "error": f"验证码错误（演示码 {DEMO_OTP}）",
-                    "risk": risk,
-                    "need_verify": True,
-                    "need_captcha": True,
-                }
-            ), 400
-    # AI-GEN-END
-
-    if not row or row["password"] != password:
-        fc = risk["fail_count"] + 1
-        set_risk(username or "_", fc)
-        risk = get_risk(username or "_")
-        return jsonify(
-            {
-                "ok": False,
-                "error": "账号或密码错误",
-                "risk": risk,
-                "need_verify": risk["need_verify"],
-                "need_captcha": risk["need_captcha"],
-                "refresh_captcha": True,
-            }
-        ), 401
-
-    # AI-GEN-BEGIN
     if user_is_closed(row):
         return jsonify(
             {
@@ -3840,9 +4939,8 @@ def api_login():
                 "flow": "account_closed",
             }
         ), 403
-    # AI-GEN-END
 
-    set_risk(username, 0)
+    set_risk(risk_key, 0)
     session.pop("login_captcha", None)
     session.pop("login_captcha_user", None)
     user = row_user(row)
@@ -3856,9 +4954,7 @@ def api_login():
     if source == "oidc":
         return _finish_oidc_after_login(user, data.get("account_id"))
 
-    # 兼容旧演示：source=erp → 来酷ERP
     if source == "erp":
-        # AI-GEN-BEGIN
         session["oidc"] = {
             "client_id": "client_laiku_erp",
             "redirect_uri": f"{_issuer()}/demo/home/callback?app=laiku_erp",
@@ -3868,10 +4964,62 @@ def api_login():
             "code_challenge": None,
             "code_challenge_method": None,
         }
-        # AI-GEN-END
         return _finish_oidc_after_login(user, data.get("account_id"))
 
     return jsonify({"ok": False, "error": "未知登录来源"}), 400
+    # AI-GEN-END
+
+
+@app.post("/api/login/otp/send")
+def login_otp_send():
+    """手机/邮箱验证码登录：发送验证码。"""
+    # AI-GEN-BEGIN
+    data = request.get_json(force=True) or {}
+    channel = data.get("channel") or "phone"
+    contact_raw = (data.get("contact") or data.get("phone") or data.get("email") or "").strip()
+    if channel not in ("phone", "email"):
+        channel = "phone"
+    contact = normalize_phone(contact_raw) if channel == "phone" else normalize_email(contact_raw)
+    if not contact:
+        return jsonify({"ok": False, "error": "请输入手机号或邮箱"}), 400
+    db = get_db()
+    if channel == "phone":
+        row = db.execute(
+            """SELECT * FROM users
+            WHERE replace(coalesce(phone,''),' ','') = ? LIMIT 1""",
+            (contact,),
+        ).fetchone()
+    else:
+        row = db.execute(
+            """SELECT * FROM users
+            WHERE lower(coalesce(email,'')) = ? LIMIT 1""",
+            (contact,),
+        ).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "未找到绑定该联系方式的账号"}), 404
+    if user_is_closed(row):
+        return jsonify({"ok": False, "error": "账号已关闭，无法登录"}), 403
+    acct_key = f"login_otp:{row['id']}:{channel}"
+    db.execute(
+        """INSERT INTO reset_codes (account, channel, code, created_at)
+        VALUES (?,?,?,?)
+        ON CONFLICT(account) DO UPDATE SET channel=excluded.channel, code=excluded.code, created_at=excluded.created_at""",
+        (acct_key, contact, DEMO_OTP, datetime.now().isoformat(timespec="seconds")),
+    )
+    db.commit()
+    if channel == "phone":
+        masked = contact[:3] + "****" + contact[-4:] if len(contact) >= 7 else contact
+    else:
+        masked = contact
+    return jsonify(
+        {
+            "ok": True,
+            "message": f"验证码已发送至 {masked}（演示码 {DEMO_OTP}）",
+            "demo_code": DEMO_OTP,
+            "user_id": int(row["id"]),
+        }
+    )
+    # AI-GEN-END
 
 
 @app.get("/api/captcha")
@@ -4198,6 +5346,11 @@ def security_contact_send(user):
         if "@" not in value:
             return jsonify({"ok": False, "error": "邮箱格式不正确"}), 400
         value = value.lower()
+        # AI-GEN-BEGIN
+        ok_s, err_s = ensure_email_suffix_allowed(get_db(), value)
+        if not ok_s:
+            return jsonify({"ok": False, "error": err_s}), 400
+        # AI-GEN-END
     db = get_db()
     if channel == "phone":
         other = db.execute(
@@ -4246,12 +5399,28 @@ def security_contact_bind(user):
     else:
         value = value.lower()
     db = get_db()
+    # AI-GEN-BEGIN
+    if channel == "email":
+        ok_s, err_s = ensure_email_suffix_allowed(db, value)
+        if not ok_s:
+            return jsonify({"ok": False, "error": err_s}), 400
+    # AI-GEN-END
     acct_key = f"sec:{user['username']}:{channel}"
     rc = db.execute("SELECT * FROM reset_codes WHERE account = ?", (acct_key,)).fetchone()
     if not rc or rc["code"] != code:
         return jsonify({"ok": False, "error": f"验证码错误（演示码 {DEMO_OTP}）"}), 400
     if (rc["channel"] or "") != value:
         return jsonify({"ok": False, "error": "联系方式与发码时不一致，请重新获取验证码"}), 400
+    # AI-GEN-BEGIN
+    ok_c, err_c = ensure_contact_available(
+        db,
+        phone=value if channel == "phone" else None,
+        email=value if channel == "email" else None,
+        exclude_user_id=user["id"],
+    )
+    if not ok_c:
+        return jsonify({"ok": False, "error": err_c}), 400
+    # AI-GEN-END
     col = "phone" if channel == "phone" else "email"
     db.execute(f"UPDATE users SET {col} = ? WHERE id = ?", (value, user["id"]))
     db.execute("DELETE FROM reset_codes WHERE account = ?", (acct_key,))
@@ -4392,6 +5561,10 @@ def home(user):
             "ok": True,
             "user": user,
             "systems": my_systems(user["id"]),
+            # AI-GEN-BEGIN
+            "nav_systems": home_nav_systems(user["id"]),
+            "portal_home": "/demo/home",
+            # AI-GEN-END
             "todos": {
                 "pending": [serialize_todo(db, r) for r in pending],
                 "done": [serialize_todo(db, r) for r in done],
@@ -4524,6 +5697,51 @@ def todo_resubmit(user, tid):
     # AI-GEN-END
 
 
+@app.post("/api/applications/<int:app_id>/cancel")
+@login_required
+def application_cancel(user, app_id):
+    """撤销未结束的申请（申请人或发起人）。"""
+    # AI-GEN-BEGIN
+    data = request.get_json(force=True, silent=True) or {}
+    db = get_db()
+    migrate_schema(db)
+    ensure_flow_events_table(db)
+    app = db.execute("SELECT * FROM applications WHERE id = ?", (app_id,)).fetchone()
+    if not app:
+        return jsonify({"ok": False, "error": "申请不存在"}), 404
+    init_row = db.execute(
+        """SELECT initiator_id FROM todos
+        WHERE application_id = ?
+        ORDER BY CASE WHEN bucket = 'initiated' THEN 0 ELSE 1 END, id
+        LIMIT 1""",
+        (app_id,),
+    ).fetchone()
+    initiator_id = (
+        int(init_row["initiator_id"])
+        if init_row and init_row["initiator_id"]
+        else None
+    )
+    allowed = (
+        user["id"] == app["applicant_id"]
+        or (initiator_id is not None and user["id"] == initiator_id)
+        or user_has_role(user, "super_admin")
+    )
+    if not allowed:
+        return jsonify({"ok": False, "error": "仅申请人或发起人可撤销"}), 403
+    result = cancel_application_flow(
+        db,
+        app_id=app_id,
+        actor_user_id=user["id"],
+        remark=(data.get("remark") or "").strip() or None,
+        now=now_ts(),
+    )
+    if not result.get("ok"):
+        return jsonify(result), 400
+    db.commit()
+    return jsonify(result)
+    # AI-GEN-END
+
+
 @app.post("/api/apply/preview-flow")
 @login_required
 def apply_preview_flow(user):
@@ -4549,6 +5767,7 @@ def apply_preview_flow(user):
         system_id=int(system_id) if system_id else None,
         with_sensitive=with_sensitive,
         days=days,
+        initiator_id=user["id"],
     )
     if not result.get("ok"):
         return jsonify(result), 400
@@ -4587,6 +5806,7 @@ def org_overview(user):
         "scope": scope,
         "can_manage": can_manage,
         "can_set_account_expire": user_can_set_account_expire(user),
+        "can_reset_org_password": user_can_reset_org_password(user),
         "can_set_dept_owner": user_can_set_dept_owner(user),
         "manage_dept_ids": sorted(manage_ids),
         "unread_messages": unread,
@@ -4825,6 +6045,21 @@ def org_update_member(user, uid):
     phone = (str(phone).strip() if phone is not None else "") or None
     email = data.get("email") if "email" in data else row["email"]
     email = (str(email).strip() if email is not None else "") or None
+    # AI-GEN-BEGIN
+    phone = normalize_phone(phone)
+    email = normalize_email(email)
+    if not phone and (row["username"] or "") != SYSTEM_ADMIN_USERNAME:
+        return jsonify({"ok": False, "error": "手机号必填（登录凭证）"}), 400
+    ok_c, err_c = ensure_contact_available(
+        db, phone=phone, email=email, exclude_user_id=uid
+    )
+    if not ok_c:
+        return jsonify({"ok": False, "error": err_c}), 400
+    # AI-GEN-BEGIN
+    ok_s, err_s = ensure_email_suffix_allowed(db, email)
+    if not ok_s:
+        return jsonify({"ok": False, "error": err_s}), 400
+    # AI-GEN-END
 
     new_dept = row["dept_id"]
     if "dept_id" in data:
@@ -5100,6 +6335,79 @@ def set_members_account_expire(user):
         updated += 1
     db.commit()
     return jsonify({"ok": True, "updated": updated, "account_expire": expire})
+
+
+# AI-GEN-BEGIN
+@app.post("/api/org/members/reset-password")
+@login_required
+def org_reset_member_password(user):
+    """部门和人员：有 org_reset_password 且可管目标时，直接修改登录密码。"""
+    if not user_can_reset_org_password(user):
+        return jsonify({"ok": False, "error": "未开通「修改人员密码」权限"}), 403
+    data = request.get_json(force=True) or {}
+    uid = data.get("user_id")
+    new_password = (data.get("new_password") or "").strip()
+    auto_gen = bool(data.get("auto_generate"))
+    if not uid:
+        return jsonify({"ok": False, "error": "请指定人员"}), 400
+    db = get_db()
+    row = db.execute("SELECT * FROM users WHERE id = ?", (int(uid),)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "用户不存在"}), 404
+    if not can_manage_member(user, row):
+        return jsonify({"ok": False, "error": "不在可管范围内"}), 403
+    if (row["username"] or "") == SYSTEM_ADMIN_USERNAME and int(user["id"]) != int(row["id"]):
+        return jsonify({"ok": False, "error": "不可修改系统超管密码"}), 403
+    if auto_gen or not new_password:
+        new_password = gen_account_password()
+    if len(new_password) < 6:
+        return jsonify({"ok": False, "error": "新密码至少 6 位"}), 400
+    db.execute("UPDATE users SET password = ? WHERE id = ?", (new_password, int(uid)))
+    notify = record_credential_notify(
+        db,
+        user_id=int(uid),
+        username=row["username"],
+        password=new_password,
+        phone=row["phone"] if "phone" in row.keys() else None,
+        email=row["email"] if "email" in row.keys() else None,
+        reason="org_reset_password",
+    )
+    write_audit_log(
+        db,
+        action="org.reset_password",
+        actor_user_id=user["id"],
+        actor_name=user.get("display_name") or user.get("username"),
+        target_type="user",
+        target_id=str(uid),
+        detail={
+            "username": row["username"],
+            "notify_id": notify.get("id"),
+            "notify_channel": notify.get("channel"),
+            "auto_generate": auto_gen or not (data.get("new_password") or "").strip(),
+        },
+    )
+    try:
+        push_system_message(
+            db,
+            int(uid),
+            "登录密码已重置",
+            f"管理员 {user.get('display_name') or user.get('username')} 已重置你的 LEUC 登录密码，请使用新密码登录。",
+            ref_type="org_reset_password",
+            ref_id=str(uid),
+        )
+    except Exception:
+        pass
+    db.commit()
+    return jsonify({
+        "ok": True,
+        "message": f"已重置 {row['display_name']} 的密码",
+        "password": new_password,
+        "notify": {
+            "channel": notify.get("channel"),
+            "target": notify.get("target"),
+            "status": notify.get("status"),
+        },
+    })
 # AI-GEN-END
 
 
@@ -5814,13 +7122,89 @@ def apply_submit(user):
     subject = user
     for_user_id = data.get("for_user_id")
     if for_user_id and int(for_user_id) != int(user["id"]):
-        if not user_has_role(user, "hr_specialist", "super_admin", "dept_owner"):
-            return jsonify({"ok": False, "error": "无权代他人申请"}), 403
-        subject = db.execute("SELECT * FROM users WHERE id = ?", (int(for_user_id),)).fetchone()
-        if not subject:
+        target = db.execute("SELECT * FROM users WHERE id = ?", (int(for_user_id),)).fetchone()
+        if not target:
             return jsonify({"ok": False, "error": "目标用户不存在"}), 404
-        if user_has_role(user, "dept_owner") and not can_manage_member(user, subject):
-            return jsonify({"ok": False, "error": "仅可代本部门下级申请"}), 403
+        # AI-GEN-BEGIN
+        if not can_apply_for_user(user, target):
+            return jsonify({"ok": False, "error": "无权代他人申请"}), 403
+        # AI-GEN-END
+        subject = target
+
+    # AI-GEN-BEGIN
+    # 本系统（LEUC）角色申请：与「角色与权限」同源，审批通过后合并绑定角色
+    if apply_type == "leuc_roles":
+        ensure_roles_seeded(db)
+        roles_in = data.get("roles") or data.get("role_codes") or []
+        if isinstance(roles_in, str):
+            roles_in = [roles_in]
+        cleaned = []
+        labels = []
+        for r in roles_in:
+            code = (r or "").strip()
+            if not code or code in ("employee_a", "employee_b"):
+                continue
+            row_r = db.execute(
+                "SELECT code, label FROM roles WHERE code = ?", (code,)
+            ).fetchone()
+            if not row_r:
+                return jsonify({"ok": False, "error": f"无效角色: {code}"}), 400
+            if code not in cleaned:
+                cleaned.append(code)
+                labels.append(row_r["label"] or code)
+        if not cleaned:
+            return jsonify({"ok": False, "error": "请选择要申请的本系统角色"}), 400
+        leuc = db.execute(
+            "SELECT id, name FROM systems WHERE code = ?", (LEUC_SYSTEM_CODE,)
+        ).fetchone()
+        system_id = int(leuc["id"]) if leuc else data.get("system_id")
+        role_txt = "、".join(labels)
+        todo_type = "本系统角色"
+        title = f"{subject['display_name']} · 本系统角色 · {role_txt}"
+        init_title = f"本系统角色 · {role_txt}（审批中）"
+        approver_id = find_approver(db, subject["id"])
+        if not approver_id or int(approver_id) == int(subject["id"]):
+            return jsonify({"ok": False, "error": "未找到直属审批人"}), 400
+        steps = [("direct_leader", "直属领导", int(approver_id))]
+        steps, cc_list = prepare_flow_steps(db, steps, subject["id"])
+        meta_extra = {
+            "leuc_user_id": subject["id"],
+            "system_id": system_id,
+            "system_name": (leuc["name"] if leuc else "本系统（LEUC）"),
+            "roles": cleaned,
+            "role_labels": labels,
+        }
+        app_id, first_todo, first_assignee, step_preview = start_multi_step_apply(
+            db,
+            flow_code="leuc_roles",
+            todo_type=todo_type,
+            title=title,
+            init_title=init_title,
+            subject_id=subject["id"],
+            initiator_id=user["id"],
+            system_id=system_id,
+            steps=steps,
+            meta_extra=meta_extra,
+            cc_list=cc_list,
+        )
+        db.commit()
+        au = db.execute(
+            "SELECT display_name, username FROM users WHERE id = ?", (first_assignee,)
+        ).fetchone()
+        return jsonify(
+            {
+                "ok": True,
+                "application_id": app_id,
+                "todo_id": first_todo,
+                "chain": step_preview,
+                "approver": dict(au) if au else None,
+                "message": (
+                    f"本系统角色申请已提交，等待 {au['display_name']}（{step_preview[0]['label']}）；"
+                    f"角色：{role_txt}"
+                ),
+            }
+        )
+    # AI-GEN-END
 
     # AI-GEN-BEGIN
     # 账号延期：大面板同申请；含敏感业务账号 → 直属→一级→财务，否则仅直属
@@ -6404,6 +7788,49 @@ def todo_decide(user, tid):
     app_id = row["application_id"] if "application_id" in row.keys() else None
     step_order_for_remark = row["step_order"] if "step_order" in row.keys() else None
 
+    # AI-GEN-BEGIN
+    # 一键关账：无接口系统的管理员待办确认
+    if row["todo_type"] == "一键关账" and not app_id:
+        try:
+            meta = json.loads(row["meta"] or "{}")
+        except Exception:
+            meta = {}
+        item_id = meta.get("bulk_close_item_id")
+        if decision == "rejected":
+            db.execute(
+                "UPDATE todos SET bucket = 'done', status = 'rejected' WHERE id = ?", (tid,)
+            )
+            if item_id:
+                db.execute(
+                    """UPDATE bulk_close_items SET exec_status = 'todo_rejected',
+                    remote_message = ? WHERE id = ?""",
+                    ((remark or "管理员驳回").strip(), int(item_id)),
+                )
+            _persist_decide_remark(db, tid, remark)
+            db.commit()
+            return jsonify({"ok": True, "message": "已驳回一键关账待办"})
+        db.execute(
+            "UPDATE todos SET bucket = 'done', status = 'approved' WHERE id = ?", (tid,)
+        )
+        if item_id:
+            db.execute(
+                """UPDATE bulk_close_items SET exec_status = 'todo_done',
+                remote_message = ?, closed_at = ? WHERE id = ?""",
+                ((remark or "管理员已确认关闭").strip(), now, int(item_id)),
+            )
+            if meta.get("bulk_close_record_id"):
+                append_bulk_event(
+                    db,
+                    int(meta["bulk_close_record_id"]),
+                    "todo_done",
+                    actor_user_id=user["id"],
+                    message=f"管理员确认关闭 {meta.get('system_name')}/{meta.get('account_name')}",
+                )
+        _persist_decide_remark(db, tid, remark)
+        db.commit()
+        return jsonify({"ok": True, "message": "已确认关账（无接口系统手工处理完成）"})
+    # AI-GEN-END
+
     # 账号申请（原账号绑定）/授权：待办通过 = 确认建议匹配
     # 多级审批（有 application_id）走下方统一链路，不走 grant 直通
     if row["todo_type"] in ("账号授权", "账号绑定", "账号申请") and not app_id:
@@ -6623,9 +8050,31 @@ def todo_decide(user, tid):
             return jsonify({"ok": True, "message": "已驳回新建人员"})
         name = (meta.get("applicant_name") or "新员工").strip()
         oa_code = (meta.get("oa_person_code") or "").strip()
-        from db import alloc_username
-
         username = alloc_username(db, name)
+        # AI-GEN-BEGIN
+        phone, email, sk = resolve_contacts_for_create(
+            db,
+            meta.get("phone") or "",
+            meta.get("email") or f"{username}@lecoo.com",
+        )
+        if "phone_missing" in sk or "phone_duplicate" in sk:
+            code = "phone_missing" if "phone_missing" in sk else "phone_duplicate"
+            raise_system_alert(
+                db,
+                code=code,
+                title=(
+                    "OA新建人员失败：缺少手机号"
+                    if code == "phone_missing"
+                    else "OA新建人员失败：手机号重复"
+                ),
+                detail={"name": name, "phone": meta.get("phone"), "todo_id": tid},
+                level="error",
+                target_type="oa_todo",
+                target_id=str(tid),
+            )
+            db.commit()
+            return jsonify({"ok": False, "error": "手机号缺失或重复，已记录系统报警"}), 400
+        # AI-GEN-END
         cur = db.execute(
             """INSERT INTO users
             (username, password, display_name, role, dept_id, phone, email, itcode,
@@ -6637,8 +8086,8 @@ def todo_decide(user, tid):
                 name,
                 "employee_a",
                 3,
-                meta.get("phone") or "",
-                meta.get("email") or f"{username}@lecoo.com",
+                phone or "",
+                email or "",
                 oa_code or username,
                 "2027-01-01",
                 default_account_expire(90),
@@ -6674,19 +8123,22 @@ def todo_decide(user, tid):
         )
 
     # AI-GEN-BEGIN
-    # 知会确认：只阅读确认，不推进主审批链
+    # 知会确认：只阅读确认，不推进主审批链；独立状态 unread → read
     try:
         _meta_cc = json.loads(row["meta"] or "{}")
     except Exception:
         _meta_cc = {}
     if row["todo_type"] == "知会确认" or _meta_cc.get("cc"):
+        if decision != "approved":
+            return jsonify({"ok": False, "error": "知会确认仅支持已阅，不可驳回"}), 400
+        _meta_cc["read_at"] = now
         db.execute(
-            "UPDATE todos SET bucket = 'done', status = ? WHERE id = ?",
-            ("approved" if decision == "approved" else "rejected", tid),
+            "UPDATE todos SET bucket = 'done', status = 'read', meta = ? WHERE id = ?",
+            (json.dumps(_meta_cc, ensure_ascii=False), tid),
         )
         _persist_decide_remark(db, tid, remark)
         db.commit()
-        return jsonify({"ok": True, "message": "已阅知会", "cc": True})
+        return jsonify({"ok": True, "message": "已阅知会", "cc": True, "cc_status": "read"})
     # AI-GEN-END
 
     # 敏感权限开通 / 关闭 / 外部人员 / 账号申请 / 账号权限关闭 / 账号延期：多级审批
@@ -6699,6 +8151,7 @@ def todo_decide(user, tid):
         "外部人员",
         "账号申请",
         "北森离职关闭",
+        "本系统角色",
     ):
         app_row = db.execute("SELECT * FROM applications WHERE id = ?", (app_id,)).fetchone()
         if not app_row:
@@ -6823,6 +8276,19 @@ def todo_decide(user, tid):
             )
             # AI-GEN-BEGIN
             _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+            append_flow_event(
+                db,
+                app_id,
+                "rejected",
+                step_order=step_order if step_order > 0 else None,
+                step_key="reject_end",
+                step_label="驳回并结束",
+                actor_user_id=user["id"],
+                assignee_id=row["assignee_id"],
+                remark=remark,
+                detail={"end": True},
+                now=now,
+            )
             # AI-GEN-END
             db.commit()
             return jsonify({"ok": True, "message": "已驳回，申请结束"})
@@ -6880,6 +8346,27 @@ def todo_decide(user, tid):
             return jsonify(result)
         # AI-GEN-END
 
+        # AI-GEN-BEGIN
+        if decision == "approved" and step_order > 0:
+            st_row = db.execute(
+                """SELECT step_key, step_label, assignee_id FROM application_steps
+                WHERE application_id = ? AND step_order = ?""",
+                (app_id, step_order),
+            ).fetchone()
+            append_flow_event(
+                db,
+                app_id,
+                "approved",
+                step_order=step_order,
+                step_key=(st_row["step_key"] if st_row else None),
+                step_label=(st_row["step_label"] if st_row else f"第{step_order}步"),
+                actor_user_id=user["id"],
+                assignee_id=(st_row["assignee_id"] if st_row else row["assignee_id"]),
+                remark=remark,
+                now=now,
+            )
+        # AI-GEN-END
+
         nxt = db.execute(
             """SELECT * FROM application_steps
             WHERE application_id = ? AND step_order = ?""",
@@ -6912,6 +8399,49 @@ def todo_decide(user, tid):
                 fx_msg = f"已延期至 {result['new_expire']}"
                 meta_fx["effect_done"] = True
                 meta_fx["new_expire"] = result["new_expire"]
+            # AI-GEN-BEGIN
+            elif app_row["flow_code"] == "leuc_roles" and not meta_fx.get("effect_done"):
+                uid = meta_fx.get("leuc_user_id") or app_row["applicant_id"]
+                roles = meta_fx.get("roles") or []
+                labels = meta_fx.get("role_labels") or roles
+                try:
+                    final = add_user_roles(db, int(uid), roles)
+                except ValueError as e:
+                    return jsonify({"ok": False, "error": str(e)}), 400
+                role_txt = "、".join(labels) if labels else "、".join(roles)
+                push_system_message(
+                    db,
+                    int(uid),
+                    "本系统角色已生效",
+                    f"已开通角色：{role_txt}（待申请人确认关闭）",
+                )
+                fx_msg = f"已开通角色：{role_txt}"
+                meta_fx["effect_done"] = True
+                meta_fx["granted_roles"] = final
+            # AI-GEN-END
+            # AI-GEN-BEGIN
+            elif app_row["flow_code"] == "external_create" and not meta_fx.get("effect_done"):
+                result = provision_external_create(db, meta_fx)
+                if not result.get("ok"):
+                    return jsonify({"ok": False, "error": result.get("error") or "创建失败"}), 400
+                fx_msg = result.get("message") or f"已创建外部人员 {result.get('username')}"
+                meta_fx["effect_done"] = True
+                meta_fx["created_user_id"] = result.get("user_id")
+                meta_fx["username"] = result.get("username") or meta_fx.get("username")
+                try:
+                    db.execute(
+                        "UPDATE applications SET provisioned = 1 WHERE id = ?",
+                        (app_id,),
+                    )
+                except Exception:
+                    pass
+                push_system_message(
+                    db,
+                    int(app_row["applicant_id"]),
+                    "外部人员已创建",
+                    fx_msg,
+                )
+            # AI-GEN-END
             elif app_row["flow_code"] in (
                 "sensitive",
                 "account_apply",
@@ -7094,6 +8624,90 @@ def todo_decide(user, tid):
                     "new_expire": result["new_expire"],
                 }
             )
+        # AI-GEN-BEGIN
+        if app_row["flow_code"] == "leuc_roles":
+            try:
+                meta = json.loads(row["meta"] or "{}")
+            except Exception:
+                meta = {}
+            if meta.get("effect_done"):
+                _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+                db.commit()
+                return jsonify({"ok": True, "message": "审批完成"})
+            uid = meta.get("leuc_user_id") or app_row["applicant_id"]
+            roles = meta.get("roles") or []
+            labels = meta.get("role_labels") or roles
+            try:
+                final = add_user_roles(db, int(uid), roles)
+            except ValueError as e:
+                return jsonify({"ok": False, "error": str(e)}), 400
+            meta["effect_done"] = True
+            meta["granted_roles"] = final
+            db.execute(
+                "UPDATE todos SET meta = ? WHERE application_id = ?",
+                (json.dumps(meta, ensure_ascii=False), app_id),
+            )
+            role_txt = "、".join(labels) if labels else "、".join(roles)
+            push_system_message(
+                db,
+                int(uid),
+                "本系统角色已生效",
+                f"已开通角色：{role_txt}",
+            )
+            _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+            db.commit()
+            return jsonify(
+                {
+                    "ok": True,
+                    "message": f"审批完成，已开通角色：{role_txt}",
+                    "roles": final,
+                }
+            )
+        # AI-GEN-END
+        # AI-GEN-BEGIN
+        if app_row["flow_code"] == "external_create":
+            try:
+                meta = json.loads(row["meta"] or "{}")
+            except Exception:
+                meta = {}
+            if meta.get("effect_done"):
+                _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+                db.commit()
+                return jsonify({"ok": True, "message": "审批完成，外部人员已创建"})
+            result = provision_external_create(db, meta)
+            if not result.get("ok"):
+                return jsonify({"ok": False, "error": result.get("error") or "创建失败"}), 400
+            meta["effect_done"] = True
+            meta["created_user_id"] = result.get("user_id")
+            meta["username"] = result.get("username") or meta.get("username")
+            db.execute(
+                "UPDATE todos SET meta = ? WHERE application_id = ?",
+                (json.dumps(meta, ensure_ascii=False), app_id),
+            )
+            try:
+                db.execute(
+                    "UPDATE applications SET provisioned = 1 WHERE id = ?",
+                    (app_id,),
+                )
+            except Exception:
+                pass
+            push_system_message(
+                db,
+                int(app_row["applicant_id"]),
+                "外部人员已创建",
+                result.get("message") or f"已创建 {result.get('username')}",
+            )
+            _persist_decide_remark(db, tid, remark, app_id=app_id, step_order=step_order_for_remark)
+            db.commit()
+            return jsonify(
+                {
+                    "ok": True,
+                    "message": result.get("message") or "审批完成，外部人员已创建",
+                    "username": result.get("username"),
+                    "user_id": result.get("user_id"),
+                }
+            )
+        # AI-GEN-END
         if app_row["flow_code"] in (
             "account_close",
             "sensitive_close",
@@ -7358,16 +8972,14 @@ def todo_decide(user, tid):
 @app.post("/api/dept/members")
 @login_required
 def add_member(user):
-    """手动添加：仅支持新建外部人员（落到内置「外部人员」部门）。"""
+    """新建外部人员：走与敏感权限相同审批链（直属→一级→财务），通过后落库。"""
     # AI-GEN-BEGIN
-    if not require_dept_manage(user):
-        return jsonify({"ok": False, "error": "无权限"}), 403
+    if not can_add_external_member(user):
+        return jsonify({"ok": False, "error": "无「新建外部人员」权限"}), 403
     data = request.get_json(force=True) or {}
     display_name = (data.get("display_name") or "").strip()
     phone = (data.get("phone") or "").strip()
     email = (data.get("email") or "").strip()
-    role = "external"
-    person_type = "external"
     db = get_db()
     migrate_schema(db)
     ensure_roles_seeded(db)
@@ -7376,15 +8988,213 @@ def add_member(user):
         return jsonify({"ok": False, "error": "外部人员部门未初始化"}), 500
     if not display_name:
         return jsonify({"ok": False, "error": "姓名必填"}), 400
-    want = (data.get("username") or "").strip() or alloc_username(db, display_name)
-    if normalize_username(want) == SYSTEM_ADMIN_USERNAME:
+    preview_base = name_to_pinyin(display_name)
+    if not preview_base or preview_base == "user":
+        return jsonify({"ok": False, "error": "无法根据姓名生成登录名"}), 400
+    username = alloc_username(db, display_name)
+    if normalize_username(username) == SYSTEM_ADMIN_USERNAME:
         return jsonify({"ok": False, "error": "用户名 admin 为系统保留"}), 400
-    ok, uname_or_err = ensure_username_available(db, want)
+    ok, uname_or_err = ensure_username_available(db, username)
     if not ok:
         return jsonify({"ok": False, "error": uname_or_err}), 400
     username = uname_or_err
-    preview_base = name_to_pinyin(display_name)
+    # AI-GEN-BEGIN
+    phone_n = normalize_phone(phone)
+    email_n = normalize_email(email)
+    if not phone_n:
+        return jsonify({"ok": False, "error": "手机号必填（登录凭证）"}), 400
+    ok_c, err_c = ensure_contact_available(db, phone=phone_n, email=email_n)
+    if not ok_c:
+        return jsonify({"ok": False, "error": err_c}), 400
+    ok_s, err_s = ensure_email_suffix_allowed(db, email_n)
+    if not ok_s:
+        return jsonify({"ok": False, "error": err_s}), 400
+    phone = phone_n or ""
+    email = email_n or ""
+    # AI-GEN-END
     beisen_user_id = (data.get("beisen_user_id") or "").strip() or None
+    dept_row = db.execute(
+        "SELECT name FROM departments WHERE id = ?", (dept_id,)
+    ).fetchone()
+    now = now_ts()
+    subject_id = int(user["id"])
+    # 与含敏感权限一致：sensitive 链（直属→一级→财务）+ 申请人确认
+    steps = materialize_approval_chain(db, "sensitive", subject_id)
+    steps, cc_list = prepare_flow_steps(db, steps, subject_id)
+    meta_extra = {
+        "external_create": True,
+        "display_name": display_name,
+        "username": username,
+        "pinyin_base": preview_base,
+        "phone": phone or None,
+        "email": email or None,
+        "beisen_user_id": beisen_user_id,
+        "dept_id": dept_id,
+        "dept_name": (dept_row["name"] if dept_row else "外部人员"),
+        "role": "external",
+        "person_type": "external",
+        "initiator_id": subject_id,
+        "todo_type": "新建外部人员",
+    }
+    title = f"新建外部人员 · {display_name}（{username}）"
+    init_title = f"新建外部人员 · {display_name}（审批中）"
+    todo_type = "新建外部人员"
+
+    def _do_create_now(app_id_for_meta=None):
+        result = provision_external_create(db, meta_extra)
+        if not result.get("ok"):
+            return None, result
+        if app_id_for_meta:
+            meta_extra["effect_done"] = True
+            meta_extra["created_user_id"] = result.get("user_id")
+            meta_extra["username"] = result.get("username") or username
+            db.execute(
+                "UPDATE applications SET status = 'approved', updated_at = ?, provisioned = 1 WHERE id = ?",
+                (now, app_id_for_meta),
+            )
+        return result, None
+
+    if not steps:
+        cur = db.execute(
+            """INSERT INTO applications
+            (flow_code, applicant_id, perm_def_id, system_id, title, status,
+             current_step, total_steps, created_at, updated_at, provisioned)
+            VALUES (?, ?, NULL, NULL, ?, 'approved', 0, 0, ?, ?, 0)""",
+            ("external_create", subject_id, title, now, now),
+        )
+        app_id = cur.lastrowid
+        result, err = _do_create_now(app_id)
+        if err:
+            return jsonify({"ok": False, "error": err.get("error") or "创建失败"}), 400
+        append_flow_event(
+            db,
+            app_id,
+            "submitted",
+            step_order=0,
+            step_key="initiator",
+            step_label="发起申请",
+            actor_user_id=subject_id,
+            assignee_id=subject_id,
+            detail={"auto_approved": True, "todo_type": todo_type},
+            now=now,
+        )
+        db.commit()
+        return jsonify(
+            {
+                "ok": True,
+                "auto_approved": True,
+                "application_id": app_id,
+                "username": result.get("username"),
+                "user": {
+                    "id": result.get("user_id"),
+                    "username": result.get("username"),
+                    "display_name": display_name,
+                    "person_type": "external",
+                    "dept_id": dept_id,
+                },
+                "notify": result.get("notify"),
+                "message": (
+                    f"无待审批节点，已直接创建外部人员 {result.get('username')}；"
+                    f"{result.get('message') or ''}"
+                ).strip(),
+            }
+        )
+
+    app_id, first_todo, first_assignee, step_preview = start_multi_step_apply(
+        db,
+        flow_code="external_create",
+        todo_type=todo_type,
+        title=title,
+        init_title=init_title,
+        subject_id=subject_id,
+        initiator_id=subject_id,
+        system_id=None,
+        steps=steps,
+        meta_extra=meta_extra,
+        cc_list=cc_list,
+    )
+    db.commit()
+    au = db.execute(
+        "SELECT display_name, username FROM users WHERE id = ?", (first_assignee,)
+    ).fetchone()
+    chain_txt = " → ".join(s["label"] for s in step_preview)
+    return jsonify(
+        {
+            "ok": True,
+            "application_id": app_id,
+            "todo_id": first_todo,
+            "username": username,
+            "chain": step_preview,
+            "approver": dict(au) if au else None,
+            "message": (
+                f"新建外部人员已提交审批，等待 {au['display_name'] if au else ''}（{step_preview[0]['label']}）；"
+                f"链：{chain_txt}（与敏感权限一致）"
+            ),
+        }
+    )
+    # AI-GEN-END
+
+
+def provision_external_create(db, meta: dict | None) -> dict:
+    """审批通过后创建外部人员主档并发信。"""
+    # AI-GEN-BEGIN
+    meta = meta if isinstance(meta, dict) else {}
+    if meta.get("effect_done") and meta.get("created_user_id"):
+        return {
+            "ok": True,
+            "user_id": meta.get("created_user_id"),
+            "username": meta.get("username"),
+            "message": "外部人员已创建",
+            "already": True,
+        }
+    display_name = (meta.get("display_name") or "").strip()
+    if not display_name:
+        return {"ok": False, "error": "缺少姓名，无法创建外部人员"}
+    dept_id = meta.get("dept_id") or get_external_dept_id(db)
+    if not dept_id:
+        return {"ok": False, "error": "外部人员部门未初始化"}
+    want = (meta.get("username") or "").strip() or alloc_username(db, display_name)
+    if normalize_username(want) == SYSTEM_ADMIN_USERNAME:
+        want = alloc_username(db, display_name)
+    ok, uname_or_err = ensure_username_available(db, want)
+    if not ok:
+        # 审批期间被占用则重新分配
+        want = alloc_username(db, display_name)
+        ok, uname_or_err = ensure_username_available(db, want)
+        if not ok:
+            return {"ok": False, "error": uname_or_err}
+    username = uname_or_err
+    phone = normalize_phone(meta.get("phone"))
+    email = normalize_email(meta.get("email"))
+    # AI-GEN-BEGIN
+    if not phone:
+        raise_system_alert(
+            db,
+            code="phone_missing",
+            title="外部人员创建失败：缺少手机号",
+            detail={"name": display_name, "meta": meta},
+            level="error",
+            target_type="external_create",
+            target_id=display_name,
+        )
+        return {"ok": False, "error": "手机号必填，无法创建外部人员"}
+    phone, email, sk = resolve_contacts_for_create(db, phone, email)
+    if "phone_duplicate" in sk or not phone:
+        raise_system_alert(
+            db,
+            code="phone_duplicate",
+            title="外部人员创建失败：手机号重复",
+            detail={"name": display_name, "phone": meta.get("phone")},
+            level="error",
+            target_type="external_create",
+            target_id=display_name,
+        )
+        return {"ok": False, "error": "手机号已被占用"}
+    ok_s, err_s = ensure_email_suffix_allowed(db, email)
+    if not ok_s:
+        return {"ok": False, "error": err_s}
+    # AI-GEN-END
+    beisen_user_id = (meta.get("beisen_user_id") or "").strip() or None
     password = gen_account_password()
     acct_expire = default_account_expire(90)
     cur = db.execute(
@@ -7396,14 +9206,14 @@ def add_member(user):
             username,
             password,
             display_name,
-            role,
+            "external",
             dept_id,
-            phone or None,
-            email or None,
+            phone,
+            email,
             username,
             "2026-12-31",
             acct_expire,
-            person_type,
+            "external",
             beisen_user_id,
         ),
     )
@@ -7411,7 +9221,7 @@ def add_member(user):
     try:
         db.execute(
             "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)",
-            (uid, role),
+            (uid, "external"),
         )
     except Exception:
         pass
@@ -7420,34 +9230,23 @@ def add_member(user):
         user_id=uid,
         username=username,
         password=password,
-        phone=phone or None,
-        email=email or None,
+        phone=phone,
+        email=email,
         reason="external_create",
     )
-    db.commit()
-    return jsonify(
-        {
-            "ok": True,
-            "user": {
-                "id": uid,
-                "username": username,
-                "display_name": display_name,
-                "pinyin_base": preview_base,
-                "person_type": person_type,
-                "dept_id": dept_id,
-            },
-            "notify": {
-                "channel": notify.get("channel"),
-                "target": notify.get("target"),
-                "status": notify.get("status"),
-            },
-            "message": (
-                f"已创建外部人员 {username}；初始密码已按"
-                f"{'手机' if notify.get('channel')=='phone' else ('邮箱' if notify.get('channel')=='email' else '无联系方式')}"
-                f"写入发送记录（未真实发送）"
-            ),
-        }
-    )
+    ch = notify.get("channel")
+    ch_txt = "手机" if ch == "phone" else ("邮箱" if ch == "email" else "无联系方式")
+    return {
+        "ok": True,
+        "user_id": uid,
+        "username": username,
+        "notify": {
+            "channel": notify.get("channel"),
+            "target": notify.get("target"),
+            "status": notify.get("status"),
+        },
+        "message": f"已创建外部人员 {username}；初始密码已按{ch_txt}写入发送记录",
+    }
     # AI-GEN-END
 
 
@@ -7581,6 +9380,10 @@ def import_members(user):
     reader = csv.reader(io.StringIO(text.strip()))
     db = get_db()
     created = []
+    # AI-GEN-BEGIN
+    batch_phones: set[str] = set()
+    batch_emails: set[str] = set()
+    # AI-GEN-END
     for row in reader:
         if not row or not row[0].strip() or row[0].strip().startswith("#"):
             continue
@@ -7591,6 +9394,40 @@ def import_members(user):
         email = row[2].strip() if len(row) > 2 else ""
         role = row[3].strip() if len(row) > 3 and row[3].strip() in ROLE_MENUS else "employee_a"
         username = alloc_username(db, display_name)
+        # AI-GEN-BEGIN
+        phone, email, sk = resolve_contacts_for_create(
+            db, phone, email, batch_phones=batch_phones, batch_emails=batch_emails
+        )
+        if "phone_missing" in sk or "phone_duplicate" in sk:
+            code = "phone_missing" if "phone_missing" in sk else "phone_duplicate"
+            raise_system_alert(
+                db,
+                code=code,
+                title=(
+                    "导入人员失败：缺少手机号"
+                    if code == "phone_missing"
+                    else "导入人员失败：手机号重复"
+                ),
+                detail={"name": display_name, "phone": row[1] if len(row) > 1 else None},
+                level="error",
+                target_type="import",
+                target_id=display_name,
+            )
+            continue
+        if email:
+            ok_s, err_s = ensure_email_suffix_allowed(db, email)
+            if not ok_s:
+                raise_system_alert(
+                    db,
+                    code="email_suffix_invalid",
+                    title="导入人员：邮箱后缀不符合配置，已忽略邮箱",
+                    detail={"name": display_name, "email": email, "error": err_s},
+                    level="warn",
+                    target_type="import",
+                    target_id=display_name,
+                )
+                email = None
+        # AI-GEN-END
         cur = db.execute(
             """INSERT INTO users
             (username, password, display_name, role, dept_id, phone, email, itcode,
@@ -7602,8 +9439,8 @@ def import_members(user):
                 display_name,
                 role,
                 dept_id,
-                phone or None,
-                email or None,
+                phone,
+                email,
                 username,
                 "2026-12-31",
                 default_account_expire(90),
@@ -7617,18 +9454,23 @@ def import_members(user):
 @app.post("/api/username/preview")
 @login_required
 def username_preview(user):
-    if not require_dept_manage(user):
-        return jsonify({"ok": False, "error": "无权限"}), 403
+    """按姓名预览登录名。登录即可预览；真正创建仍校验 org_add。"""
+    # AI-GEN-BEGIN
     data = request.get_json(force=True) or {}
     name = (data.get("display_name") or "").strip()
+    if not name:
+        return jsonify({"ok": True, "pinyin_base": "", "username": ""})
     db = get_db()
+    base = name_to_pinyin(name)
+    username = alloc_username(db, name)
     return jsonify(
         {
             "ok": True,
-            "pinyin_base": name_to_pinyin(name),
-            "username": alloc_username(db, name),
+            "pinyin_base": base,
+            "username": username,
         }
     )
+    # AI-GEN-END
 
 
 @app.get("/api/hr/users")
@@ -7802,6 +9644,29 @@ def hr_sync_init(user):
         username = uname_or_err
         itcode = (r["emp_no"] if "emp_no" in rkeys and r["emp_no"] else None) or username
         acct_expire = default_account_expire(90)
+        # AI-GEN-BEGIN
+        phone, email, sk = resolve_contacts_for_create(db, r["phone"], r["email"])
+        if "phone_missing" in sk or "phone_duplicate" in sk:
+            code = "phone_missing" if "phone_missing" in sk else "phone_duplicate"
+            raise_system_alert(
+                db,
+                code=code,
+                title=(
+                    "花名册建用户失败：缺少手机号"
+                    if code == "phone_missing"
+                    else "花名册建用户失败：手机号重复"
+                ),
+                detail={
+                    "name": r["display_name"],
+                    "phone": r["phone"],
+                    "roster_id": r["id"],
+                },
+                level="error",
+                target_type="roster",
+                target_id=str(r["id"]),
+            )
+            continue
+        # AI-GEN-END
         cur = db.execute(
             """INSERT INTO users
             (username, password, display_name, role, dept_id, phone, email, itcode,
@@ -7813,8 +9678,8 @@ def hr_sync_init(user):
                 r["display_name"],
                 "employee_a",
                 r["dept_id"],
-                r["phone"],
-                r["email"],
+                phone,
+                email,
                 itcode,
                 "2026-12-31",
                 acct_expire,
@@ -8690,6 +10555,9 @@ def _diff_leorg_employees(db, emps, leorg_to_local=None):
         phone = extract_leorg_phone(e)
         leorg_emp_id = e.get("id")
         beisen_user_id = _beisen_id_of(e)
+        # AI-GEN-BEGIN
+        feishu_user_id = _feishu_id_of_emp(e)
+        # AI-GEN-END
         org_leorg = e.get("org_id")
         try:
             org_leorg_id = int(org_leorg) if org_leorg not in (None, "") else None
@@ -8736,6 +10604,7 @@ def _diff_leorg_employees(db, emps, leorg_to_local=None):
             "email": email,
             "emp_no": emp_no or None,
             "beisen_user_id": beisen_user_id,
+            "feishu_user_id": feishu_user_id,
         }
         # AI-GEN-END
 
@@ -8763,6 +10632,20 @@ def _diff_leorg_employees(db, emps, leorg_to_local=None):
                         "new": beisen_user_id,
                     }
                 )
+            # AI-GEN-BEGIN
+            ukeys = user.keys()
+            old_fid = (
+                (user["feishu_user_id"] or "") if "feishu_user_id" in ukeys else ""
+            )
+            if feishu_user_id and old_fid != feishu_user_id:
+                fields.append(
+                    {
+                        "field": "feishu_user_id",
+                        "old": old_fid or None,
+                        "new": feishu_user_id,
+                    }
+                )
+            # AI-GEN-END
             ukeys = user.keys()
             if leorg_emp_id is not None:
                 old_le = user["leorg_emp_id"] if "leorg_emp_id" in ukeys else None
@@ -8940,19 +10823,48 @@ def _apply_leorg_sync_changes(db, selected):
             uid = int(p["user_id"])
             sets = []
             params = []
+            # AI-GEN-BEGIN
+            phone_new = None
+            email_new = None
+            has_phone = False
+            has_email = False
             for f in p.get("fields") or []:
                 fld = f.get("field")
                 if fld in (
                     "display_name",
                     "dept_id",
-                    "phone",
-                    "email",
                     "itcode",
                     "beisen_user_id",
+                    "feishu_user_id",
                     "leorg_emp_id",
                 ):
                     sets.append(f"{fld} = ?")
                     params.append(f.get("new"))
+                elif fld == "phone":
+                    has_phone = True
+                    phone_new = f.get("new")
+                elif fld == "email":
+                    has_email = True
+                    email_new = f.get("new")
+            if has_phone or has_email:
+                urow = db.execute(
+                    "SELECT phone, email FROM users WHERE id = ?", (uid,)
+                ).fetchone()
+                out_p, out_e, sk = resolve_contacts_for_update(
+                    db,
+                    user_id=uid,
+                    new_phone=phone_new if has_phone else None,
+                    new_email=email_new if has_email else None,
+                    cur_phone=urow["phone"] if urow else None,
+                    cur_email=urow["email"] if urow else None,
+                )
+                if has_phone and "phone" not in sk:
+                    sets.append("phone = ?")
+                    params.append(out_p)
+                if has_email and "email" not in sk:
+                    sets.append("email = ?")
+                    params.append(out_e)
+            # AI-GEN-END
             if sets:
                 params.append(uid)
                 db.execute(
@@ -8964,6 +10876,52 @@ def _apply_leorg_sync_changes(db, selected):
             display_name = (p.get("display_name") or "").strip()
             if not display_name:
                 continue
+            phone, email, contact_skipped = resolve_contacts_for_create(
+                db, p.get("phone"), p.get("email")
+            )
+            if "phone_missing" in contact_skipped or "phone_duplicate" in contact_skipped:
+                code = (
+                    "phone_missing"
+                    if "phone_missing" in contact_skipped
+                    else "phone_duplicate"
+                )
+                raise_system_alert(
+                    db,
+                    code=code,
+                    title=(
+                        "同步确认建用户失败：缺少手机号"
+                        if code == "phone_missing"
+                        else "同步确认建用户失败：手机号重复"
+                    ),
+                    detail={
+                        "name": display_name,
+                        "phone": p.get("phone"),
+                        "email": p.get("email"),
+                        "leorg_emp_id": p.get("leorg_emp_id"),
+                        "skipped": contact_skipped,
+                    },
+                    level="error",
+                    target_type="leorg_emp",
+                    target_id=str(p.get("leorg_emp_id") or display_name),
+                )
+                continue
+            if email:
+                ok_s, err_s = ensure_email_suffix_allowed(db, email)
+                if not ok_s:
+                    raise_system_alert(
+                        db,
+                        code="email_suffix_invalid",
+                        title="同步确认建用户：邮箱后缀不符合配置，已忽略邮箱",
+                        detail={
+                            "name": display_name,
+                            "email": email,
+                            "error": err_s,
+                        },
+                        level="warn",
+                        target_type="leorg_emp",
+                        target_id=str(p.get("leorg_emp_id") or display_name),
+                    )
+                    email = None
             username = alloc_username(db, display_name)
             password = gen_account_password()
             acct_expire = default_account_expire(90)
@@ -8978,8 +10936,8 @@ def _apply_leorg_sync_changes(db, selected):
                     display_name,
                     "employee_a",
                     p.get("dept_id"),
-                    p.get("phone"),
-                    p.get("email"),
+                    phone,
+                    email,
                     p.get("emp_no") or username,
                     "2099-12-31",
                     acct_expire,
@@ -9001,8 +10959,8 @@ def _apply_leorg_sync_changes(db, selected):
                 user_id=uid,
                 username=username,
                 password=password,
-                phone=p.get("phone"),
-                email=p.get("email"),
+                phone=phone,
+                email=email,
                 reason="leorg_sync_create",
             )
             counts["user"] = counts.get("user", 0) + 1
@@ -9308,7 +11266,14 @@ def _sync_leorg_employees(
     users_updated = 0
     skipped = 0
     beisen_filled = 0
+    # AI-GEN-BEGIN
+    feishu_filled = 0
+    # AI-GEN-END
     closed = 0
+    # AI-GEN-BEGIN
+    batch_phones: set[str] = set()
+    batch_emails: set[str] = set()
+    # AI-GEN-END
 
     def _beisen_id_of(row):
         v = row.get("beisen_id")
@@ -9326,6 +11291,9 @@ def _sync_leorg_employees(
         phone = extract_leorg_phone(e)
         leorg_emp_id = e.get("id")
         beisen_user_id = _beisen_id_of(e)
+        # AI-GEN-BEGIN
+        feishu_user_id = _feishu_id_of_emp(e)
+        # AI-GEN-END
         org_leorg = e.get("org_id")
         # AI-GEN-BEGIN
         dept_id = _resolve_emp_dept_id(leorg_to_local, org_leorg, fallback_dept_id)
@@ -9395,12 +11363,56 @@ def _sync_leorg_employees(
             ) or not role:
                 sets.insert(0, "display_name = ?")
                 params.insert(0, name)
-            if email:
-                sets.append("email = ?")
-                params.append(email)
-            if phone:
-                sets.append("phone = ?")
-                params.append(phone)
+            # AI-GEN-BEGIN
+            # 手机/邮箱全局唯一：冲突则跳过该字段，不覆盖他人
+            if email or phone:
+                out_p, out_e, sk = resolve_contacts_for_update(
+                    db,
+                    user_id=uid,
+                    new_phone=phone if phone else None,
+                    new_email=email if email else None,
+                    cur_phone=user["phone"] if "phone" in user.keys() else None,
+                    cur_email=user["email"] if "email" in user.keys() else None,
+                )
+                if phone and "phone" in sk:
+                    raise_system_alert(
+                        db,
+                        code="phone_duplicate",
+                        title="通讯录更新跳过：手机号与他人冲突",
+                        detail={
+                            "user_id": uid,
+                            "name": name,
+                            "phone": phone,
+                            "leorg_emp_id": leorg_emp_id,
+                        },
+                        level="warn",
+                        target_type="user",
+                        target_id=str(uid),
+                    )
+                if email and "email" not in sk:
+                    ok_s, err_s = ensure_email_suffix_allowed(db, out_e)
+                    if not ok_s:
+                        raise_system_alert(
+                            db,
+                            code="email_suffix_invalid",
+                            title="通讯录更新跳过：邮箱后缀不符合配置",
+                            detail={
+                                "user_id": uid,
+                                "name": name,
+                                "email": out_e,
+                                "error": err_s,
+                            },
+                            level="warn",
+                            target_type="user",
+                            target_id=str(uid),
+                        )
+                    else:
+                        sets.append("email = ?")
+                        params.append(out_e)
+                if phone and "phone" not in sk:
+                    sets.append("phone = ?")
+                    params.append(out_p)
+            # AI-GEN-END
             if emp_no:
                 sets.append("itcode = ?")
                 params.append(emp_no)
@@ -9411,6 +11423,12 @@ def _sync_leorg_employees(
                 sets.append("beisen_user_id = ?")
                 params.append(beisen_user_id)
                 beisen_filled += 1
+            # AI-GEN-BEGIN
+            if feishu_user_id:
+                sets.append("feishu_user_id = ?")
+                params.append(feishu_user_id)
+                feishu_filled += 1
+            # AI-GEN-END
             params.append(uid)
             before_snap = {
                 "dept_id": user["dept_id"] if "dept_id" in user.keys() else None,
@@ -9544,15 +11562,72 @@ def _sync_leorg_employees(
                 continue
 
         # AI-GEN-BEGIN
-        # 新用户：直接生成登录名并创建，写发送记录
+        # 新用户：手机号优先必填唯一；LeOrg 常返回脱敏号（含*）→ 仍建用户、phone 置空并报警
+        phone_n, email_n, contact_skipped = resolve_contacts_for_create(
+            db, phone, email, batch_phones=batch_phones, batch_emails=batch_emails
+        )
+        soft_phone_skip = False
+        if "phone_missing" in contact_skipped or "phone_duplicate" in contact_skipped:
+            code = (
+                "phone_missing"
+                if "phone_missing" in contact_skipped
+                else "phone_duplicate"
+            )
+            # 通讯录同步：不因缺手机整批失败；无可用手机时建档留空，后续补绑
+            soft_phone_skip = True
+            phone_n = None
+            raise_system_alert(
+                db,
+                code=code,
+                title=(
+                    "通讯录建用户：缺少可用手机号（已建档，待补绑）"
+                    if code == "phone_missing"
+                    else "通讯录建用户：手机号重复（已建档，手机置空）"
+                ),
+                detail={
+                    "name": name,
+                    "phone": phone,
+                    "email": email,
+                    "leorg_emp_id": leorg_emp_id,
+                    "emp_no": emp_no,
+                    "dept_id": dept_id,
+                    "skipped": contact_skipped,
+                    "note": "LeOrg list/detail 常返回脱敏手机（含*），无法作为登录凭证",
+                },
+                level="warn",
+                target_type="leorg_emp",
+                target_id=str(leorg_emp_id or emp_no or name),
+            )
+        phone = phone_n
+        email = email_n
+        if email:
+            ok_s, err_s = ensure_email_suffix_allowed(db, email)
+            if not ok_s:
+                raise_system_alert(
+                    db,
+                    code="email_suffix_invalid",
+                    title="通讯录建用户：邮箱后缀不符合配置，已忽略邮箱",
+                    detail={
+                        "name": name,
+                        "email": email,
+                        "error": err_s,
+                        "leorg_emp_id": leorg_emp_id,
+                    },
+                    level="warn",
+                    target_type="leorg_emp",
+                    target_id=str(leorg_emp_id or name),
+                )
+                email = None
+                contact_skipped = list(contact_skipped) + ["email_suffix"]
         username = alloc_username(db, name)
         password = gen_account_password()
         acct_expire = default_account_expire(90)
         cur = db.execute(
             """INSERT INTO users
             (username, password, display_name, role, dept_id, phone, email, itcode,
-             password_expire, account_expire, person_type, leorg_emp_id, beisen_user_id)
-            VALUES (?,?,?,?,?,?,?,?,?,?, 'internal', ?, ?)""",
+             password_expire, account_expire, person_type, leorg_emp_id, beisen_user_id,
+             feishu_user_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?, 'internal', ?, ?, ?)""",
             (
                 username,
                 password,
@@ -9566,6 +11641,7 @@ def _sync_leorg_employees(
                 acct_expire,
                 int(leorg_emp_id) if leorg_emp_id is not None else None,
                 beisen_user_id,
+                feishu_user_id,
             ),
         )
         # AI-GEN-BEGIN
@@ -9602,8 +11678,11 @@ def _sync_leorg_employees(
                         "dept_id": dept_id,
                         "phone": phone,
                         "email": email,
+                        "contact_skipped": contact_skipped,
+                        "soft_phone_skip": soft_phone_skip,
                         "leorg_emp_id": leorg_emp_id,
                         "beisen_user_id": beisen_user_id,
+                        "feishu_user_id": feishu_user_id,
                         "account_expire": acct_expire,
                     },
                 }
@@ -9616,6 +11695,7 @@ def _sync_leorg_employees(
         "roster_updated": roster_updated,
         "users_updated": users_updated,
         "beisen_filled": beisen_filled,
+        "feishu_filled": feishu_filled,
         "skipped": skipped,
         "closed": closed,
     }
@@ -9806,11 +11886,12 @@ def hr_batch_grant(user):
 @app.get("/api/hr/grant-systems")
 @login_required
 def bind_systems(user):
-    """可选系统列表（含禁外部、权限目录、是否有敏感）。"""
+    """可选系统列表（含禁外部、权限目录、是否有敏感）。本系统 LEUC 改为返回可申请角色。"""
     # AI-GEN-BEGIN
     db = get_db()
+    ensure_roles_seeded(db)
     rows = db.execute(
-        """SELECT id, code, name, access_mode, forbid_external, has_sensitive
+        """SELECT id, code, name, access_mode, forbid_external, has_sensitive, is_builtin
         FROM systems WHERE status='enabled' ORDER BY CASE WHEN code = ? THEN 0 ELSE 1 END, id""",
         (LEUC_SYSTEM_CODE,),
     ).fetchall()
@@ -9821,20 +11902,58 @@ def bind_systems(user):
         FROM sensitive_perm_defs WHERE enabled=1 ORDER BY id"""
     ).fetchall():
         perms_by_sys.setdefault(r["system_id"], []).append(dict(r))
+    # 本系统可申请角色：全部内置 + 自定义（隐藏旧 employee_a/b）
+    leuc_roles = []
+    for rr in db.execute(
+        "SELECT code, label, is_builtin, sort_order FROM roles ORDER BY sort_order, code"
+    ).fetchall():
+        if rr["code"] in ("employee_a", "employee_b"):
+            continue
+        leuc_roles.append(
+            {
+                "code": rr["code"],
+                "label": rr["label"] or rr["code"],
+                "is_builtin": bool(rr["is_builtin"]),
+            }
+        )
     systems_out = []
     for r in rows:
+        is_leuc = (r["code"] or "") == LEUC_SYSTEM_CODE or int(
+            r["is_builtin"] if "is_builtin" in r.keys() else 0
+        )
+        if is_leuc:
+            d = dict(r)
+            d["is_builtin"] = int(d.get("is_builtin") or 0)
+            systems_out.append(
+                {
+                    **d,
+                    "mode_label": "需账号绑定",
+                    "forbid_external": int(r["forbid_external"] or 0),
+                    "has_sensitive": 0,
+                    "has_sensitive_defs": False,
+                    "default_perm_def_id": None,
+                    "permissions": [],
+                    "apply_mode": "roles",
+                    "roles": leuc_roles,
+                }
+            )
+            continue
         perms = perms_by_sys.get(r["id"], [])
         sens_ids = [p["id"] for p in perms if p.get("is_sensitive")]
         has_sens = bool(r["has_sensitive"]) if "has_sensitive" in r.keys() else bool(sens_ids)
+        d = dict(r)
+        d["is_builtin"] = int(d.get("is_builtin") or 0)
         systems_out.append(
             {
-                **dict(r),
+                **d,
                 "mode_label": "全员登录" if r["access_mode"] == "open" else "需账号绑定",
                 "forbid_external": int(r["forbid_external"] or 0),
                 "has_sensitive": int(has_sens),
                 "has_sensitive_defs": bool(sens_ids),
                 "default_perm_def_id": sens_ids[0] if sens_ids else None,
                 "permissions": perms,
+                "apply_mode": "perms",
+                "roles": [],
             }
         )
     return jsonify({"ok": True, "systems": systems_out})
@@ -9875,6 +11994,11 @@ def bind_user_bound_accounts(user):
     if not can_apply_for_user(user, target):
         return jsonify({"ok": False, "error": "无权查看该人员已绑定账号"}), 403
     db = get_db()
+    # AI-GEN-BEGIN
+    # 本系统账号与人员一致：确保存在 LEUC 登录账号行，供申请权限选用
+    ensure_user_leuc_account(db, target)
+    db.commit()
+    # AI-GEN-END
     sid = request.args.get("system_id")
     sql = """SELECT a.id, a.account_name, a.account_label, a.system_id,
                a.can_login, a.has_sensitive, a.perm_summary,
@@ -10111,6 +12235,20 @@ def bind_apply(user):
                 sys_row = db.execute("SELECT * FROM systems WHERE id = ?", (sid,)).fetchone()
                 if not sys_row:
                     continue
+                # AI-GEN-BEGIN
+                # 本系统账号与人员一致：禁止走「新建账号」申请
+                if (sys_row["code"] or "") == LEUC_SYSTEM_CODE or int(
+                    sys_row["is_builtin"] if "is_builtin" in sys_row.keys() else 0
+                ):
+                    for it in g.get("items") or []:
+                        if int(it.get("system_id") or 0) == int(sid) and it.get("create_new"):
+                            return jsonify(
+                                {
+                                    "ok": False,
+                                    "error": f"{urow['display_name']}：本系统（LEUC）只能申请权限，不可新建账号",
+                                }
+                            ), 400
+                # AI-GEN-END
                 ok, err = user_may_access_system(db, urow, sys_row)
                 if not ok:
                     return jsonify({"ok": False, "error": f"{urow['display_name']}：{err}"}), 400
@@ -10729,10 +12867,36 @@ def sys_accounts_confirm_bind(user):
             )
             account_id = cur.lastrowid
         # AI-GEN-END
+    # AI-GEN-BEGIN
+    # 可输入账号名/唯一标识：无 account_id 时按输入解析
+    if not account_id and not create_new:
+        key = (
+            (data.get("account_key") or data.get("account_name") or data.get("account_uid") or "")
+            .strip()
+        )
+        if key:
+            hit = db.execute(
+                """SELECT id FROM system_accounts
+                WHERE system_id = ? AND (account_name = ? OR account_uid = ?)
+                  AND (leuc_user_id IS NULL OR leuc_user_id = ?)
+                ORDER BY CASE WHEN leuc_user_id = ? THEN 0 ELSE 1 END, id
+                LIMIT 1""",
+                (grant["system_id"], key, key, grant["leuc_user_id"], grant["leuc_user_id"]),
+            ).fetchone()
+            if hit:
+                account_id = hit["id"]
+            else:
+                return jsonify(
+                    {
+                        "ok": False,
+                        "error": f"未找到账号「{key}」，请核对账号名/唯一标识，或使用「新建并绑定」",
+                    }
+                ), 400
+    # AI-GEN-END
     if not account_id:
         account_id = grant["suggested_account_id"]
     if not account_id:
-        return jsonify({"ok": False, "error": "请选择账号或新建绑定"}), 400
+        return jsonify({"ok": False, "error": "请填写账号或新建绑定"}), 400
     bind_leuc_to_system_account(db, grant["leuc_user_id"], account_id)
     db.execute(
         """UPDATE grant_applications
@@ -10934,6 +13098,18 @@ def _beisen_id_of_emp(row) -> str | None:
     if v is None or v == "":
         return None
     return str(v).strip()
+
+
+# AI-GEN-BEGIN
+def _feishu_id_of_emp(row) -> str | None:
+    """从 LeOrg 员工对象取飞书用户 ID。"""
+    v = row.get("feishu_user_id")
+    if v is None or v == "":
+        v = row.get("feishuUserId") or row.get("feishu_id") or row.get("feishuId")
+    if v is None or v == "":
+        return None
+    return str(v).strip()
+# AI-GEN-END
 
 
 def sync_beisen_accounts_from_org(db, system_id: int) -> dict:
@@ -11265,6 +13441,24 @@ def admin_systems(user):
         item["can_manage"] = manage_ids is None or r["id"] in manage_ids
         # AI-GEN-BEGIN
         item["is_builtin"] = int(r["is_builtin"] if "is_builtin" in r.keys() else 0)
+        if item["is_builtin"] or (item.get("code") or "") == LEUC_SYSTEM_CODE:
+            ensure_roles_seeded(db)
+            item["apply_mode"] = "roles"
+            item["permissions"] = []
+            item["roles"] = [
+                {
+                    "code": rr["code"],
+                    "label": rr["label"] or rr["code"],
+                    "is_builtin": bool(rr["is_builtin"]),
+                }
+                for rr in db.execute(
+                    "SELECT code, label, is_builtin FROM roles ORDER BY sort_order, code"
+                ).fetchall()
+                if rr["code"] not in ("employee_a", "employee_b")
+            ]
+        else:
+            item["apply_mode"] = "perms"
+            item["roles"] = []
         if "sso_login_field" not in item or not item.get("sso_login_field"):
             item["sso_login_field"] = (
                 "account_uid" if item.get("code") == "beisen" else "account_name"
@@ -11443,6 +13637,9 @@ def admin_create_system(user):
         return jsonify(
             {"ok": False, "error": f"sso_login_field 须为 {' / '.join(SSO_LOGIN_FIELDS)}"}
         ), 400
+    nav_icon = (data.get("nav_icon") or "").strip() or None
+    home_url = (data.get("home_url") or "").strip() or None
+    show_in_nav = 0 if data.get("show_in_nav") in (0, False, "0", "false") else 1
     # AI-GEN-END
     owner_ids = data.get("owner_user_ids") or data.get("owners") or []
     db = get_db()
@@ -11452,8 +13649,8 @@ def admin_create_system(user):
             """INSERT INTO systems
             (code, name, client_id, client_secret, redirect_uris, scopes, grant_types,
              token_endpoint_auth_method, require_pkce, access_mode, forbid_external,
-             sso_login_field, status, owner_user_id, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+             sso_login_field, status, owner_user_id, nav_icon, home_url, show_in_nav, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 code,
                 name,
@@ -11469,6 +13666,9 @@ def admin_create_system(user):
                 sso_login_field,
                 "enabled",
                 None,
+                nav_icon,
+                home_url,
+                show_in_nav,
                 datetime.now().isoformat(timespec="seconds"),
             ),
         )
@@ -11556,6 +13756,27 @@ def admin_update_system(user, sid):
     scopes = data.get("scopes") if "scopes" in data else row["scopes"]
     scopes = (scopes or "openid profile").strip()
 
+    # AI-GEN-BEGIN
+    if "nav_icon" in data:
+        nav_icon = (data.get("nav_icon") or "").strip() or None
+    else:
+        nav_icon = (row["nav_icon"] if "nav_icon" in row.keys() else None) or None
+    if "home_url" in data:
+        home_url = (data.get("home_url") or "").strip() or None
+    else:
+        home_url = (row["home_url"] if "home_url" in row.keys() else None) or None
+    if "show_in_nav" in data:
+        show_in_nav = 0 if data.get("show_in_nav") in (0, False, "0", "false") else 1
+    else:
+        show_in_nav = int(row["show_in_nav"] if "show_in_nav" in row.keys() else 1)
+    if "close_api_url" in data:
+        close_api_url = (data.get("close_api_url") or "").strip() or None
+    else:
+        close_api_url = (
+            row["close_api_url"] if "close_api_url" in row.keys() else None
+        ) or None
+    # AI-GEN-END
+
     # 仅超管可改系统管理员（先校验，避免半更新）
     touch_owners = "owner_user_ids" in data or "owners" in data
     if touch_owners and not user_has_role(user, "super_admin"):
@@ -11564,7 +13785,8 @@ def admin_update_system(user, sid):
     db.execute(
         """UPDATE systems SET
           name=?, redirect_uris=?, access_mode=?, forbid_external=?,
-          require_pkce=?, sso_login_field=?, scopes=?
+          require_pkce=?, sso_login_field=?, scopes=?,
+          nav_icon=?, home_url=?, show_in_nav=?, close_api_url=?
         WHERE id=?""",
         (
             name,
@@ -11574,6 +13796,10 @@ def admin_update_system(user, sid):
             require_pkce,
             sso_login_field,
             scopes,
+            nav_icon,
+            home_url,
+            show_in_nav,
+            close_api_url,
             sid,
         ),
     )
@@ -12474,7 +14700,7 @@ def demo_portal_systems():
     beisen_st = beisen_status_dict()
     rows = get_db().execute(
         """SELECT id, code, name, client_id, client_secret, redirect_uris,
-                  access_mode, status, require_pkce
+                  access_mode, status, require_pkce, nav_icon, home_url, show_in_nav
            FROM systems WHERE status = 'enabled' AND code != ? ORDER BY id""",
         (LEUC_SYSTEM_CODE,),
     ).fetchall()
@@ -12483,6 +14709,11 @@ def demo_portal_systems():
         d = dict(r)
         d["mode_label"] = "全员登录" if d.get("access_mode") == "open" else "需账号绑定"
         d["portal_redirect"] = f"{_issuer()}/demo/home/callback?app={d['code']}"
+        icon = (d.get("nav_icon") or "").strip() or (d.get("name") or d.get("code") or "?")[:1]
+        d["nav_icon"] = icon
+        home_url = (d.get("home_url") or "").strip()
+        d["home_url"] = home_url or None
+        d["launch_url"] = home_url or f"/demo/home?open={quote(d['code'], safe='')}"
         if d.get("code") == "beisen":
             d["beisen_sso_enabled"] = bool(beisen_st.get("enabled"))
             d["beisen_sso_error"] = beisen_st.get("error")
@@ -12494,6 +14725,8 @@ def demo_portal_systems():
             d["beisen_sso_go"] = "/beisen/sso/go?return_url=" + quote(
                 d["beisen_portal_url"], safe=""
             )
+            if not home_url:
+                d["launch_url"] = d["beisen_sso_go"] if d["beisen_sso_enabled"] else d["launch_url"]
         systems.append(d)
     return jsonify(
         {
@@ -12585,7 +14818,7 @@ def _serialize_beisen_sso_account(acct, field: str = "account_uid") -> dict:
 
 
 def _beisen_sso_diagnose(user, account_id=None) -> dict:
-    """诊断北森 SSO 不可用原因（不含通讯录兜底）；支持多账号。"""
+    """诊断北森 SSO：优先账号池已开通账号；无则用通讯录 beisen_user_id 自动绑定。"""
     db = get_db()
     migrate_schema(db)
     sys_row = db.execute(
@@ -12606,24 +14839,42 @@ def _beisen_sso_diagnose(user, account_id=None) -> dict:
     rows = _bound_system_accounts_for_sso(db, user["id"], "beisen")
     accounts = [_serialize_beisen_sso_account(r, field) for r in rows]
 
-    # 池中有绑定但不可登录
-    pool_any = db.execute(
-        """SELECT a.id FROM system_accounts a
-        JOIN systems s ON s.id = a.system_id
-        WHERE a.leuc_user_id = ? AND s.code = 'beisen'
-        LIMIT 1""",
-        (user["id"],),
-    ).fetchone()
-
     if not accounts:
-        if pool_any is not None:
+        # AI-GEN-BEGIN
+        # 同步自动绑定：通讯录北森 ID 非空且为正整数即可 SSO
+        profile_bid = profile_sso_id(user, "beisen")
+        if profile_bid and (
+            field != "account_uid" or _beisen_sub_is_positive_id(profile_bid)
+        ):
+            return {
+                "ok": True,
+                "sub": profile_bid,
+                "account_name": user.get("display_name") or user.get("username") or profile_bid,
+                "pool_account_id": None,
+                "sso_login_field": field,
+                "sso_login_field_label": field_label,
+                "source": "profile",
+                "accounts": [
+                    {
+                        "pool_account_id": None,
+                        "account_name": user.get("username") or profile_bid,
+                        "display_name": user.get("display_name"),
+                        "account_uid": profile_bid if field == "account_uid" else None,
+                        "sub": profile_bid,
+                        "is_default": True,
+                        "uty_id_ok": _beisen_sub_is_positive_id(profile_bid),
+                        "source": "profile",
+                    }
+                ],
+            }
+        if profile_bid and field == "account_uid":
             return {
                 "ok": False,
                 "error": (
-                    "北森账号池已关联但尚未开通可登录权限。"
-                    "请先完成账号/权限申请，由系统负责人确认开通后再 SSO。"
+                    f"通讯录北森用户ID「{profile_bid}」不是正整数，无法 SSO。"
+                    "请检查 LeOrg 同步数据。"
                 ),
-                "need_apply": True,
+                "need_sync": True,
                 "sso_login_field": field,
                 "sso_login_field_label": field_label,
                 "accounts": [],
@@ -12631,15 +14882,15 @@ def _beisen_sso_diagnose(user, account_id=None) -> dict:
         return {
             "ok": False,
             "error": (
-                "须先申请并开通北森系统账号后才能 SSO 登录。"
-                "请走账号申请，由系统负责人在「系统账号管理」绑定账号池中的北森用户ID；"
-                "通讯录中的北森ID不能直接用于登录。"
+                "当前用户无北森用户ID，无法 SSO。"
+                "请先完成部门和人员同步（同步后自动绑定）。"
             ),
-            "need_bind": True,
+            "need_sync": True,
             "sso_login_field": field,
             "sso_login_field_label": field_label,
             "accounts": [],
         }
+        # AI-GEN-END
 
     chosen = None
     if account_id is not None:
@@ -12688,26 +14939,25 @@ def _beisen_sso_diagnose(user, account_id=None) -> dict:
                 f"已绑定北森账号 {chosen['account_name']}，但缺少「{field_label}」。"
                 "请在系统账号管理补全该账号池字段后再登录。"
             ),
-            "need_sso_field": True,
-            "account_name": chosen["account_name"],
-            "accounts": accounts,
+            "need_bind": True,
             "sso_login_field": field,
             "sso_login_field_label": field_label,
+            "accounts": accounts,
+            "pool_account_id": chosen["id"],
         }
     if field == "account_uid" and not _beisen_sub_is_positive_id(sub):
         return {
             "ok": False,
             "error": (
                 f"账号 {chosen['account_name']} 的北森用户ID「{sub}」不是正整数，"
-                "北森 SSO（uty=id）会报 Argument not positive。"
+                "无法 SSO。"
                 "请改选真实北森用户ID，或在账号池修正唯一标识。"
             ),
-            "need_sso_field": True,
             "need_choose": len(accounts) > 1,
-            "account_name": chosen["account_name"],
             "accounts": accounts,
             "sso_login_field": field,
             "sso_login_field_label": field_label,
+            "pool_account_id": chosen["id"],
         }
     return {
         "ok": True,
@@ -12722,7 +14972,7 @@ def _beisen_sso_diagnose(user, account_id=None) -> dict:
 
 
 def _beisen_resolve_sub(user, data=None, uty: str = "id", account_id=None):
-    """解析北森 SSO sub：仅用已开通绑定的账号池字段（不用通讯录 beisen_user_id）。"""
+    """解析北森 SSO sub：优先账号池；无则用通讯录 beisen_user_id。"""
     data = data or {}
     override = (data.get("sub") or request.args.get("sub") or "").strip()
     if override:
@@ -12737,17 +14987,23 @@ def _beisen_resolve_sub(user, data=None, uty: str = "id", account_id=None):
         return ""
     if mode == "email":
         db = get_db()
+        pool_id = detail.get("pool_account_id")
+        if not pool_id:
+            return (user.get("email") or "").strip()
         acct = None
         for r in _bound_system_accounts_for_sso(db, user["id"], "beisen"):
-            if int(r["id"]) == int(detail["pool_account_id"]):
+            if int(r["id"]) == int(pool_id):
                 acct = r
                 break
         return _value_from_sso_login_field(acct, "email")
     if mode in ("jobcode", "job_code"):
         db = get_db()
+        pool_id = detail.get("pool_account_id")
+        if not pool_id:
+            return (user.get("itcode") or "").strip()
         acct = None
         for r in _bound_system_accounts_for_sso(db, user["id"], "beisen"):
-            if int(r["id"]) == int(detail["pool_account_id"]):
+            if int(r["id"]) == int(pool_id):
                 acct = r
                 break
         return _value_from_sso_login_field(acct, "itcode")
@@ -12776,10 +15032,12 @@ def beisen_sso_accounts(user):
             "accounts": accounts,
             "sso_login_field": detail.get("sso_login_field"),
             "sso_login_field_label": detail.get("sso_login_field_label"),
-            "error": None if accounts else detail.get("error"),
+            "error": None if detail.get("ok") or accounts else detail.get("error"),
             "tip": tip,
             "need_bind": bool(detail.get("need_bind")),
             "need_apply": bool(detail.get("need_apply")),
+            "need_sync": bool(detail.get("need_sync")),
+            "source": detail.get("source"),
         }
     )
     # AI-GEN-END
@@ -12980,7 +15238,7 @@ def beisen_sso_go():
             )
             return redirect(f"/?{q}")
         tip += (
-            " <a href='/'>回用户中心申请北森账号</a> · "
+            " <a href='/'>回用户中心</a>（同步通讯录后北森 ID 即可自动登录） · "
             "<a href='/demo/home'>返回导航</a>"
         )
         return (
@@ -13424,6 +15682,10 @@ def _run_scheduled_leorg_sync(
     return f"{mode} ok org={org_stats} emp={emp_stats}", summary
 
 
+# AI-GEN-BEGIN
+_LEORG_SYNC_JOB_LOCK = threading.Lock()
+
+
 def _execute_leorg_sync_job(
     conn,
     *,
@@ -13431,65 +15693,50 @@ def _execute_leorg_sync_job(
     actor_user_id: int | None = None,
     actor_name: str | None = None,
     ip: str | None = None,
+    run_id: int | None = None,
+    hold_lock: bool = True,
 ) -> dict:
-    """执行同步并写入任务执行记录 / 变化明细 / 审计日志。"""
-    ensure_ops_tables = __import__("leuc_ops", fromlist=["ensure_ops_tables"]).ensure_ops_tables
-    ensure_ops_tables(conn)
-    run_id = begin_task_run(
-        conn,
-        task_code="leorg_sync",
-        trigger_type=trigger_type,
-        actor_user_id=actor_user_id,
-    )
-    change_sink: list = []
-    try:
-        msg, summary = _run_scheduled_leorg_sync(
-            conn, change_sink=change_sink, sync_run_id=run_id
-        )
-        status = "ok" if not summary.get("skipped") else "skipped"
-        append_sync_change_logs(conn, run_id, change_sink)
-        finish_task_run(conn, run_id, status=status, message=msg, summary=summary)
-        write_audit_log(
-            conn,
-            action="task.run",
-            actor_user_id=actor_user_id,
-            actor_name=actor_name,
-            target_type="scheduled_task",
-            target_id="leorg_sync",
-            detail={
+    """执行同步并写入任务执行记录 / 变化明细 / 审计日志。
+
+    run_id 可预创建（异步立即执行）；创建后会先 commit，使 status=running 对外可见。
+    """
+    owns_lock = False
+    if hold_lock:
+        if not _LEORG_SYNC_JOB_LOCK.acquire(blocking=False):
+            return {
+                "ok": False,
+                "status": "skipped",
+                "message": "已有同步在执行",
                 "run_id": run_id,
-                "trigger": trigger_type,
-                "status": status,
-                "summary": summary,
-                "message": msg,
-            },
-            ip=ip,
-        )
-        conn.commit()
-        return {
-            "ok": status in ("ok", "skipped"),
-            "status": status,
-            "message": msg,
-            "run_id": run_id,
-            "summary": summary,
-            "change_count": len(change_sink),
-        }
-    except Exception as e:  # noqa: BLE001
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        # 回滚后重建执行失败记录（新事务）
-        try:
-            ensure_ops_tables(conn)
-            run_id2 = begin_task_run(
+                "summary": {"skipped": True, "reason": "busy"},
+                "change_count": 0,
+            }
+        owns_lock = True
+    try:
+        ensure_ops_tables = __import__(
+            "leuc_ops", fromlist=["ensure_ops_tables"]
+        ).ensure_ops_tables
+        ensure_ops_tables(conn)
+        if run_id is None:
+            run_id = begin_task_run(
                 conn,
                 task_code="leorg_sync",
                 trigger_type=trigger_type,
                 actor_user_id=actor_user_id,
             )
-            err = f"{type(e).__name__}: {e}"
-            finish_task_run(conn, run_id2, status="error", message=err, summary={"error": err})
+            # 先提交「执行中」，便于前端轮询看到中间态
+            try:
+                conn.commit()
+            except Exception:
+                pass
+        change_sink: list = []
+        try:
+            msg, summary = _run_scheduled_leorg_sync(
+                conn, change_sink=change_sink, sync_run_id=run_id
+            )
+            status = "ok" if not summary.get("skipped") else "skipped"
+            append_sync_change_logs(conn, run_id, change_sink)
+            finish_task_run(conn, run_id, status=status, message=msg, summary=summary)
             write_audit_log(
                 conn,
                 action="task.run",
@@ -13497,27 +15744,71 @@ def _execute_leorg_sync_job(
                 actor_name=actor_name,
                 target_type="scheduled_task",
                 target_id="leorg_sync",
-                detail={"run_id": run_id2, "trigger": trigger_type, "status": "error", "error": err},
+                detail={
+                    "run_id": run_id,
+                    "trigger": trigger_type,
+                    "status": status,
+                    "summary": summary,
+                    "message": msg,
+                },
                 ip=ip,
             )
             conn.commit()
-            run_id = run_id2
-            msg = err
-        except Exception:
-            msg = f"{type(e).__name__}: {e}"
-            run_id = None
-        import sys
-        import traceback
+            return {
+                "ok": status in ("ok", "skipped"),
+                "status": status,
+                "message": msg,
+                "run_id": run_id,
+                "summary": summary,
+                "change_count": len(change_sink),
+            }
+        except Exception as e:  # noqa: BLE001
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            # 同一 run_id 落失败态（已暴露的 running 不另开记录）
+            try:
+                ensure_ops_tables(conn)
+                err = f"{type(e).__name__}: {e}"
+                finish_task_run(
+                    conn, run_id, status="error", message=err, summary={"error": err}
+                )
+                write_audit_log(
+                    conn,
+                    action="task.run",
+                    actor_user_id=actor_user_id,
+                    actor_name=actor_name,
+                    target_type="scheduled_task",
+                    target_id="leorg_sync",
+                    detail={
+                        "run_id": run_id,
+                        "trigger": trigger_type,
+                        "status": "error",
+                        "error": err,
+                    },
+                    ip=ip,
+                )
+                conn.commit()
+                msg = err
+            except Exception:
+                msg = f"{type(e).__name__}: {e}"
+            import sys
+            import traceback
 
-        traceback.print_exc(file=sys.stderr)
-        return {
-            "ok": False,
-            "status": "error",
-            "message": msg,
-            "run_id": run_id,
-            "summary": None,
-            "change_count": 0,
-        }
+            traceback.print_exc(file=sys.stderr)
+            return {
+                "ok": False,
+                "status": "error",
+                "message": msg,
+                "run_id": run_id,
+                "summary": None,
+                "change_count": 0,
+            }
+    finally:
+        if owns_lock:
+            _LEORG_SYNC_JOB_LOCK.release()
+# AI-GEN-END
 
 
 @app.get("/api/admin/tasks")
@@ -13575,34 +15866,121 @@ def admin_tasks_run(user, code):
     db = get_db()
     migrate_schema(db)
     # AI-GEN-BEGIN
-    result = _execute_leorg_sync_job(
-        db,
-        trigger_type="manual",
-        actor_user_id=user["id"],
-        actor_name=user.get("display_name") or user.get("username"),
-        ip=request.headers.get("X-Forwarded-For") or request.remote_addr,
-    )
-    status = result.get("status") or "error"
-    msg = result.get("message") or ""
+    from leuc_ops import ensure_ops_tables
+
+    ensure_ops_tables(db)
+    running = db.execute(
+        """SELECT id FROM task_run_logs
+        WHERE task_code = ? AND status = 'running'
+        ORDER BY id DESC LIMIT 1""",
+        (code,),
+    ).fetchone()
+    if running:
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": "任务正在执行中",
+                    "status": "running",
+                    "run_id": running["id"],
+                }
+            ),
+            409,
+        )
+    if not _LEORG_SYNC_JOB_LOCK.acquire(blocking=False):
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": "任务正在执行中",
+                    "status": "running",
+                }
+            ),
+            409,
+        )
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    task = db.execute("SELECT * FROM scheduled_tasks WHERE code = ?", (code,)).fetchone()
-    iv = float(task["interval_hours"] or 6) if task else 6
-    next_at = (datetime.now() + timedelta(hours=iv)).strftime("%Y-%m-%d %H:%M:%S")
-    db.execute(
-        """UPDATE scheduled_tasks
-        SET last_run_at=?, next_run_at=?, last_status=?, last_message=?, updated_at=?
-        WHERE code=?""",
-        (now, next_at, status, (msg or "")[:500], now, code),
-    )
-    db.commit()
+    try:
+        run_id = begin_task_run(
+            db,
+            task_code=code,
+            trigger_type="manual",
+            actor_user_id=user["id"],
+        )
+        db.execute(
+            """UPDATE scheduled_tasks
+            SET last_run_at=?, last_status=?, last_message=?, updated_at=?
+            WHERE code=?""",
+            (now, "running", "执行中", now, code),
+        )
+        db.commit()
+    except Exception:
+        try:
+            _LEORG_SYNC_JOB_LOCK.release()
+        except RuntimeError:
+            pass
+        raise
+
+    actor_user_id = user["id"]
+    actor_name = user.get("display_name") or user.get("username")
+    ip = request.headers.get("X-Forwarded-For") or request.remote_addr
+
+    def _bg_run():
+        try:
+            with app.app_context():
+                from db import connect
+
+                conn = connect()
+                try:
+                    result = _execute_leorg_sync_job(
+                        conn,
+                        trigger_type="manual",
+                        actor_user_id=actor_user_id,
+                        actor_name=actor_name,
+                        ip=ip,
+                        run_id=run_id,
+                        hold_lock=False,
+                    )
+                    status = result.get("status") or "error"
+                    msg = result.get("message") or ""
+                    task = conn.execute(
+                        "SELECT * FROM scheduled_tasks WHERE code = ?", (code,)
+                    ).fetchone()
+                    iv = float(task["interval_hours"] or 6) if task else 6
+                    next_at = (datetime.now() + timedelta(hours=iv)).strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+                    finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    conn.execute(
+                        """UPDATE scheduled_tasks
+                        SET last_run_at=?, next_run_at=?, last_status=?, last_message=?, updated_at=?
+                        WHERE code=?""",
+                        (
+                            finished_at,
+                            next_at,
+                            status,
+                            (msg or "")[:500],
+                            finished_at,
+                            code,
+                        ),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+        finally:
+            try:
+                _LEORG_SYNC_JOB_LOCK.release()
+            except RuntimeError:
+                pass
+
+    threading.Thread(target=_bg_run, name=f"leuc-task-{code}", daemon=True).start()
     return jsonify(
         {
-            "ok": bool(result.get("ok")),
-            "message": msg,
-            "status": status,
-            "run_id": result.get("run_id"),
-            "summary": result.get("summary"),
-            "change_count": result.get("change_count") or 0,
+            "ok": True,
+            "message": "已开始执行",
+            "status": "running",
+            "run_id": run_id,
+            "summary": None,
+            "change_count": 0,
         }
     )
     # AI-GEN-END
@@ -13661,6 +16039,263 @@ def admin_audit_logs(user):
     action = request.args.get("action") or None
     return jsonify({"ok": True, "logs": list_audit_logs(db, limit=limit, action=action)})
     # AI-GEN-END
+
+
+@app.get("/api/admin/alerts")
+@login_required
+def admin_system_alerts(user):
+    """系统报警列表（手机号缺失/重复等）。"""
+    # AI-GEN-BEGIN
+    if not user_has_role(user, "super_admin", "hr_specialist"):
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    db = get_db()
+    migrate_schema(db)
+    limit = int(request.args.get("limit") or 100)
+    unread_only = (request.args.get("unread") or "") in ("1", "true", "yes")
+    return jsonify({"ok": True, "alerts": list_system_alerts(db, limit=limit, unread_only=unread_only)})
+    # AI-GEN-END
+
+
+@app.get("/api/admin/settings")
+@login_required
+def admin_settings_list(user):
+    """系统配置中心：读库内配置。"""
+    # AI-GEN-BEGIN
+    if not user_has_role(user, "super_admin", "hr_specialist"):
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    db = get_db()
+    migrate_schema(db)
+    return jsonify({"ok": True, "settings": list_system_settings(db)})
+    # AI-GEN-END
+
+
+@app.put("/api/admin/settings")
+@login_required
+def admin_settings_save(user):
+    """系统配置中心：写入数据库。"""
+    # AI-GEN-BEGIN
+    if not user_has_role(user, "super_admin", "hr_specialist"):
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    data = request.get_json(force=True) or {}
+    items = data.get("settings") or data.get("items") or {}
+    if isinstance(items, list):
+        pairs = {}
+        for it in items:
+            if isinstance(it, dict) and it.get("key"):
+                pairs[str(it["key"])] = "" if it.get("value") is None else str(it.get("value"))
+        items = pairs
+    if not isinstance(items, dict) or not items:
+        return jsonify({"ok": False, "error": "请提交 settings 字典"}), 400
+    db = get_db()
+    migrate_schema(db)
+    for key, value in items.items():
+        key = str(key).strip()
+        if not key:
+            continue
+        if key == "email_allowed_suffixes":
+            # 规范化：逗号分隔、补 @
+            norms = parse_email_allowed_suffixes(str(value))
+            value = ",".join(norms)
+        set_setting(db, key, str(value))
+    write_audit_log(
+        db,
+        action="settings.update",
+        actor_user_id=user["id"],
+        actor_name=user.get("display_name") or user.get("username"),
+        target_type="system_settings",
+        detail={"keys": list(items.keys())},
+        ip=request.headers.get("X-Forwarded-For") or request.remote_addr,
+    )
+    db.commit()
+    return jsonify({"ok": True, "settings": list_system_settings(db), "message": "配置已保存"})
+    # AI-GEN-END
+
+
+@app.get("/api/settings/public")
+def settings_public():
+    """登录页/个人中心可用的公开配置（无密钥）。"""
+    # AI-GEN-BEGIN
+    db = get_db()
+    migrate_schema(db)
+    suffixes = parse_email_allowed_suffixes(get_setting(db, "email_allowed_suffixes"))
+    return jsonify(
+        {
+            "ok": True,
+            "email_allowed_suffixes": suffixes,
+            "email_allowed_suffixes_raw": get_setting(db, "email_allowed_suffixes"),
+        }
+    )
+    # AI-GEN-END
+
+
+# AI-GEN-BEGIN
+@app.post("/api/apply/bulk-close")
+@login_required
+def api_apply_bulk_close(user):
+    """代关他人：选人 + 凭证说明 + 附件；有 close_api_url 直关，否则管理员待办。"""
+    db = get_db()
+    migrate_schema(db)
+    ensure_ops_tables(db)
+    ensure_bulk_close_tables(db)
+    if request.content_type and "multipart/form-data" in (request.content_type or ""):
+        target_user_id = request.form.get("target_user_id") or request.form.get("user_id")
+        reason = request.form.get("reason") or ""
+        credential_note = request.form.get("credential_note") or request.form.get("credential") or ""
+        effective_at = request.form.get("effective_at") or None
+        files = list(request.files.getlist("files") or []) + list(
+            request.files.getlist("attachments") or []
+        )
+        cred = request.files.get("credential_file")
+        if cred and getattr(cred, "filename", None):
+            files.append(cred)
+    else:
+        data = request.get_json(silent=True) or {}
+        target_user_id = data.get("target_user_id") or data.get("user_id")
+        reason = data.get("reason") or ""
+        credential_note = data.get("credential_note") or data.get("credential") or ""
+        effective_at = data.get("effective_at")
+        files = []
+    try:
+        tid = int(target_user_id)
+    except Exception:
+        return jsonify({"ok": False, "error": "请选择要代关的人员"}), 400
+    result = execute_proxy_bulk_close(
+        db,
+        operator=user,
+        target_user_id=tid,
+        reason=reason,
+        credential_note=credential_note,
+        effective_at=effective_at,
+        files=files,
+        base_dir=Path(__file__).resolve().parent,
+    )
+    if not result.get("ok"):
+        return jsonify(result), 403 if "无权" in (result.get("error") or "") else 400
+    detail = get_bulk_close_detail(db, int(result["record_id"]))
+    result["detail"] = detail
+    return jsonify(result)
+
+
+@app.post("/api/apply/bulk-restore")
+@login_required
+def api_apply_bulk_restore(user):
+    """代恢复：mode=last|all。"""
+    db = get_db()
+    migrate_schema(db)
+    ensure_ops_tables(db)
+    ensure_bulk_close_tables(db)
+    data = request.get_json(silent=True) or {}
+    try:
+        tid = int(data.get("target_user_id") or data.get("user_id") or 0)
+    except Exception:
+        tid = 0
+    if not tid:
+        return jsonify({"ok": False, "error": "请选择要恢复的人员"}), 400
+    result = execute_proxy_bulk_restore(
+        db,
+        operator=user,
+        target_user_id=tid,
+        mode=(data.get("mode") or "last"),
+        record_id=data.get("record_id"),
+    )
+    if not result.get("ok"):
+        return jsonify(result), 403 if "无权" in (result.get("error") or "") else 400
+    return jsonify(result)
+
+
+@app.get("/api/apply/bulk-close/records")
+@login_required
+def api_apply_bulk_close_records(user):
+    """一键关账批次列表（本人代关记录；人事/超管可看全部）。"""
+    db = get_db()
+    migrate_schema(db)
+    ensure_bulk_close_tables(db)
+    limit = int(request.args.get("limit") or 50)
+    target = request.args.get("target_user_id")
+    target_id = int(target) if target else None
+    if user_has_role(user, "super_admin", "hr_specialist"):
+        rows = list_bulk_close_records(
+            db, operator_id=None, target_user_id=target_id, limit=limit
+        )
+    else:
+        rows = list_bulk_close_records(
+            db, operator_id=int(user["id"]), target_user_id=target_id, limit=limit
+        )
+    # 补姓名
+    for r in rows:
+        tu = db.execute(
+            "SELECT display_name, username FROM users WHERE id = ?",
+            (r["target_user_id"],),
+        ).fetchone()
+        ou = db.execute(
+            "SELECT display_name, username FROM users WHERE id = ?",
+            (r["operator_id"],),
+        ).fetchone()
+        r["target_name"] = tu["display_name"] if tu else ""
+        r["target_username"] = tu["username"] if tu else ""
+        r["operator_name"] = ou["display_name"] if ou else ""
+    return jsonify({"ok": True, "records": rows})
+
+
+@app.get("/api/apply/bulk-close/<int:rid>")
+@login_required
+def api_apply_bulk_close_detail(user, rid):
+    db = get_db()
+    migrate_schema(db)
+    ensure_bulk_close_tables(db)
+    detail = get_bulk_close_detail(db, rid)
+    if not detail:
+        return jsonify({"ok": False, "error": "记录不存在"}), 404
+    rec = detail["record"]
+    target = db.execute(
+        "SELECT * FROM users WHERE id = ?", (rec["target_user_id"],)
+    ).fetchone()
+    allowed = (
+        int(user["id"]) == int(rec["operator_id"])
+        or user_has_role(user, "super_admin", "hr_specialist")
+        or (target and can_proxy_bulk_close(user, target))
+    )
+    if not allowed:
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    return jsonify({"ok": True, **detail})
+
+
+@app.post("/api/apply/bulk-close/<int:rid>/run")
+@login_required
+def api_apply_bulk_close_run(user, rid):
+    """执行已到期的 scheduled 批次。"""
+    db = get_db()
+    migrate_schema(db)
+    ensure_ops_tables(db)
+    ensure_bulk_close_tables(db)
+    rec = db.execute(
+        "SELECT * FROM bulk_close_records WHERE id = ?", (int(rid),)
+    ).fetchone()
+    if not rec:
+        return jsonify({"ok": False, "error": "记录不存在"}), 404
+    target = db.execute(
+        "SELECT * FROM users WHERE id = ?", (rec["target_user_id"],)
+    ).fetchone()
+    if not (
+        int(user["id"]) == int(rec["operator_id"])
+        or user_has_role(user, "super_admin", "hr_specialist")
+        or (target and can_proxy_bulk_close(user, target))
+    ):
+        return jsonify({"ok": False, "error": "无权限"}), 403
+    if rec["status"] not in ("scheduled", "processing"):
+        return jsonify({"ok": False, "error": f"当前状态不可执行：{rec['status']}"}), 400
+    now = now_ts()
+    if (rec["effective_at"] or "") > now and not user_has_role(
+        user, "super_admin", "hr_specialist"
+    ):
+        return jsonify(
+            {"ok": False, "error": f"尚未到生效时间 {rec['effective_at']}"}
+        ), 400
+    result = _run_bulk_close_record(db, int(rid), operator_id=int(user["id"]))
+    detail = get_bulk_close_detail(db, int(rid))
+    result["detail"] = detail
+    return jsonify(result)
+# AI-GEN-END
 
 
 @app.get("/api/admin/leave-closes")
